@@ -1,14 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { CountriesService } from './countries/countries.service';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
-  // Call Insert Method Once on App Startup
-  const countriesService = app.get(CountriesService);
-  await countriesService.insertCountries();
-
+  app.useGlobalPipes(new ValidationPipe()); // ✅ Enables class-validator
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
