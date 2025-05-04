@@ -1,41 +1,71 @@
-import { Body, Controller, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  UnauthorizedException,
+  UsePipes,
+  BadRequestException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { OtpService } from 'src/otp/otp.service';
-import { UsersService } from 'src/users/users.service';
-import { SendOtpDto } from './dto/send-otp.dto';
-import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import Joi from 'joi';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly otpService: OtpService,
-    private readonly usersService: UsersService,
   ) {}
 
+
   @Post('send-otp')
-  async sendOtp(@Body() body: SendOtpDto) {
-    const { phone, countryId } = body;
+  @UsePipes(new JoiValidationPipe(
+    Joi.object({
+      phone: Joi.string().required(),
+      countryId: Joi.string().required(),
+    })
+  ))
+  async sendOtp(@Body() body:any) {
+    const { phone } = body;
     return { message: this.otpService.generateOTP(phone) };
   }
 
   @Post('register')
-  async verifyOtp(@Body() dto: VerifyOtpDto) {
+  @UsePipes(new JoiValidationPipe(
+    Joi.object({
+      firstName: Joi.string().required(),
+      lastName: Joi.string().required(),
+      phone: Joi.string().required(),
+      countryId: Joi.string().required(),
+      languageId: Joi.string().required(),
+      email: Joi.string().email().optional(),
+      code: Joi.string().required(),
+      password: Joi.string()
+        .min(6)
+        .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
+        .message(
+          'Password must include uppercase, lowercase, number, and special character',
+        )
+        .required(),
+    })
+  ))
+  async verifyOtp(@Body() dto:any) {
     const { phone, code, ...rest } = dto;
-  
+
     const isValid = this.otpService.verifyOTP(phone, code);
     if (!isValid) {
       throw new UnauthorizedException('Invalid OTP');
     }
-  
+
     const user = await this.authService.createOrGetUser({
       phone,
       ...rest,
       isVerified: true,
     });
-  
+
     const token = this.authService.generateToken(user);
-  
+
     return { access_token: token, user };
   }
 }
