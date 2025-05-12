@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User } from 'src/users/user.schema';
+import { pbkdf2Sync, randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -39,4 +40,33 @@ export class AuthService {
 
     return await newUser.save();
   }
+
+  async findUserByPhone(phone: string): Promise<User | null> {
+    return this.userModel.findOne({ phone });
+  }
+
+  hashPassword(password: string): { salt: string; hash: string } {
+    const salt = randomBytes(16).toString('hex');
+    const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return { salt, hash };
+  }
+
+  validatePassword(password: string, storedHash: string, salt: string): boolean {
+    const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return hash === storedHash;
+  }
+
+  async validateUser(phone: string, password: string): Promise<User> {
+    const user = await this.userModel.findOne({ phone });
+    if (!user) throw new UnauthorizedException('Invalid phone or password');
+
+    const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
+    if (!isValid) throw new UnauthorizedException('Invalid phone or password');
+
+    if (user.isBanned) throw new UnauthorizedException('Your account is blocked!');
+
+
+    return user;
+  }
+  
 }
