@@ -5,7 +5,9 @@ import { Document, Types } from 'mongoose';
 export class User extends Document {
   @Prop({ required: true }) firstName: string;
   @Prop({ required: true }) lastName: string;
-  @Prop({ required: true }) password: string;
+
+  @Prop({ required: true }) passwordHash: string;
+  @Prop({ required: true }) passwordSalt: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Country', required: true }) country: Types.ObjectId;
   @Prop({ type: Types.ObjectId, ref: 'Language', required: true }) language: Types.ObjectId;
