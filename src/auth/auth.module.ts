@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from 'src/users/user.schema';
 import { UsersModule } from 'src/users/users.module';
 import { OtpModule } from 'src/otp/otp.module';
+import { TwilioModule } from 'src/twilio/twilio.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { OtpModule } from 'src/otp/otp.module';
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     UsersModule,
-    OtpModule, 
+    OtpModule,
+    TwilioModule
   ],
   providers: [AuthService],
   controllers: [AuthController]

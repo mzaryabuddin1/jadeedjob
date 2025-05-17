@@ -10,108 +10,128 @@ import { AuthService } from './auth.service';
 import { OtpService } from 'src/otp/otp.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
+import { TwilioService } from 'src/twilio/twilio.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly otpService: OtpService,
+    private readonly twilioService: TwilioService,
   ) {}
 
-
   @Post('send-otp')
-  @UsePipes(new JoiValidationPipe(
-    Joi.object({
-      phone: Joi.string().required(),
-      countryId: Joi.string().required(),
-    })
-  ))
-  async sendOtp(@Body() body:any) {
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        firstName: Joi.string().required(),
+        lastName: Joi.string().required(),
+        phone: Joi.string().required(),
+        countryId: Joi.string()
+          .pattern(/^[0-9a-fA-F]{24}$/)
+          .required(),
+        languageId: Joi.string()
+          .pattern(/^[0-9a-fA-F]{24}$/)
+          .required(),
+        email: Joi.string().email().optional(),
+        password: Joi.string()
+          .min(6)
+          .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
+          .message(
+            'Password must include uppercase, lowercase, number, and special character',
+          )
+          .required(),
+      }),
+    ),
+  )
+  async sendOtp(@Body() body: any) {
     const { phone } = body;
 
-    // ✅ 1. Check if user already registered
     const existingUser = await this.authService.findUserByPhone(phone);
     if (existingUser) {
       throw new BadRequestException('Phone number is already registered');
     }
 
-    // ✅ 2. Check if OTP has already been used (example logic)
-    const isUsed = this.otpService.isOtpUsed(phone);
-    if (isUsed) {
-      throw new BadRequestException('OTP has already been used');
-    }
+    const { salt, hash } = this.authService.hashPassword(body.password);
+    body.passwordHash = hash;
+    body.passwordSalt = salt;
+    delete body.password;
 
-    // ✅ 3. Generate and send OTP
-    const otp = this.otpService.generateOTP(phone);
+    const otp = this.otpService.generateOTP(phone, body);
+    this.twilioService.sendSms(
+      phone,
+      otp + ' code will be expire in 5 minutes.',
+    );
     return { message: `OTP sent to ${phone}`, otp }; // remove OTP in prod
   }
 
-  @Post('register')
-  @UsePipes(new JoiValidationPipe(
-    Joi.object({
-      firstName: Joi.string().required(),
-      lastName: Joi.string().required(),
-      phone: Joi.string().required(),
-      countryId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
-      languageId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
-      email: Joi.string().email().optional(),
-      code: Joi.string().required(),
-      password: Joi.string()
-        .min(6)
-        .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
-        .message(
-          'Password must include uppercase, lowercase, number, and special character',
-        )
-        .required(),
-    })
-  ))
-  async verifyOtp(@Body() dto:any) {
-    const { phone, code, password, ...rest } = dto;
+  @Post('verify-otp')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        phone: Joi.string().required(),
+        code: Joi.string().length(6).required(),
+      }),
+    ),
+  )
+  async verifyOtp(@Body() body: any) {
+    const { phone, code } = body;
+    const entry = this.otpService.getOtpEntry(phone);
 
-    const isValid = this.otpService.verifyOTP(phone, code);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid OTP');
+    if (!entry) throw new UnauthorizedException('OTP not found');
+    if (entry.used) throw new UnauthorizedException('OTP already used');
+    if (new Date() > entry.expiresAt) {
+      this.otpService.deleteOtp(phone);
+      throw new UnauthorizedException('OTP expired');
     }
+    if (entry.code !== code) throw new UnauthorizedException('Invalid OTP');
 
-    const { salt, hash } = this.authService.hashPassword(password)
-    rest.passwordHash = hash
-    rest.passwordSalt = salt
+    // ✅ Mark used and extract data
+    this.otpService.markUsed(phone);
+    const { registrationData } = entry;
 
-    const user = (await this.authService.createOrGetUser({
-      phone,
-      ...rest,
-      isVerified: true,
-    })).toObject();
+    const user = (
+      await this.authService.createOrGetUser({
+        ...registrationData,
+        isVerified: true,
+      })
+    ).toObject();
+
     delete user.passwordHash
     delete user.passwordSalt
 
     const token = this.authService.generateToken(user);
+    this.otpService.deleteOtp(phone); // Optional cleanup
 
     return { access_token: token, user };
   }
 
   @Post('login')
-  @UsePipes(new JoiValidationPipe(
-    Joi.object({
-      phone: Joi.string().required(),
-      password: Joi.string()
-        .min(6)
-        .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
-        .message('Password must include uppercase, lowercase, number, and special character')
-        .required(),
-    })
-  ))
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        phone: Joi.string().required(),
+        password: Joi.string()
+          .min(6)
+          .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
+          .message(
+            'Password must include uppercase, lowercase, number, and special character',
+          )
+          .required(),
+      }),
+    ),
+  )
   async login(@Body() dto: any) {
     const { phone, password } = dto;
-  
-    const user = (await this.authService.validateUser(phone, password)).toObject();
-    delete user.passwordHash
-    delete user.passwordSalt
-  
+
+    const user = (
+      await this.authService.validateUser(phone, password)
+    ).toObject();
+    delete user.passwordHash;
+    delete user.passwordSalt;
+
     const token = this.authService.generateToken(user);
-  
+
     return { access_token: token, user };
   }
-
-
 }

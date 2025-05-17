@@ -57,14 +57,13 @@ export class AuthService {
   }
 
   async validateUser(phone: string, password: string): Promise<User> {
-    const user = await this.userModel.findOne({ phone });
+    const user = await this.userModel.findOne({ phone }).populate('country').populate('language');
     if (!user) throw new UnauthorizedException('Invalid phone or password');
 
     const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
     if (!isValid) throw new UnauthorizedException('Invalid phone or password');
 
     if (user.isBanned) throw new UnauthorizedException('Your account is blocked!');
-
 
     return user;
   }
