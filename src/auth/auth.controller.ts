@@ -20,7 +20,7 @@ export class AuthController {
     private readonly twilioService: TwilioService,
   ) {}
 
-  @Post('send-otp')
+  @Post('register/send-otp')
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -65,7 +65,7 @@ export class AuthController {
     return { message: `OTP sent to ${phone}`, otp }; // remove OTP in prod
   }
 
-  @Post('verify-otp')
+  @Post('register/verify-otp')
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -97,8 +97,8 @@ export class AuthController {
       })
     ).toObject();
 
-    delete user.passwordHash
-    delete user.passwordSalt
+    delete user.passwordHash;
+    delete user.passwordSalt;
 
     const token = this.authService.generateToken(user);
     this.otpService.deleteOtp(phone); // Optional cleanup
@@ -133,5 +133,79 @@ export class AuthController {
     const token = this.authService.generateToken(user);
 
     return { access_token: token, user };
+  }
+
+  @Post('forgot-password/send-otp')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        phone: Joi.string().required(),
+      }),
+    ),
+  )
+  async sendForgotPasswordOtp(@Body() body: any) {
+    const { phone } = body;
+
+    const user = await this.authService.findUserByPhone(phone);
+    if (!user) {
+      throw new BadRequestException('Phone number is not registered');
+    }
+
+    const otp = this.otpService.generateOTP(phone, {
+      phone,
+      purpose: 'forgot-password',
+    });
+    await this.twilioService.sendSms(
+      phone,
+      `${otp} is your OTP to reset password. It will expire in 5 minutes.`,
+    );
+
+    return { message: `OTP sent to ${phone}` };
+  }
+
+  @Post('forgot-password/verify-otp')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        phone: Joi.string().required(),
+        code: Joi.string().length(6).required(),
+        newPassword: Joi.string()
+          .min(6)
+          .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
+          .message(
+            'Password must include uppercase, lowercase, number, and special character',
+          )
+          .required(),
+      }),
+    ),
+  )
+  async verifyForgotPasswordOtp(@Body() body: any) {
+    const { phone, code, newPassword } = body;
+
+    const entry = this.otpService.getOtpEntry(phone);
+
+    if (!entry) throw new UnauthorizedException('OTP not found');
+    if (entry.used) throw new UnauthorizedException('OTP already used');
+    if (new Date() > entry.expiresAt) {
+      this.otpService.deleteOtp(phone);
+      throw new UnauthorizedException('OTP expired');
+    }
+    if (entry.code !== code) throw new UnauthorizedException('Invalid OTP');
+    if (entry.registrationData?.purpose !== 'forgot-password') {
+      throw new UnauthorizedException('OTP is not for password reset');
+    }
+
+    const user = await this.authService.findUserByPhone(phone);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const { salt, hash } = this.authService.hashPassword(newPassword);
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    await user.save();
+
+    this.otpService.markUsed(phone);
+    this.otpService.deleteOtp(phone);
+
+    return { message: 'Password has been reset successfully' };
   }
 }
