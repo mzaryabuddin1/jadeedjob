@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
-// MONGO
+// MongoDB
 import { MongooseModule } from '@nestjs/mongoose';
 
+// Env
 import { ConfigModule } from '@nestjs/config';
+
+// App Modules
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OtpService } from './otp/otp.service';
@@ -14,13 +17,39 @@ import { TwilioModule } from './twilio/twilio.module';
 import { CountryModule } from './country/country.module';
 import { LanguageModule } from './language/language.module';
 
+// Throttling
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(), // Loads .env variables
-    MongooseModule.forRoot(process.env.MONGODB_URI), AuthModule, UsersModule, OtpModule, TwilioModule, CountryModule, LanguageModule,
+    ConfigModule.forRoot(), // Load .env
+    MongooseModule.forRoot(process.env.MONGODB_URI),
+
+    // Application Modules
+    AuthModule,
+    UsersModule,
+    OtpModule,
+    TwilioModule,
+    CountryModule,
+    LanguageModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 30000, // 30 seconds window
+          limit: 10,   // 1 request per IP per window
+        },
+      ],
+    }),
   ],
   controllers: [AppController],
-  providers: [AppService, OtpService],
+  providers: [
+    AppService,
+    OtpService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard, // ⬅️ Apply Throttler globally
+    },
+  ],
 })
 export class AppModule {}
