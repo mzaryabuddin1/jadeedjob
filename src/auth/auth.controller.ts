@@ -160,7 +160,7 @@ export class AuthController {
       `${otp} is your OTP to reset password. It will expire in 5 minutes.`,
     );
 
-    return { message: `OTP sent to ${phone}` };
+    return { message: `OTP sent to ${phone}`, otp };
   }
 
   @Post('forgot-password/verify-otp')
