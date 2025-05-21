@@ -13,7 +13,7 @@ export class AuthService {
   ) {}
 
   generateToken(user: User) {
-    return this.jwtService.sign({ sub: user._id, isBanned: user.isBanned });
+    return this.jwtService.sign({ id: user._id });
   }
 
   async createOrGetUser(data: {

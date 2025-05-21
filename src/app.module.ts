@@ -20,10 +20,11 @@ import { LanguageModule } from './language/language.module';
 // Throttling
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { FilterModule } from './filter/filter.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(), // Load .env
+    ConfigModule.forRoot({isGlobal: true}), // Load .env
     MongooseModule.forRoot(process.env.MONGODB_URI),
 
     // Application Modules
@@ -41,6 +42,7 @@ import { APP_GUARD } from '@nestjs/core';
         },
       ],
     }),
+    FilterModule,
   ],
   controllers: [AppController],
   providers: [

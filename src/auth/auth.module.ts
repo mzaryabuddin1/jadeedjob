@@ -7,19 +7,25 @@ import { User, UserSchema } from 'src/users/user.schema';
 import { UsersModule } from 'src/users/users.module';
 import { OtpModule } from 'src/otp/otp.module';
 import { TwilioModule } from 'src/twilio/twilio.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'your_jwt_secret', // Replace with env var in production
-      signOptions: { expiresIn: '7d' },
+    ConfigModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     UsersModule,
     OtpModule,
-    TwilioModule
+    TwilioModule,
   ],
   providers: [AuthService],
-  controllers: [AuthController]
+  controllers: [AuthController],
 })
 export class AuthModule {}
