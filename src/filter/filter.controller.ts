@@ -1,4 +1,15 @@
-import { Controller, Post, Body, UseGuards, Req, UsePipes, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Req,
+  UsePipes,
+  BadRequestException,
+  Get,
+  Query,
+  Param,
+} from '@nestjs/common';
 import { FilterService } from './filter.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
@@ -11,7 +22,8 @@ import { InjectModel } from '@nestjs/mongoose';
 @UseGuards(JwtAuthGuard) // Auth-protected
 @Controller('filters')
 export class FilterController {
-  constructor(private readonly filterService: FilterService,
+  constructor(
+    private readonly filterService: FilterService,
     @InjectModel(Filter.name) private filterModel: Model<Filter>,
   ) {}
 
@@ -25,7 +37,7 @@ export class FilterController {
     ),
   )
   async createFilter(@Body() body: any, @Req() req: any) {
-    body.name = toSentenceCase(body.name)
+    body.name = toSentenceCase(body.name);
 
     const existing = await this.filterModel.findOne({
       name: { $regex: `^${body.name}$`, $options: 'i' }, // Case-insensitive match
@@ -46,5 +58,46 @@ export class FilterController {
       message: 'Filter submitted for review',
       filter: createdFilter,
     };
+  }
+
+  @Get()
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        page: Joi.number().integer().min(1).default(1),
+        limit: Joi.number().integer().min(1).max(100).default(20),
+        search: Joi.string().allow('').optional(),
+        preference_ids: Joi.array().items(Joi.string().length(24)).optional(),
+        approvalStatus: Joi.string()
+          .valid('pending', 'approved', 'rejected')
+          .optional(),
+        createdBy: Joi.string().length(24).optional(),
+        sortBy: Joi.string()
+          .valid('name', 'icon', 'status', 'approvalStatus', 'createdAt')
+          .optional(),
+        sortOrder: Joi.string().valid('asc', 'desc').optional(),
+      }),
+    ),
+  )
+  async getFilter(@Query() query: any) {
+    const result = await this.filterService.getFilters(query);
+    return result;
+  }
+
+  @Get(':id')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        id: Joi.string()
+          .pattern(/^[0-9a-fA-F]{24}$/)
+          .required()
+          .messages({
+            'string.pattern.base': 'Invalid country ID format',
+          }),
+      }),
+    ),
+  )
+  async getCountryById(@Param() params: any) {
+    return this.filterService.FilterById(params.id);
   }
 }
