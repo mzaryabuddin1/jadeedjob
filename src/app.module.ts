@@ -21,6 +21,7 @@ import { LanguageModule } from './language/language.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { FilterModule } from './filter/filter.module';
+import { JobModule } from './job/job.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { FilterModule } from './filter/filter.module';
       ],
     }),
     FilterModule,
+    JobModule,
   ],
   controllers: [AppController],
   providers: [
