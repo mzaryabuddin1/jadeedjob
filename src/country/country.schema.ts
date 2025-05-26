@@ -38,6 +38,15 @@ export class Country extends Document {
     long: number;
   };
 
+  @Prop()
+  currency_code: string;
+
+  @Prop()
+  currency_name: string;
+
+  @Prop({ default: false })
+  isActive: boolean;
+
   @Prop([String])
   timezones: string[];
 }

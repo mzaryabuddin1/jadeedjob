@@ -31,12 +31,19 @@ export class CountryService {
 
     const skip = (page - 1) * limit;
 
-    const query = search ? { name: { $regex: search, $options: 'i' } } : {};
+    // Build query
+    const query: Record<string, any> = { isActive: true };
 
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+    }
+
+    // Build sort
     const sort: Record<string, SortOrder> = {
       [sortBy]: sortOrder === 'asc' ? 1 : -1,
     };
 
+    // Execute query and count in parallel
     const [data, total] = await Promise.all([
       this.countryModel.find(query).sort(sort).skip(skip).limit(limit).exec(),
       this.countryModel.countDocuments(query).exec(),

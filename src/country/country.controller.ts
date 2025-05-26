@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Param, UsePipes } from '@nestjs/common';
+import { Controller, Get, Query, Param, UsePipes, Patch } from '@nestjs/common';
 import { CountryService } from './country.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
@@ -47,4 +47,5 @@ export class CountryController {
   async getCountryById(@Param() params: any) {
     return this.countryService.getCountryById(params.id);
   }
+
 }
