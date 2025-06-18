@@ -22,6 +22,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { FilterModule } from './filter/filter.module';
 import { JobModule } from './job/job.module';
+import { JobApplicationModule } from './job-application/job-application.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { JobModule } from './job/job.module';
     }),
     FilterModule,
     JobModule,
+    JobApplicationModule,
   ],
   controllers: [AppController],
   providers: [
