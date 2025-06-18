@@ -9,21 +9,44 @@ export class Job extends Document {
   @Prop()
   description: string;
 
-  @Prop({type: [String], default: []})
+  @Prop({ type: [String], default: [] })
   skill_requirements: string[];
 
-  @Prop({type: [String], default: []})
+  @Prop({ type: [String], default: [] })
   benefits: string[];
 
-  @Prop({ type: [String], enum: ['morning', 'evening', 'night', 'rotational'], default: [] })
+  @Prop({
+    type: [String],
+    enum: ['morning', 'evening', 'night', 'rotational'],
+    default: [],
+  })
   shifts: string[];
 
-  @Prop({ type: [String], enum: ['full-time', 'part-time', 'contract', 'temporary', 'freelance', 'internship'], default: [] })
+  @Prop({
+    type: [String],
+    enum: [
+      'full-time',
+      'part-time',
+      'contract',
+      'temporary',
+      'freelance',
+      'internship',
+    ],
+    default: [],
+  })
   jobTypes: string[];
 
   @Prop({
     type: String,
-    enum: ['piece-rate', 'daily-wage', 'hourly', 'monthly', 'fixed', 'commission', 'negotiable'],
+    enum: [
+      'piece-rate',
+      'daily-wage',
+      'hourly',
+      'monthly',
+      'fixed',
+      'commission',
+      'negotiable',
+    ],
     required: true,
   })
   salaryType: string;
@@ -36,14 +59,19 @@ export class Job extends Document {
 
   @Prop({
     type: {
-      lat: { type: Number, required: true },
-      lng: { type: Number, required: true },
+      type: String,
+      enum: ['Point'],
+      required: true,
+      default: 'Point',
     },
-    required: true,
+    coordinates: {
+      type: [Number], // [longitude, latitude]
+      required: true,
+    },
   })
   location: {
-    lat: number;
-    lng: number;
+    type: 'Point';
+    coordinates: [number, number];
   };
 
   @Prop({ type: Date })
@@ -69,3 +97,4 @@ export class Job extends Document {
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
+JobSchema.index({ location: '2dsphere' });

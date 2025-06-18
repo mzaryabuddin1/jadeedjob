@@ -1,4 +1,13 @@
-import { Controller, Post, Body, UsePipes, Req, UseGuards, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UsePipes,
+  Req,
+  UseGuards,
+  Get,
+  Query,
+} from '@nestjs/common';
 import { JobService } from './job.service';
 import Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
@@ -8,7 +17,10 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 @UseGuards(JwtAuthGuard) // Auth-protected
 @Controller('job')
 export class JobController {
-    constructor(private readonly jobService: JobService, private readonly userService: UsersService,) {}
+  constructor(
+    private readonly jobService: JobService,
+    private readonly userService: UsersService,
+  ) {}
 
   @Post()
   @UsePipes(
@@ -58,7 +70,11 @@ export class JobController {
     ),
   )
   async createJob(@Body() body: any, @Req() req: any) {
-    const user = await this.userService.getUserById(req.user.id);
+     // 🔁 Convert lat/lng to GeoJSON format
+    body.location = {
+      type: 'Point',
+      coordinates: [body.location.lng, body.location.lat],
+    };
     return this.jobService.createJob(body);
   }
 
@@ -70,30 +86,14 @@ export class JobController {
         lng: Joi.number().required(),
         page: Joi.number().min(1).optional(),
         limit: Joi.number().min(1).max(10).optional(),
-        search: Joi.string().optional(),
+        search: Joi.string().optional().allow(""),
         sortBy: Joi.string().optional(), // optional, could default to 'createdAt' in service
         sortOrder: Joi.string().valid('asc', 'desc').optional(),
       }),
     ),
   )
-  async findNearbyJobs(
-    @Query('lat') lat: number,
-    @Query('lng') lng: number,
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-    @Query('search') search?: string,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc',
-  ) {
-    const result = await this.jobService.findNearbyJobs(
-      lat,
-      lng,
-      page,
-      limit,
-      search,
-      sortBy,
-      sortOrder,
-    );
+  async findNearbyJobs(@Query() query: any) {
+    const result = await this.jobService.findNearbyJobs(query);
     return result;
   }
 }

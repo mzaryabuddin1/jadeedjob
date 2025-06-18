@@ -12,31 +12,32 @@ export class JobService {
     return job.save();
   }
 
-  async findNearbyJobs(
-    lat: number,
-    lng: number,
-    page = 1,
-    limit = 10,
-    search?: string,
-    sortBy: string = 'createdAt',
-    sortOrder: 'asc' | 'desc' = 'desc',
-  ) {
-    const radiusInKm = 5;
+  async findNearbyJobs(payload: any) {
+    const {
+      lat,
+      lng,
+      page = 1,
+      limit = 10,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = payload;
 
+    const radiusInKm = 1;
     const skip = (page - 1) * limit;
-    const maxLimit = Math.min(limit, 10); // Max 10 records
+    const maxLimit = Math.min(limit, 10); // Max 10 records per page
 
     const query: any = {
       isActive: true,
       location: {
         $geoWithin: {
-          $centerSphere: [[lng, lat], radiusInKm / 6378.1], // Earth radius in km
+          $centerSphere: [[lng, lat], radiusInKm / 6378.1],
         },
       },
     };
 
     if (search) {
-      query.description = { $regex: search, $options: 'i' }; // case-insensitive search
+      query.description = { $regex: search, $options: 'i' };
     }
 
     const sortOptions: any = {};
@@ -49,12 +50,13 @@ export class JobService {
       .limit(maxLimit);
 
     const total = await this.jobModel.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
 
     return {
-      page,
-      limit: maxLimit,
+      data: jobs,
       total,
-      jobs,
+      totalPages,
+      currentPage: page,
     };
   }
 }
