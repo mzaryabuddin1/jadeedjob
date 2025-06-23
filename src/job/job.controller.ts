@@ -78,6 +78,25 @@ export class JobController {
     return this.jobService.createJob(body);
   }
 
+  @Get()
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        lat: Joi.number().required(),
+        lng: Joi.number().required(),
+        filter: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(), // optional ObjectId
+        page: Joi.number().min(1).optional(),
+        limit: Joi.number().min(1).max(10).optional(),
+        search: Joi.string().optional().allow(''),
+        sortBy: Joi.string().optional(),
+        sortOrder: Joi.string().valid('asc', 'desc').optional(),
+      }),
+    ),
+  )
+  async findJobs(@Query() query: any) {
+    return this.jobService.findJobs(query);
+  }
+
   @Get('nearby')
   @UsePipes(
     new JoiValidationPipe(
@@ -89,6 +108,7 @@ export class JobController {
         search: Joi.string().optional().allow(""),
         sortBy: Joi.string().optional(), // optional, could default to 'createdAt' in service
         sortOrder: Joi.string().valid('asc', 'desc').optional(),
+        radiusKm: Joi.number().min(1).max(10).optional(),
       }),
     ),
   )
@@ -96,4 +116,6 @@ export class JobController {
     const result = await this.jobService.findNearbyJobs(query);
     return result;
   }
+
+
 }

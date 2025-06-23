@@ -23,6 +23,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { FilterModule } from './filter/filter.module';
 import { JobModule } from './job/job.module';
 import { JobApplicationModule } from './job-application/job-application.module';
+import { OrganizationModule } from './organization/organization.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { JobApplicationModule } from './job-application/job-application.module';
     FilterModule,
     JobModule,
     JobApplicationModule,
+    OrganizationModule,
   ],
   controllers: [AppController],
   providers: [
