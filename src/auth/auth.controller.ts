@@ -24,16 +24,16 @@ export class AuthController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
+        // ===== Required Fields =====
         firstName: Joi.string().required(),
         lastName: Joi.string().required(),
         phone: Joi.string().required(),
-        countryId: Joi.string()
+        country: Joi.string()
           .pattern(/^[0-9a-fA-F]{24}$/)
           .required(),
-        languageId: Joi.string()
+        language: Joi.string()
           .pattern(/^[0-9a-fA-F]{24}$/)
           .required(),
-        email: Joi.string().email().optional(),
         password: Joi.string()
           .min(6)
           .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
@@ -41,6 +41,117 @@ export class AuthController {
             'Password must include uppercase, lowercase, number, and special character',
           )
           .required(),
+
+        // ===== Optional Fields =====
+        email: Joi.string().email().optional(),
+        isVerified: Joi.boolean().optional(),
+        isBanned: Joi.boolean().optional(),
+
+        // Basic Details
+        full_name: Joi.string().optional(),
+        father_name: Joi.string().optional(),
+        gender: Joi.string().valid('Male', 'Female', 'Other').optional(),
+        date_of_birth: Joi.date().optional(),
+        nationality: Joi.string().optional(),
+        marital_status: Joi.string()
+          .valid('Single', 'Married', 'Other')
+          .optional(),
+        profile_photo: Joi.string().uri().optional(),
+
+        // Contact Info
+        alternate_phone: Joi.string().optional(),
+        address_line1: Joi.string().optional(),
+        address_line2: Joi.string().optional(),
+        city: Joi.string().optional(),
+        state: Joi.string().optional(),
+        postal_code: Joi.string().optional(),
+        contact_country: Joi.string().optional(),
+
+        // Identity Verification
+        national_id_number: Joi.string().optional(),
+        passport_number: Joi.string().optional(),
+        id_expiry_date: Joi.date().optional(),
+        id_document_front: Joi.string().uri().optional(),
+        id_document_back: Joi.string().uri().optional(),
+        address_proof_document: Joi.string().uri().optional(),
+
+        // Professional Summary
+        professional_summary: Joi.string().optional(),
+
+        // ===== Subschemas =====
+
+        // Work Experience (array)
+        work_experience: Joi.array()
+          .items(
+            Joi.object({
+              company_name: Joi.string().optional(),
+              designation: Joi.string().optional(),
+              department: Joi.string().optional(),
+              employment_type: Joi.string()
+                .valid('Full-time', 'Part-time', 'Contract')
+                .optional(),
+              from_date: Joi.date().optional(),
+              to_date: Joi.date().optional(),
+              key_responsibilities: Joi.string().optional(),
+              experience_certificate: Joi.string().uri().optional(),
+              currently_working: Joi.boolean().optional(),
+            }),
+          )
+          .optional(),
+
+        // Education (array)
+        education: Joi.array()
+          .items(
+            Joi.object({
+              highest_qualification: Joi.string().optional(),
+              institution_name: Joi.string().optional(),
+              graduation_year: Joi.string().optional(),
+              gpa_or_grade: Joi.string().optional(),
+              degree_document: Joi.string().uri().optional(),
+            }),
+          )
+          .optional(),
+
+        // Certifications (array)
+        certifications: Joi.array()
+          .items(
+            Joi.object({
+              certification_name: Joi.string().optional(),
+              issuing_institution: Joi.string().optional(),
+              certification_date: Joi.date().optional(),
+              certificate_file: Joi.string().uri().optional(),
+            }),
+          )
+          .optional(),
+
+        // Skills
+        skills: Joi.array().items(Joi.string()).optional(),
+        technical_skills: Joi.array().items(Joi.string()).optional(),
+        soft_skills: Joi.array().items(Joi.string()).optional(),
+
+        // Social Links
+        linkedin_url: Joi.string().uri().optional(),
+        github_url: Joi.string().uri().optional(),
+        portfolio_url: Joi.string().uri().optional(),
+        behance_url: Joi.string().uri().optional(),
+
+        // Bank Info
+        bank_name: Joi.string().optional(),
+        account_number: Joi.string().optional(),
+        iban: Joi.string().optional(),
+        branch_name: Joi.string().optional(),
+        swift_code: Joi.string().optional(),
+
+        // Verification
+        kyc_status: Joi.string()
+          .valid('pending', 'verified', 'rejected')
+          .default('pending'),
+        verified_by_admin_id: Joi.string()
+          .pattern(/^[0-9a-fA-F]{24}$/)
+          .optional(),
+        verification_date: Joi.date().optional(),
+        rejection_reason: Joi.string().optional(),
+        notes: Joi.string().optional(),
       }),
     ),
   )
@@ -58,10 +169,10 @@ export class AuthController {
     delete body.password;
 
     const otp = this.otpService.generateOTP(phone, body);
-    this.twilioService.sendSms(
-      phone,
-      otp + ' code will be expire in 5 minutes.',
-    );
+    // this.twilioService.sendSms(
+    //   phone,
+    //   otp + ' code will be expire in 5 minutes.',
+    // );
     return { message: `OTP sent to ${phone}`, otp }; // remove OTP in prod
   }
 

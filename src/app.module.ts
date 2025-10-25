@@ -24,6 +24,7 @@ import { FilterModule } from './filter/filter.module';
 import { JobModule } from './job/job.module';
 import { JobApplicationModule } from './job-application/job-application.module';
 import { OrganizationModule } from './organization/organization.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { OrganizationModule } from './organization/organization.module';
     JobModule,
     JobApplicationModule,
     OrganizationModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -21,8 +21,8 @@ export class AuthService {
     lastName: string;
     phone: string;
     email?: string;
-    countryId: string;
-    languageId: string;
+    country: string;
+    language: string;
     isVerified?: boolean;
   }): Promise<User> {
     const existingUser = await this.userModel.findOne({ phone: data.phone });
@@ -33,8 +33,8 @@ export class AuthService {
 
     const newUser = new this.userModel({
       ...data,
-      country: data.countryId,
-      language: data.languageId,
+      country: data.country,
+      language: data.language,
       isBanned: false,
     });
 

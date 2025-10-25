@@ -23,12 +23,20 @@ export class OtpService {
       registrationData,
     });
 
+    console.log({
+      code: otp,
+      used: false,
+      expiresAt,
+      registrationData,
+    })
+
     console.log(`OTP for ${phone}: ${otp}`);
     return otp;
   }
 
   verifyOTP(phone: string, code: string): boolean {
     const otpEntry = this.otps.get(phone);
+    console.log(this.otps)
     if (!otpEntry || otpEntry.code !== code || otpEntry.used) return false;
 
     otpEntry.used = true;
