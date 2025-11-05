@@ -33,12 +33,12 @@ export class UsersController {
         lastName: Joi.string().optional(),
         phone: Joi.string().optional(),
         password: Joi.string()
-            .min(6)
-            .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
-            .message(
+          .min(6)
+          .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
+          .message(
             'Password must include uppercase, lowercase, number, and special character',
-            )
-            .optional(),
+          )
+          .optional(),
 
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
@@ -117,6 +117,9 @@ export class UsersController {
         swift_code: Joi.string().optional(),
 
         notes: Joi.string().optional(),
+        filter_preferences: Joi.array()
+          .items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/))
+          .optional(),
       }),
     ),
   )
@@ -136,10 +139,10 @@ export class UsersController {
     ];
     forbidden.forEach((field) => delete body[field]);
 
-    if(body?.password){
-        const { salt, hash } = this.authService.hashPassword(body.password);
-        body.passwordHash = hash;
-        body.passwordSalt = salt;
+    if (body?.password) {
+      const { salt, hash } = this.authService.hashPassword(body.password);
+      body.passwordHash = hash;
+      body.passwordSalt = salt;
     }
 
     const updatedUser = await this.usersService.updateUser(userId, body);

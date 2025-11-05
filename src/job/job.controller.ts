@@ -13,6 +13,7 @@ import Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { UsersService } from 'src/users/users.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { Types } from 'mongoose';
 
 @UseGuards(JwtAuthGuard) // Auth-protected
 @Controller('job')
@@ -71,6 +72,8 @@ export class JobController {
   )
   async createJob(@Body() body: any, @Req() req: any) {
      // 🔁 Convert lat/lng to GeoJSON format
+    body.filter = Types.ObjectId.createFromHexString(body.filter);
+
     body.location = {
       type: 'Point',
       coordinates: [body.location.lng, body.location.lat],

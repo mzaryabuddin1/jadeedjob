@@ -244,6 +244,9 @@ export class User extends Document {
 
   @Prop()
   notes?: string;
+
+  @Prop({ type: [Types.ObjectId], ref: 'Filter', default: [] })
+  filter_preferences?: Types.ObjectId[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
