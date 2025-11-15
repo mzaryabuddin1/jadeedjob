@@ -124,7 +124,7 @@ export class UsersController {
     ),
   )
   async updateMe(@Req() req: Request, @Body() body: any) {
-    const userId = (req.user as any)?._id || (req.user as any)?.id;
+    const userId = (req.user as any)?.id;
     if (!userId) throw new NotFoundException('User not found or unauthorized');
 
     // Security: strip forbidden fields

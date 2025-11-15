@@ -1,65 +1,72 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { JobApplication } from './job-application.schema';
-import { Job } from 'src/job/job.schema';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class JobApplicationService {
-  constructor(
-    @InjectModel(JobApplication.name)
-    private jobAppModel: Model<JobApplication>,
-    @InjectModel(Job.name) private jobModel: Model<Job>, // ✅ THIS LINE
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  async apply(data: any) {
-    // ✅ Check if job exists and is active
-    const job = await this.jobModel.findOne({ _id: data.job, isActive: true });
+  async apply(data: { jobId: number; applicantId: number }) {
+    // Check if job exists and is active
+    const job = await this.prisma.job.findFirst({
+      where: { id: data.jobId, isActive: true },
+    });
+
     if (!job) {
       throw new BadRequestException('Job does not exist or is not active');
     }
 
-    // Optionally, prevent duplicate applications
-    const existing = await this.jobAppModel.findOne({
-      job: data.job,
-      applicant: data.applicant,
+    // Prevent duplicate application
+    const existing = await this.prisma.jobApplication.findFirst({
+      where: {
+        jobId: data.jobId,
+        applicantId: data.applicantId,
+      },
     });
+
     if (existing) {
       throw new BadRequestException('You already applied to this job');
     }
 
-    const application = new this.jobAppModel(data);
-    return application.save();
+    return this.prisma.jobApplication.create({
+      data,
+    });
   }
 
-  async getApplicationsByUser(userId: string, page = 1, limit = 10) {
+    async getApplicationsByUser(userId: number, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
-    const maxLimit = Math.min(limit, 50);
 
     const [applications, total] = await Promise.all([
-      this.jobAppModel
-        .find({ applicant: userId })
-        .populate('job')
-        .skip(skip)
-        .limit(maxLimit),
-      this.jobAppModel.countDocuments({ applicant: userId }),
+      this.prisma.jobApplication.findMany({
+        where: { applicantId: userId },
+        include: { job: true },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.jobApplication.count({
+        where: { applicantId: userId },
+      }),
     ]);
-
-    const totalPages = Math.ceil(total / maxLimit);
 
     return {
       data: applications,
       total,
-      totalPages,
+      totalPages: Math.ceil(total / limit),
       currentPage: page,
     };
   }
 
-  async getApplicationsByJob(jobId: string) {
-    return this.jobAppModel.find({ job: jobId }).populate('applicant');
+    async getApplicationsByJob(jobId: number) {
+    return this.prisma.jobApplication.findMany({
+      where: { jobId },
+      include: { applicant: true },
+    });
   }
 
-  async updateStatus(id: string, status: string) {
-    return this.jobAppModel.findByIdAndUpdate(id, { status }, { new: true });
+    async updateStatus(id: number, status: string) {
+    return this.prisma.jobApplication.update({
+      where: { id },
+      data: { status },
+    });
   }
 }

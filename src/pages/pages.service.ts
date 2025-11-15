@@ -1,108 +1,118 @@
+// src/pages/pages.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Page } from './pages.schema';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class PagesService {
-  constructor(
-    @InjectModel(Page.name) private readonly pageModel: Model<Page>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async createPage(data: any, userId: string) {
-    const existing = await this.pageModel.findOne({ owner: userId });
+  async createPage(data: any, userId: number) {
+    const existing = await this.prisma.page.findFirst({
+      where: { ownerId: userId },
+    });
+
     if (existing) {
       throw new BadRequestException('User already has a company page.');
     }
 
-    const page = new this.pageModel({
-      ...data,
-      owner: new Types.ObjectId(userId),
+    const page = await this.prisma.page.create({
+      data: {
+        ...data,
+        ownerId: userId,
+      },
     });
-
-    const savedPage = await page.save();
 
     return {
       message: 'Company page created successfully',
-      data: savedPage,
+      data: page,
     };
   }
 
-  async getPages(query: any, userId?: string) {
+  async getPages(query: any, userId?: number) {
     const {
       page = 1,
       limit = 20,
       search = '',
-      mine = false, // 👈 optional flag
+      mine = false,
     } = query;
 
-    // ✅ Build filter condition
-    const filter: any = {};
+    const where: any = {};
 
     if (search) {
-      filter.company_name = { $regex: search, $options: 'i' };
+      where.company_name = {
+        contains: search,
+        mode: 'insensitive',
+      };
     }
 
-    // ✅ If "mine" is true → only return pages owned by logged-in user
     if (mine && userId) {
-      filter.owner = new Types.ObjectId(userId);
+      where.ownerId = userId;
     }
 
-    const total = await this.pageModel.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
+    const total = await this.prisma.page.count({ where });
 
-    const data = await this.pageModel
-      .find(filter)
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .exec();
+    const data = await this.prisma.page.findMany({
+      where,
+      take: Number(limit),
+      skip: (Number(page) - 1) * Number(limit),
+      orderBy: { createdAt: 'desc' },
+    });
 
     return {
       data,
       pagination: {
         total,
-        totalPages,
+        totalPages: Math.ceil(total / limit),
         currentPage: Number(page),
         limit: Number(limit),
       },
     };
   }
 
-  async getPageById(id: string) {
-    const page = await this.pageModel.findById(id);
+  async getPageById(id: number) {
+    const page = await this.prisma.page.findUnique({
+      where: { id },
+    });
+
     if (!page) throw new BadRequestException('Company page not found');
+
     return page;
   }
 
-  async updatePage(id: string, data: any, userId: string) {
-    const page = await this.pageModel.findOneAndUpdate(
-      { _id: id, owner: userId },
-      data,
-      { new: true },
-    );
+  async updatePage(id: number, data: any, userId: number) {
+    const page = await this.prisma.page.findFirst({
+      where: { id, ownerId: userId },
+    });
 
-    if (!page)
+    if (!page) {
       throw new BadRequestException(
         'Page not found or you are not authorized to update it',
       );
+    }
+
+    const updated = await this.prisma.page.update({
+      where: { id },
+      data,
+    });
 
     return {
       message: 'Page updated successfully',
-      data: page,
+      data: updated,
     };
   }
 
-  async deletePage(id: string, userId: string) {
-    const deleted = await this.pageModel.findOneAndDelete({
-      _id: id,
-      owner: userId,
+  async deletePage(id: number, userId: number) {
+    const page = await this.prisma.page.findFirst({
+      where: { id, ownerId: userId },
     });
 
-    if (!deleted)
+    if (!page) {
       throw new BadRequestException(
         'Page not found or you are not authorized to delete it',
       );
+    }
+
+    await this.prisma.page.delete({ where: { id } });
 
     return { message: 'Page deleted successfully' };
   }

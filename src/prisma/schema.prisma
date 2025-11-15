@@ -1,0 +1,336 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres:P3XKhnHPYdGWyl5I@localhost:5432/jobsloot_staging?schema=public"
+}
+
+//
+// ─── COUNTRY ─────────────────────────────────────────
+//
+model Country {
+  id            Int      @id @default(autoincrement())
+  name          String
+  unicode       String?
+  emoji         String?
+  alpha2        String
+  alpha3        String
+  dialCode      String
+  region        String?
+  capital       String?
+  geoLat        Float?
+  geoLong       Float?
+  currency_code String?
+  currency_name String?
+  isActive      Boolean   @default(false)
+  timezones     String[]
+
+  users         User[]
+}
+
+//
+// ─── LANGUAGE ─────────────────────────────────────────
+//
+model Language {
+  id      Int     @id @default(autoincrement())
+  code  String  @unique
+  name    String
+  users   User[]
+}
+
+//
+// ─── FILTERS ─────────────────────────────────────────
+//
+model Filter {
+  id             Int       @id @default(autoincrement())
+  name           String
+  icon           String    @default("fas fa-user-tie")
+  status         String    @default("active")
+  approvalStatus String    @default("pending")
+  rejectionReason String?
+  createdBy      Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User?     @relation(fields: [createdBy], references: [id])
+  jobs           Job[]     // Job.filterId
+}
+
+
+//
+// ─── WORK EXPERIENCE ─────────────────────────────────────────
+//
+model WorkExperience {
+  id                     Int       @id @default(autoincrement())
+  company_name           String?
+  designation            String?
+  department             String?
+  employment_type        String?   // Full-time | Part-time | Contract
+  from_date              DateTime?
+  to_date                DateTime?
+  key_responsibilities   String?
+  experience_certificate String?
+  currently_working      Boolean?  @default(false)
+
+  user   User? @relation(fields: [userId], references: [id])
+  userId Int?
+}
+
+//
+// ─── EDUCATION ─────────────────────────────────────────
+//
+model Education {
+  id                 Int      @id @default(autoincrement())
+  highest_qualification String?
+  institution_name   String?
+  graduation_year    String?
+  gpa_or_grade       String?
+  degree_document    String?
+
+  user   User? @relation(fields: [userId], references: [id])
+  userId Int?
+}
+
+//
+// ─── CERTIFICATION ─────────────────────────────────────────
+//
+model Certification {
+  id                   Int      @id @default(autoincrement())
+  certification_name   String?
+  issuing_institution  String?
+  certification_date   DateTime?
+  certificate_file     String?
+
+  user   User? @relation(fields: [userId], references: [id])
+  userId Int?
+}
+
+//
+// ─── USER ─────────────────────────────────────────
+//
+model User {
+  id              Int       @id @default(autoincrement())
+  firstName       String
+  lastName        String
+  passwordHash    String
+  passwordSalt    String
+  phone           String    @unique
+  email           String?
+  isVerified      Boolean   @default(false)
+  isBanned        Boolean   @default(false)
+
+  // Relations
+  countryId       Int
+  languageId      Int
+  country         Country   @relation(fields: [countryId], references: [id])
+  language        Language  @relation(fields: [languageId], references: [id])
+
+  // Profile fields
+  full_name       String?
+  father_name     String?
+  gender          String?
+  date_of_birth   DateTime?
+  nationality     String?
+  marital_status  String?
+  profile_photo   String?
+
+  alternate_phone      String?
+  address_line1        String?
+  address_line2        String?
+  city                 String?
+  state                String?
+  postal_code          String?
+  contact_country      String?
+
+  national_id_number   String?
+  passport_number      String?
+  id_expiry_date       DateTime?
+  id_document_front    String?
+  id_document_back     String?
+  address_proof_document String?
+
+  professional_summary String?
+
+  // Skill arrays
+  skills           String[]
+  technical_skills String[]
+  soft_skills      String[]
+
+  // Social URLs
+  linkedin_url     String?
+  github_url       String?
+  portfolio_url    String?
+  behance_url      String?
+
+  // Bank fields
+  bank_name        String?
+  account_number   String?
+  iban             String?
+  branch_name      String?
+  swift_code       String?
+
+  // Verification
+  kyc_status       String @default("pending")
+  verified_by_admin_id Int?
+  verification_date DateTime?
+  rejection_reason  String?
+  notes             String?
+
+  // Filters many-to-many
+  filters Filter[] @relation("UserFilters")
+
+  // One-to-many nested tables
+  work_experience  WorkExperience[]
+  education        Education[]
+  certifications   Certification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationsCreated  Organization[]    @relation("UserToOrganizations")
+  organizationMemberships OrgMember[]
+}
+
+//
+// ─── JOB ─────────────────────────────────────────
+//
+model Job {
+  id                  Int       @id @default(autoincrement())
+  filterId            Int
+  filter              Filter    @relation(fields: [filterId], references: [id])
+
+  description         String
+  skillRequirements   String[]
+  benefits            String[]
+  shifts              String[]
+  jobTypes            String[]
+  salaryType          String
+  salaryAmount        Float
+  currency            String?
+
+  location            Unsupported("geometry(Point, 4326)") // <-- Geo field
+
+  startDate           DateTime?
+  endDate             DateTime?
+
+  industry            String?
+  educationLevel      String?
+  experienceRequired  String?
+  languageRequirements String[]
+  isActive            Boolean   @default(true)
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+//
+// ─── JOB APPLICATIONS────────────────────────────────────────
+//
+model JobApplication {
+  id         Int      @id @default(autoincrement())
+
+  jobId      Int
+  job        Job      @relation(fields: [jobId], references: [id])
+
+  applicantId Int
+  applicant   User     @relation(fields: [applicantId], references: [id])
+
+  status     String   @default("pending")
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+//
+// ─── Organization────────────────────────────────────────
+//
+model Organization {
+  id         Int         @id @default(autoincrement())
+  name       String
+  industry   String
+  isActive   String      @default("active")
+  createdBy  Int
+  creator    User        @relation(fields: [createdBy], references: [id])
+
+  members    OrgMember[]
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model OrgMember {
+  id            Int           @id @default(autoincrement())
+  userId        Int
+  organizationId Int
+
+  role          String        @default("user") // 'owner' | 'admin' | 'user'
+
+  user          User          @relation(fields: [userId], references: [id])
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+}
+
+//
+// ─── PAge ────────────────────────────────────────
+//
+
+model Page {
+  id                Int      @id @default(autoincrement())
+  ownerId           Int
+  owner             User     @relation(fields: [ownerId], references: [id])
+
+  company_name      String
+  business_name     String?
+  company_logo      String?
+  website_url       String?
+  official_email    String?
+  official_phone    String?
+  industry_type     String?
+  company_description String?
+  founded_year      Int?
+
+  country           String?
+  state             String?
+  city              String?
+  postal_code       String?
+  address_line1     String?
+  address_line2     String?
+  google_maps_link  String?
+
+  business_registration_number String?
+  tax_identification_number    String?
+  registration_authority       String?
+  business_license_document    String?
+  company_type        String?
+
+  verification_status  String    @default("pending") // pending | verified | rejected
+  verification_date    DateTime?
+  verified_by_admin_id Int?
+
+  verification_notes    String?
+  rejection_reason      String?
+  verification_documents String[]
+
+  representative_name        String?
+  representative_designation String?
+  representative_email       String?
+  representative_phone       String?
+  id_proof_document          String?
+
+  linkedin_page_url     String?
+  facebook_page_url     String?
+  instagram_page_url    String?
+  twitter_page_url      String?
+  youtube_channel_url   String?
+  verified_email_domain String?
+
+  number_of_employees   Int?
+  annual_revenue_range  String?
+  client_list           String[]
+  certifications        String[]
+  company_rating        Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

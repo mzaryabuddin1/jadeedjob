@@ -2,12 +2,11 @@ import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
-import { MongooseModule } from '@nestjs/mongoose';
-import { User, UserSchema } from 'src/users/user.schema';
 import { UsersModule } from 'src/users/users.module';
 import { OtpModule } from 'src/otp/otp.module';
 import { TwilioModule } from 'src/twilio/twilio.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
   imports: [
@@ -20,7 +19,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         signOptions: { expiresIn: '7d' },
       }),
     }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+   PrismaModule,
     UsersModule,
     OtpModule,
     TwilioModule,

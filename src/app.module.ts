@@ -2,9 +2,6 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
-// MongoDB
-import { MongooseModule } from '@nestjs/mongoose';
-
 // Env
 import { ConfigModule } from '@nestjs/config';
 
@@ -26,11 +23,12 @@ import { JobApplicationModule } from './job-application/job-application.module';
 import { OrganizationModule } from './organization/organization.module';
 import { FilesModule } from './files/files.module';
 import { PagesModule } from './pages/pages.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({isGlobal: true}), // Load .env
-    MongooseModule.forRoot(process.env.MONGODB_URI),
+    // MongooseModule.forRoot(process.env.MONGODB_URI),
 
     // Application Modules
     AuthModule,
@@ -53,6 +51,7 @@ import { PagesModule } from './pages/pages.module';
     OrganizationModule,
     FilesModule,
     PagesModule,
+    PrismaModule,
   ],
   controllers: [AppController],
   providers: [

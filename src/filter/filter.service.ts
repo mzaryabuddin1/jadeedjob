@@ -1,19 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Filter } from './filter.schema';
-import { Model, Types } from 'mongoose';
-import { Job } from 'src/job/job.schema';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class FilterService {
-  constructor(
-    @InjectModel(Filter.name) private readonly filterModel: Model<Filter>,
-    @InjectModel(Job.name) private readonly jobModel: Model<Job>, // ✅ Add this
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  async createFilter(data: Partial<Filter>): Promise<Filter> {
-    const filter = new this.filterModel(data);
-    return filter.save();
+  async createFilter(data: any) {
+    return this.prisma.filter.create({
+      data: {
+        name: data.name,
+        icon: data.icon ?? 'fas fa-user-tie',
+        status: data.status ?? 'active',
+        approvalStatus: 'pending',
+        rejectionReason: null,
+        createdBy: data.createdBy,
+      },
+    });
   }
 
   async getFilters(query: any) {
@@ -24,75 +26,68 @@ export class FilterService {
       preference_ids = [],
       sortBy = 'createdAt',
       sortOrder = 'desc',
-      approvalStatus = null,
+      approvalStatus,
+      createdBy,
     } = query;
-
-    const filterCondition: any = {};
-    if (search) {
-      filterCondition.name = { $regex: search, $options: 'i' };
-    }
-    if (approvalStatus) {
-      filterCondition.approvalStatus = approvalStatus;
-    }
-
-    const sortCondition: Record<string, 1 | -1> = {};
-    sortCondition[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const skip = (page - 1) * limit;
 
-    // ✅ Convert preference_ids to ObjectIds if provided
-    const preferenceObjectIds =
-      preference_ids?.length > 0
-        ? preference_ids.map((id: string) => new Types.ObjectId(id))
-        : [];
+    const where: any = {};
 
-    // ✅ Count total filters
-    const total = await this.filterModel.countDocuments(filterCondition);
-    const totalPages = Math.ceil(total / limit);
+    if (search) {
+      where.name = { contains: search, mode: 'insensitive' };
+    }
 
-    // ✅ Base query aggregation
-    const baseQuery = this.filterModel.aggregate([
-      { $match: filterCondition },
-      {
-        $lookup: {
-          from: 'jobs',
-          let: { filterId: '$_id' },
-          pipeline: [
-            { $match: { $expr: { $eq: ['$filter', '$$filterId'] } } },
-            { $match: { isActive: true } },
-          ],
-          as: 'jobs',
-        },
-      },
-      {
-        $addFields: {
-          jobCount: { $size: '$jobs' },
-          isPreferred: {
-            $in: ['$_id', preferenceObjectIds], // ✅ tag if it's in the preferred list
+    if (approvalStatus) {
+      where.approvalStatus = approvalStatus;
+    }
+
+    if (createdBy) {
+      where.createdBy = Number(createdBy);
+    }
+
+    // --- FETCH FILTERS ---
+    const [filters, total] = await Promise.all([
+      this.prisma.filter.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit,
+        include: {
+          jobs: {
+            where: { isActive: true },
+            select: { id: true },
           },
         },
-      },
-      { $project: { jobs: 0 } },
-      { $sort: sortCondition },
-      { $skip: skip },
-      { $limit: limit },
+      }),
+      this.prisma.filter.count({ where }),
     ]);
 
-    const results = await baseQuery.exec();
+    // --- TRANSFORM RESULTS ---
+    const data = filters.map((f) => ({
+      ...f,
+      jobCount: f.jobs.length,
+      isPreferred: preference_ids.includes(f.id),
+      jobs: undefined,
+    }));
 
     return {
-      data: results,
+      data,
       total,
-      totalPages,
+      totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
     };
   }
 
-  async FilterById(id: string): Promise<Filter> {
-    const filter = await this.filterModel.findById(id).exec();
+  async filterById(id: number) {
+    const filter = await this.prisma.filter.findUnique({
+      where: { id },
+    });
+
     if (!filter) {
       throw new NotFoundException('Filter not found');
     }
+
     return filter;
   }
 }

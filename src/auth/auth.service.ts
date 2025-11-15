@@ -1,63 +1,66 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { User } from 'src/users/user.schema';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
-    @InjectModel(User.name) private userModel: Model<User>,
+    private prisma: PrismaService,
   ) {}
 
-  generateToken(user: User) {
-    return this.jwtService.sign({ id: user._id });
+  generateToken(user: any) {
+    return this.jwtService.sign({ id: user.id });
   }
 
-  async createOrGetUser(data: {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email?: string;
-    country: string;
-    language: string;
-    isVerified?: boolean;
-  }): Promise<User> {
-    const existingUser = await this.userModel.findOne({ phone: data.phone });
-
-    if (existingUser) {
-      return existingUser;
-    }
-
-    const newUser = new this.userModel({
-      ...data,
-      country: data.country,
-      language: data.language,
-      isBanned: false,
+  async createOrGetUser(data: any) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { phone: data.phone },
     });
 
-    return await newUser.save();
+    if (existingUser) return existingUser;
+
+    return this.prisma.user.create({
+      data: {
+        ...data,
+        countryId: Number(data.country),
+        languageId: Number(data.language),
+        isBanned: false,
+      },
+    });
   }
 
-  async findUserByPhone(phone: string): Promise<User | null> {
-    return this.userModel.findOne({ phone });
+  async findUserByPhone(phone: string) {
+    return this.prisma.user.findUnique({
+      where: { phone },
+      include: {
+        country: true,
+        language: true,
+      },
+    });
   }
 
-  hashPassword(password: string): { salt: string; hash: string } {
+  hashPassword(password: string) {
     const salt = randomBytes(16).toString('hex');
     const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
     return { salt, hash };
   }
 
-  validatePassword(password: string, storedHash: string, salt: string): boolean {
+  validatePassword(password: string, storedHash: string, salt: string) {
     const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
     return hash === storedHash;
   }
 
-  async validateUser(phone: string, password: string): Promise<User> {
-    const user = await this.userModel.findOne({ phone }).populate('country').populate('language');
+  async validateUser(phone: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { phone },
+      include: {
+        country: true,
+        language: true,
+      },
+    });
+
     if (!user) throw new UnauthorizedException('Invalid phone or password');
 
     const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
@@ -67,5 +70,4 @@ export class AuthService {
 
     return user;
   }
-  
 }

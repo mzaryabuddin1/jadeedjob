@@ -1,3 +1,4 @@
+// src/organization/organization.controller.ts
 import {
   Controller,
   Post,
@@ -6,13 +7,12 @@ import {
   Req,
   Get,
   UsePipes,
-  Param,
 } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
-import { Types } from 'mongoose';
+
 @UseGuards(JwtAuthGuard)
 @Controller('organization')
 export class OrganizationController {
@@ -25,7 +25,12 @@ export class OrganizationController {
         name: Joi.string().required(),
         industry: Joi.string().required(),
         members: Joi.array()
-          .items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/))
+          .items(
+            Joi.object({
+              user: Joi.number().required(),
+              role: Joi.string().valid('admin', 'user').default('user'),
+            }),
+          )
           .optional(),
       }),
     ),
@@ -37,24 +42,23 @@ export class OrganizationController {
     });
   }
 
-@Post('member')
-@UsePipes(
-  new JoiValidationPipe(
-    Joi.object({
-      organization: Joi.string()
-        .pattern(/^[0-9a-fA-F]{24}$/)
-        .required(),
-      user: Joi.string()
-        .pattern(/^[0-9a-fA-F]{24}$/)
-        .required(),
-      role: Joi.string().valid('admin', 'user').required(),
-    }),
-  ),
-)
-async addMember(@Body() body: any, @Req() req: any) {
-  return this.orgService.addMember(body.organization, body, req.user.id);
-}
-
+  @Post('member')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        organization: Joi.number().required(),
+        user: Joi.number().required(),
+        role: Joi.string().valid('admin', 'user').required(),
+      }),
+    ),
+  )
+  async addMember(@Body() body: any, @Req() req: any) {
+    return this.orgService.addMember(
+      body.organization,
+      { userId: body.user, role: body.role },
+      req.user.id,
+    );
+  }
 
   @Get('my')
   async getMine(@Req() req: any) {

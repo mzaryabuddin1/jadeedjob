@@ -24,19 +24,14 @@ export class JobApplicationController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        job: Joi.string()
-          .pattern(/^[0-9a-fA-F]{24}$/)
-          .required()
-          .messages({
-            'string.pattern.base': 'Invalid job ID format',
-          }),
+        job: Joi.number().required(),
       }),
     ),
   )
   async apply(@Body() body: any, @Req() req: any) {
     return this.jobAppService.apply({
-      ...body,
-      applicant: req.user.id,
+      jobId: Number(body.job),
+      applicantId: req.user.id,
     });
   }
 
@@ -53,36 +48,26 @@ export class JobApplicationController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        jobId: Joi.string()
-          .pattern(/^[0-9a-fA-F]{24}$/)
-          .required()
-          .messages({
-            'string.pattern.base': 'Invalid job ID format',
-          }),
+        jobId: Joi.number().required(),
       }),
     ),
   )
-  async getByJob(@Param('jobId') jobId: string) {
-    return this.jobAppService.getApplicationsByJob(jobId);
+  async getByJob(@Param('jobId') jobId: number) {
+    return this.jobAppService.getApplicationsByJob(Number(jobId));
   }
 
   @Patch(':id/status')
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        id: Joi.string()
-          .pattern(/^[0-9a-fA-F]{24}$/)
-          .required()
-          .messages({
-            'string.pattern.base': 'Invalid application ID format',
-          }),
+        id: Joi.number().required(),
         status: Joi.string()
           .valid('pending', 'accepted', 'rejected')
           .required(),
       }),
     ),
   )
-  async updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.jobAppService.updateStatus(id, status);
+  async updateStatus(@Param('id') id: number, @Body('status') status: string) {
+    return this.jobAppService.updateStatus(Number(id), status);
   }
 }

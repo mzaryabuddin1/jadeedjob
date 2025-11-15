@@ -1,13 +1,11 @@
+// src/pages/pages.module.ts
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
 import { PagesController } from './pages.controller';
 import { PagesService } from './pages.service';
-import { Page, PageSchema } from './pages.schema';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Page.name, schema: PageSchema }]),
-  ],
+  imports: [PrismaModule],
   controllers: [PagesController],
   providers: [PagesService],
   exports: [PagesService],

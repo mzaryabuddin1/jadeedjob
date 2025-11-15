@@ -1,13 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Country } from './country.schema';
-import { Model, SortOrder } from 'mongoose';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class CountryService {
-  constructor(
-    @InjectModel(Country.name) private readonly countryModel: Model<Country>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async getAllCountries(options: {
     page?: number;
@@ -15,12 +11,7 @@ export class CountryService {
     search?: string;
     sortBy?: 'name' | 'dialCode' | 'alpha2' | 'region';
     sortOrder?: 'asc' | 'desc';
-  }): Promise<{
-    data: Country[];
-    total: number;
-    totalPages: number;
-    currentPage: number;
-  }> {
+  }) {
     const {
       limit = 20,
       page = 1,
@@ -31,22 +22,25 @@ export class CountryService {
 
     const skip = (page - 1) * limit;
 
-    // Build query
-    const query: Record<string, any> = { isActive: true };
-
-    if (search) {
-      query.name = { $regex: search, $options: 'i' };
-    }
-
-    // Build sort
-    const sort: Record<string, SortOrder> = {
-      [sortBy]: sortOrder === 'asc' ? 1 : -1,
+    const where = {
+      isActive: true,
+      ...(search
+        ? { name: { contains: search, mode: 'insensitive' } }
+        : {}),
     };
 
-    // Execute query and count in parallel
+    const orderBy = {
+      [sortBy]: sortOrder,
+    };
+
     const [data, total] = await Promise.all([
-      this.countryModel.find(query).sort(sort).skip(skip).limit(limit).exec(),
-      this.countryModel.countDocuments(query).exec(),
+      this.prisma.country.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+      }),
+      this.prisma.country.count({ where }),
     ]);
 
     const totalPages = Math.ceil(total / limit);
@@ -59,11 +53,15 @@ export class CountryService {
     };
   }
 
-  async getCountryById(id: string): Promise<Country> {
-    const country = await this.countryModel.findById(id).exec();
+  async getCountryById(id: string) {
+    const country = await this.prisma.country.findUnique({
+      where: { id: Number(id) },
+    });
+
     if (!country) {
       throw new NotFoundException('Country not found');
     }
+
     return country;
   }
 }

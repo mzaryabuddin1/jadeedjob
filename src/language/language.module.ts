@@ -1,10 +1,12 @@
-import { MongooseModule } from '@nestjs/mongoose';
-import { Language, LanguageSchema } from './language.schema';
 import { Module } from '@nestjs/common';
+import { LanguageService } from './language.service';
+import { LanguageController } from './language.controller';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Language.name, schema: LanguageSchema }]),
-  ],
+  imports: [PrismaModule],
+  controllers: [LanguageController],
+  providers: [LanguageService],
+  exports: [LanguageService],
 })
 export class LanguageModule {}

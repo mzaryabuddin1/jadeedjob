@@ -11,6 +11,7 @@ import { OtpService } from 'src/otp/otp.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
 import { TwilioService } from 'src/twilio/twilio.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('auth')
 export class AuthController {
@@ -18,6 +19,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly otpService: OtpService,
     private readonly twilioService: TwilioService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post('register/send-otp')
@@ -28,12 +30,8 @@ export class AuthController {
         firstName: Joi.string().required(),
         lastName: Joi.string().required(),
         phone: Joi.string().required(),
-        country: Joi.string()
-          .pattern(/^[0-9a-fA-F]{24}$/)
-          .required(),
-        language: Joi.string()
-          .pattern(/^[0-9a-fA-F]{24}$/)
-          .required(),
+        country: Joi.number().required(),
+        language: Joi.number().required(),
         password: Joi.string()
           .min(6)
           .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
@@ -146,9 +144,7 @@ export class AuthController {
         kyc_status: Joi.string()
           .valid('pending', 'verified', 'rejected')
           .default('pending'),
-        verified_by_admin_id: Joi.string()
-          .pattern(/^[0-9a-fA-F]{24}$/)
-          .optional(),
+        verified_by_admin_id: Joi.number().optional(),
         verification_date: Joi.date().optional(),
         rejection_reason: Joi.string().optional(),
         notes: Joi.string().optional(),
@@ -201,12 +197,10 @@ export class AuthController {
     this.otpService.markUsed(phone);
     const { registrationData } = entry;
 
-    const user = (
-      await this.authService.createOrGetUser({
-        ...registrationData,
-        isVerified: true,
-      })
-    ).toObject();
+    const user = await this.authService.createOrGetUser({
+      ...registrationData,
+      isVerified: true,
+    });
 
     delete user.passwordHash;
     delete user.passwordSalt;
@@ -235,9 +229,7 @@ export class AuthController {
   async login(@Body() dto: any) {
     const { phone, password } = dto;
 
-    const user = (
-      await this.authService.validateUser(phone, password)
-    ).toObject();
+    const user = await this.authService.validateUser(phone, password);
     delete user.passwordHash;
     delete user.passwordSalt;
 
@@ -310,9 +302,13 @@ export class AuthController {
     if (!user) throw new UnauthorizedException('User not found');
 
     const { salt, hash } = this.authService.hashPassword(newPassword);
-    user.passwordSalt = salt;
-    user.passwordHash = hash;
-    await user.save();
+    await this.prisma.user.update({
+      where: { phone },
+      data: {
+        passwordSalt: salt,
+        passwordHash: hash,
+      },
+    });
 
     this.otpService.markUsed(phone);
     this.otpService.deleteOtp(phone);
