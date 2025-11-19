@@ -1,30 +1,40 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Language } from './entities/language.entity';
 
 @Injectable()
 export class LanguageService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Language)
+    private readonly languageRepo: Repository<Language>,
+  ) {}
 
   findAll() {
-    return this.prisma.language.findMany();
+    return this.languageRepo.find();
   }
 
-  findOne(id: number) {
-    return this.prisma.language.findUnique({ where: { id } });
+  async findOne(id: number) {
+    const lang = await this.languageRepo.findOne({ where: { id } });
+    if (!lang) {
+      throw new NotFoundException('Language not found');
+    }
+    return lang;
   }
 
   create(data: { code: string; name: string }) {
-    return this.prisma.language.create({ data });
+    const lang = this.languageRepo.create(data);
+    return this.languageRepo.save(lang);
   }
 
-  update(id: number, data: any) {
-    return this.prisma.language.update({
-      where: { id },
-      data,
-    });
+  async update(id: number, data: any) {
+    const lang = await this.findOne(id);
+    Object.assign(lang, data);
+    return this.languageRepo.save(lang);
   }
 
-  delete(id: number) {
-    return this.prisma.language.delete({ where: { id } });
+  async delete(id: number) {
+    const lang = await this.findOne(id);
+    return this.languageRepo.remove(lang);
   }
 }

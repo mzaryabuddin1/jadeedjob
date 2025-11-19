@@ -18,16 +18,14 @@ import { AuthService } from 'src/auth/auth.service';
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly authService: AuthService, // ✅ inject here
+    private readonly authService: AuthService,
   ) {}
 
-  // ─── PATCH /users/me ────────────────────────────────────────
   @UseGuards(JwtAuthGuard)
   @Patch('me')
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        // Only optional fields allowed — users can’t change secure ones
         email: Joi.string().email().optional(),
         firstName: Joi.string().optional(),
         lastName: Joi.string().optional(),
@@ -60,47 +58,6 @@ export class UsersController {
 
         professional_summary: Joi.string().optional(),
 
-        work_experience: Joi.array()
-          .items(
-            Joi.object({
-              company_name: Joi.string().optional(),
-              designation: Joi.string().optional(),
-              department: Joi.string().optional(),
-              employment_type: Joi.string()
-                .valid('Full-time', 'Part-time', 'Contract')
-                .optional(),
-              from_date: Joi.date().optional(),
-              to_date: Joi.date().optional(),
-              key_responsibilities: Joi.string().optional(),
-              experience_certificate: Joi.string().uri().optional(),
-              currently_working: Joi.boolean().optional(),
-            }),
-          )
-          .optional(),
-
-        education: Joi.array()
-          .items(
-            Joi.object({
-              highest_qualification: Joi.string().optional(),
-              institution_name: Joi.string().optional(),
-              graduation_year: Joi.string().optional(),
-              gpa_or_grade: Joi.string().optional(),
-              degree_document: Joi.string().uri().optional(),
-            }),
-          )
-          .optional(),
-
-        certifications: Joi.array()
-          .items(
-            Joi.object({
-              certification_name: Joi.string().optional(),
-              issuing_institution: Joi.string().optional(),
-              certification_date: Joi.date().optional(),
-              certificate_file: Joi.string().uri().optional(),
-            }),
-          )
-          .optional(),
-
         skills: Joi.array().items(Joi.string()).optional(),
         technical_skills: Joi.array().items(Joi.string()).optional(),
         soft_skills: Joi.array().items(Joi.string()).optional(),
@@ -117,9 +74,6 @@ export class UsersController {
         swift_code: Joi.string().optional(),
 
         notes: Joi.string().optional(),
-        filter_preferences: Joi.array()
-          .items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/))
-          .optional(),
       }),
     ),
   )
@@ -127,7 +81,7 @@ export class UsersController {
     const userId = (req.user as any)?.id;
     if (!userId) throw new NotFoundException('User not found or unauthorized');
 
-    // Security: strip forbidden fields
+    // Remove forbidden fields
     const forbidden = [
       'passwordHash',
       'passwordSalt',
@@ -139,13 +93,16 @@ export class UsersController {
     ];
     forbidden.forEach((field) => delete body[field]);
 
+    // Password update
     if (body?.password) {
       const { salt, hash } = this.authService.hashPassword(body.password);
       body.passwordHash = hash;
       body.passwordSalt = salt;
+      delete body.password;
     }
 
     const updatedUser = await this.usersService.updateUser(userId, body);
+
     return {
       message: 'Profile updated successfully',
       user: updatedUser,

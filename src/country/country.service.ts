@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Like } from 'typeorm';
+import { Country } from './entities/country.entity';
 
 @Injectable()
 export class CountryService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Country)
+    private countryRepo: Repository<Country>,
+  ) {}
 
   async getAllCountries(options: {
     page?: number;
@@ -25,37 +30,32 @@ export class CountryService {
     const where = {
       isActive: true,
       ...(search
-        ? { name: { contains: search, mode: 'insensitive' } }
+        ? { name: Like(`%${search}%`) }
         : {}),
     };
 
-    const orderBy = {
-      [sortBy]: sortOrder,
+    const order = {
+      [sortBy]: sortOrder.toUpperCase(),
     };
 
-    const [data, total] = await Promise.all([
-      this.prisma.country.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-      }),
-      this.prisma.country.count({ where }),
-    ]);
-
-    const totalPages = Math.ceil(total / limit);
+    const [data, total] = await this.countryRepo.findAndCount({
+      where,
+      order,
+      skip,
+      take: limit,
+    });
 
     return {
       data,
       total,
-      totalPages,
+      totalPages: Math.ceil(total / limit),
       currentPage: page,
     };
   }
 
-  async getCountryById(id: string) {
-    const country = await this.prisma.country.findUnique({
-      where: { id: Number(id) },
+  async getCountryById(id: number) {
+    const country = await this.countryRepo.findOne({
+      where: { id },
     });
 
     if (!country) {

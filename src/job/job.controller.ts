@@ -8,7 +8,6 @@ import {
   Get,
   Query,
 } from '@nestjs/common';
-
 import { JobService } from './job.service';
 import Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
@@ -61,7 +60,6 @@ export class JobController {
 
         startDate: Joi.date().optional(),
         endDate: Joi.date().optional(),
-
         industry: Joi.string().optional(),
         educationLevel: Joi.string().optional(),
         experienceRequired: Joi.string().optional(),
@@ -69,7 +67,7 @@ export class JobController {
       }),
     ),
   )
-  async createJob(@Body() body: any, @Req() req: any) {
+  async createJob(@Body() body: any) {
     return this.jobService.createJob(body);
   }
 

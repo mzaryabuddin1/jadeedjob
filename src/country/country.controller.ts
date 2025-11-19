@@ -14,7 +14,9 @@ export class CountryController {
         page: Joi.number().integer().min(1).default(1),
         limit: Joi.number().integer().min(1).max(100).default(20),
         search: Joi.string().allow('').optional(),
-        sortBy: Joi.string().valid('name', 'dialCode', 'alpha2', 'region').optional(),
+        sortBy: Joi.string()
+          .valid('name', 'dial_code', 'code')
+          .optional(),
         sortOrder: Joi.string().valid('asc', 'desc').optional(),
       }),
     ),
@@ -33,13 +35,11 @@ export class CountryController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        id: Joi.number().required().messages({
-          'number.base': 'Country ID must be a number',
-        }),
+        id: Joi.number().required(),
       }),
     ),
   )
   async getCountryById(@Param() params: any) {
-    return this.countryService.getCountryById(params.id);
+    return this.countryService.getCountryById(Number(params.id));
   }
 }

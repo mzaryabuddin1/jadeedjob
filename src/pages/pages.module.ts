@@ -1,11 +1,13 @@
-// src/pages/pages.module.ts
 import { Module } from '@nestjs/common';
 import { PagesController } from './pages.controller';
 import { PagesService } from './pages.service';
-import { PrismaModule } from 'src/prisma/prisma.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Page } from './entities/page.entity';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [
+    TypeOrmModule.forFeature([Page]),
+  ],
   controllers: [PagesController],
   providers: [PagesService],
   exports: [PagesService],

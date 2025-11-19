@@ -1,13 +1,17 @@
-// src/pages/pages.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Like } from 'typeorm';
+import { Page } from './entities/page.entity';
 
 @Injectable()
 export class PagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Page)
+    private readonly pageRepo: Repository<Page>,
+  ) {}
 
   async createPage(data: any, userId: number) {
-    const existing = await this.prisma.page.findFirst({
+    const existing = await this.pageRepo.findOne({
       where: { ownerId: userId },
     });
 
@@ -15,12 +19,12 @@ export class PagesService {
       throw new BadRequestException('User already has a company page.');
     }
 
-    const page = await this.prisma.page.create({
-      data: {
-        ...data,
-        ownerId: userId,
-      },
+    const page = this.pageRepo.create({
+      ...data,
+      ownerId: userId,
     });
+
+    await this.pageRepo.save(page);
 
     return {
       message: 'Company page created successfully',
@@ -39,23 +43,18 @@ export class PagesService {
     const where: any = {};
 
     if (search) {
-      where.company_name = {
-        contains: search,
-        mode: 'insensitive',
-      };
+      where.company_name = Like(`%${search}%`);
     }
 
     if (mine && userId) {
       where.ownerId = userId;
     }
 
-    const total = await this.prisma.page.count({ where });
-
-    const data = await this.prisma.page.findMany({
+    const [data, total] = await this.pageRepo.findAndCount({
       where,
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
-      orderBy: { createdAt: 'desc' },
+      order: { createdAt: 'DESC' },
     });
 
     return {
@@ -70,17 +69,17 @@ export class PagesService {
   }
 
   async getPageById(id: number) {
-    const page = await this.prisma.page.findUnique({
-      where: { id },
-    });
+    const page = await this.pageRepo.findOne({ where: { id } });
 
-    if (!page) throw new BadRequestException('Company page not found');
+    if (!page) {
+      throw new BadRequestException('Company page not found');
+    }
 
     return page;
   }
 
   async updatePage(id: number, data: any, userId: number) {
-    const page = await this.prisma.page.findFirst({
+    const page = await this.pageRepo.findOne({
       where: { id, ownerId: userId },
     });
 
@@ -90,10 +89,9 @@ export class PagesService {
       );
     }
 
-    const updated = await this.prisma.page.update({
-      where: { id },
-      data,
-    });
+    await this.pageRepo.update(id, data);
+
+    const updated = await this.pageRepo.findOne({ where: { id } });
 
     return {
       message: 'Page updated successfully',
@@ -102,7 +100,7 @@ export class PagesService {
   }
 
   async deletePage(id: number, userId: number) {
-    const page = await this.prisma.page.findFirst({
+    const page = await this.pageRepo.findOne({
       where: { id, ownerId: userId },
     });
 
@@ -112,7 +110,7 @@ export class PagesService {
       );
     }
 
-    await this.prisma.page.delete({ where: { id } });
+    await this.pageRepo.delete(id);
 
     return { message: 'Page deleted successfully' };
   }

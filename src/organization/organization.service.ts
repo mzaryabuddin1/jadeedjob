@@ -1,165 +1,126 @@
-// src/organization/organization.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In } from 'typeorm';
+import { Organization } from './entities/organization.entity';
+import { OrgMember } from './entities/org-member.entity';
 import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class OrganizationService {
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectRepository(Organization)
+    private readonly orgRepo: Repository<Organization>,
+
+    @InjectRepository(OrgMember)
+    private readonly orgMemberRepo: Repository<OrgMember>,
+
     private readonly usersService: UsersService,
   ) {}
 
+  // ────────────────────────────────────────────────
   async createOrg(data: {
     name: string;
     industry: string;
     createdBy: number;
     members?: { user: number; role: 'admin' | 'user' }[];
   }) {
-    // Check for duplicate organization name
-    const exists = await this.prisma.organization.findFirst({
-      where: { name: data.name },
-    });
+    // Check duplicate
+    const exists = await this.orgRepo.findOne({ where: { name: data.name } });
+    if (exists) throw new BadRequestException('Organization name already exists');
 
-    if (exists) {
-      throw new BadRequestException('Organization name already exists');
-    }
+    // Validate user ids
+    const memberMap = new Map<number, string>();
 
-    // Normalize members into a map
-    const memberMap = new Map<number, 'admin' | 'user'>();
-    if (data.members) {
-      for (const m of data.members) {
-        memberMap.set(m.user, m.role || 'user');
-      }
-    }
+    data.members?.forEach((m) => memberMap.set(m.user, m.role));
 
-    // all user IDs = members + creator
     const allUserIds = [...memberMap.keys(), data.createdBy];
-    const uniqueUserIds = Array.from(new Set(allUserIds));
+    const uniqueIds = Array.from(new Set(allUserIds));
 
-    // Check all users exist
-    const validUsers = await this.prisma.user.findMany({
-      where: { id: { in: uniqueUserIds } },
-      select: { id: true },
-    });
-
-    if (validUsers.length !== uniqueUserIds.length) {
+    const validUsers = await this.usersService.findUsersByIds(uniqueIds);
+    if (validUsers.length !== uniqueIds.length)
       throw new BadRequestException('One or more user IDs are invalid');
-    }
 
-    // Build members list (owner + provided members)
+    // Prepare members list
     const membersToCreate = [
-      { userId: data.createdBy, role: 'owner' as const },
+      { userId: data.createdBy, role: 'owner' },
       ...Array.from(memberMap.entries()).map(([userId, role]) => ({
         userId,
         role,
       })),
     ];
 
-    const org = await this.prisma.organization.create({
-      data: {
-        name: data.name,
-        industry: data.industry,
-        createdBy: data.createdBy,
-        isActive: 'active',
-        members: {
-          create: membersToCreate,
-        },
-      },
-      include: {
-        members: {
-          include: { user: true },
-        },
-      },
+    // Create organization + members
+    const org = this.orgRepo.create({
+      name: data.name,
+      industry: data.industry,
+      createdBy: data.createdBy,
+      members: membersToCreate.map((m) =>
+        this.orgMemberRepo.create({
+          userId: m.userId,
+          role: m.role as any,
+        }),
+      ),
     });
 
-    return org;
+    return this.orgRepo.save(org);
   }
 
+  // ────────────────────────────────────────────────
   async getMyOrganizations(userId: number) {
-    return this.prisma.organization.findMany({
-      where: {
-        OR: [
-          { createdBy: userId },
-          {
-            members: {
-              some: { userId },
-            },
-          },
-        ],
-      },
-      include: {
-        members: {
-          include: { user: true },
-        },
-      },
+    return this.orgRepo.find({
+      where: [
+        { createdBy: userId },
+        { members: { userId } },
+      ],
+      relations: ['members', 'members.user'],
     });
   }
 
+  // ────────────────────────────────────────────────
   async addMember(
     orgId: number,
     member: { userId: number; role: 'admin' | 'user' },
     requesterId: number,
   ) {
-    const org = await this.prisma.organization.findUnique({
+    const org = await this.orgRepo.findOne({
       where: { id: orgId },
-      include: {
-        members: true,
-      },
+      relations: ['members'],
     });
 
-    if (!org) {
-      throw new BadRequestException('Organization not found');
-    }
+    if (!org) throw new BadRequestException('Organization not found');
 
-    // Check if requester is owner or admin
+    // permissions
     const isAllowed =
       org.createdBy === requesterId ||
       org.members.some(
-        (m) =>
-          m.userId === requesterId &&
-          (m.role === 'owner' || m.role === 'admin'),
+        (m) => m.userId === requesterId && (m.role === 'owner' || m.role === 'admin'),
       );
 
     if (!isAllowed) {
-      throw new BadRequestException(
-        'Only owners or admins can add members to the organization',
-      );
+      throw new BadRequestException('Only owners or admins can add members');
     }
 
-    // Ensure target user exists
+    // user exists?
     const user = await this.usersService.getUserById(member.userId);
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
+    if (!user) throw new BadRequestException('User not found');
 
-    // Check if already member
-    const alreadyMember = org.members.some(
-      (m) => m.userId === member.userId,
-    );
-
-    if (alreadyMember) {
+    // already member?
+    if (org.members.some((m) => m.userId === member.userId)) {
       throw new BadRequestException('User is already a member');
     }
 
-    await this.prisma.orgMember.create({
-      data: {
+    // add member
+    await this.orgMemberRepo.save(
+      this.orgMemberRepo.create({
         organizationId: orgId,
         userId: member.userId,
         role: member.role,
-      },
-    });
+      }),
+    );
 
-    const updatedOrg = await this.prisma.organization.findUnique({
+    return this.orgRepo.findOne({
       where: { id: orgId },
-      include: {
-        members: { include: { user: true } },
-      },
+      relations: ['members', 'members.user'],
     });
-
-    return {
-      message: 'Member added successfully',
-      organization: updatedOrg,
-    };
   }
 }

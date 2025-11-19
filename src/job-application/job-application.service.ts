@@ -1,13 +1,25 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { JobApplication } from './entities/job-application.entity';
+import { Job } from 'src/job/entities/job.entity';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
 export class JobApplicationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(JobApplication)
+    private jobAppRepo: Repository<JobApplication>,
+
+    @InjectRepository(Job)
+    private jobRepo: Repository<Job>,
+
+    @InjectRepository(User)
+    private userRepo: Repository<User>,
+  ) {}
 
   async apply(data: { jobId: number; applicantId: number }) {
-    // Check if job exists and is active
-    const job = await this.prisma.job.findFirst({
+    const job = await this.jobRepo.findOne({
       where: { id: data.jobId, isActive: true },
     });
 
@@ -15,8 +27,7 @@ export class JobApplicationService {
       throw new BadRequestException('Job does not exist or is not active');
     }
 
-    // Prevent duplicate application
-    const existing = await this.prisma.jobApplication.findFirst({
+    const existing = await this.jobAppRepo.findOne({
       where: {
         jobId: data.jobId,
         applicantId: data.applicantId,
@@ -27,26 +38,24 @@ export class JobApplicationService {
       throw new BadRequestException('You already applied to this job');
     }
 
-    return this.prisma.jobApplication.create({
-      data,
+    const app = this.jobAppRepo.create({
+      jobId: data.jobId,
+      applicantId: data.applicantId,
     });
+
+    return this.jobAppRepo.save(app);
   }
 
-    async getApplicationsByUser(userId: number, page = 1, limit = 10) {
+  async getApplicationsByUser(userId: number, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
-    const [applications, total] = await Promise.all([
-      this.prisma.jobApplication.findMany({
-        where: { applicantId: userId },
-        include: { job: true },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.jobApplication.count({
-        where: { applicantId: userId },
-      }),
-    ]);
+    const [applications, total] = await this.jobAppRepo.findAndCount({
+      where: { applicantId: userId },
+      relations: ['job'],
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
 
     return {
       data: applications,
@@ -56,17 +65,21 @@ export class JobApplicationService {
     };
   }
 
-    async getApplicationsByJob(jobId: number) {
-    return this.prisma.jobApplication.findMany({
+  async getApplicationsByJob(jobId: number) {
+    return this.jobAppRepo.find({
       where: { jobId },
-      include: { applicant: true },
+      relations: ['applicant'],
     });
   }
 
-    async updateStatus(id: number, status: string) {
-    return this.prisma.jobApplication.update({
-      where: { id },
-      data: { status },
-    });
+  async updateStatus(id: number, status: string) {
+    const app = await this.jobAppRepo.findOne({ where: { id } });
+
+    if (!app) {
+      throw new BadRequestException('Application not found');
+    }
+
+    app.status = status;
+    return this.jobAppRepo.save(app);
   }
 }

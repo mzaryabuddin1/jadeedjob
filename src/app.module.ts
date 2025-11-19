@@ -23,13 +23,22 @@ import { JobApplicationModule } from './job-application/job-application.module';
 import { OrganizationModule } from './organization/organization.module';
 import { FilesModule } from './files/files.module';
 import { PagesModule } from './pages/pages.module';
-import { PrismaModule } from './prisma/prisma.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
   imports: [
     ConfigModule.forRoot({isGlobal: true}), // Load .env
     // MongooseModule.forRoot(process.env.MONGODB_URI),
-
+    TypeOrmModule.forRoot({
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      username: 'root',
+      password: '',
+      database: 'jobsloot_staging',
+      autoLoadEntities: true,
+      synchronize: true,
+    }),
     // Application Modules
     AuthModule,
     UsersModule,
@@ -51,7 +60,6 @@ import { PrismaModule } from './prisma/prisma.module';
     OrganizationModule,
     FilesModule,
     PagesModule,
-    PrismaModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,19 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Raw } from 'typeorm';
+import { Job } from './entities/job.entity';
 
 @Injectable()
 export class JobService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Job)
+    private jobRepo: Repository<Job>,
+  ) {}
 
   async createJob(data: any) {
     const { location, ...rest } = data;
 
-    return this.prisma.job.create({
-      data: {
-        ...rest,
-        location: `POINT(${location.lng} ${location.lat})`,
-      },
+    const job = this.jobRepo.create({
+      ...rest,
+      location: () => `POINT(${location.lng}, ${location.lat})`,
     });
+
+    return this.jobRepo.save(job);
   }
 
   async findNearbyJobs(query: any) {
@@ -24,40 +29,32 @@ export class JobService {
       limit = 10,
       search = '',
       sortBy = 'createdAt',
-      sortOrder = 'desc',
+      sortOrder = 'DESC',
       radiusKm = 1,
     } = query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
+    const radiusMeters = radiusKm * 1000;
 
-    const jobs = await this.prisma.$queryRawUnsafe(`
-      SELECT *,
-        ST_Distance(
-          location,
-          ST_SetSRID(ST_Point(${lng}, ${lat}), 4326)
-        ) AS distance
-      FROM "Job"
-      WHERE ST_DWithin(
-        location,
-        ST_SetSRID(ST_Point(${lng}, ${lat}), 4326),
-        ${radiusKm * 1000}
-      )
-      AND "isActive" = true
-      ${search ? `AND description ILIKE '%${search}%'` : ''}
-      ORDER BY "${sortBy}" ${sortOrder}
+    const jobs = await this.jobRepo.query(`
+      SELECT 
+        *, 
+        ST_Distance_Sphere(location, POINT(${lng}, ${lat})) AS distance
+      FROM jobs
+      WHERE isActive = 1
+      AND ST_Distance_Sphere(location, POINT(${lng}, ${lat})) <= ${radiusMeters}
+      ${search ? `AND description LIKE '%${search}%'` : ''}
+      ORDER BY ${sortBy} ${sortOrder}
       LIMIT ${limit}
-      OFFSET ${skip}
+      OFFSET ${offset}
     `);
 
-    const totalResult: any = await this.prisma.$queryRawUnsafe(`
-      SELECT COUNT(*) FROM "Job"
-      WHERE ST_DWithin(
-        location,
-        ST_SetSRID(ST_Point(${lng}, ${lat}), 4326),
-        ${radiusKm * 1000}
-      )
-      AND "isActive" = true
-      ${search ? `AND description ILIKE '%${search}%'` : ''}
+    const totalResult = await this.jobRepo.query(`
+      SELECT COUNT(*) AS count
+      FROM jobs
+      WHERE isActive = 1
+      AND ST_Distance_Sphere(location, POINT(${lng}, ${lat})) <= ${radiusMeters}
+      ${search ? `AND description LIKE '%${search}%'` : ''}
     `);
 
     const total = Number(totalResult[0].count);
@@ -69,7 +66,7 @@ export class JobService {
       currentPage: page,
     };
   }
-  
+
   async findJobs(query: any) {
     const {
       filter,
@@ -77,42 +74,27 @@ export class JobService {
       limit = 10,
       search,
       sortBy = 'createdAt',
-      sortOrder = 'desc',
+      sortOrder = 'DESC',
       lat,
       lng,
     } = query;
 
-    const skip = (page - 1) * limit;
-
-    // If lat/lng provided → geo distance sorted
+    // If geo available → use geo function
     if (lat && lng) {
-      return this.findNearbyJobs({
-        lat,
-        lng,
-        filter,
-        page,
-        limit,
-        search,
-        sortBy,
-        sortOrder,
-      });
+      return this.findNearbyJobs(query);
     }
 
-    // No geo → use Prisma query
     const where: any = { isActive: true };
 
-    if (filter) where.filterId = Number(filter);
-    if (search) where.description = { contains: search, mode: 'insensitive' };
+    if (filter) where.filterId = filter;
+    if (search) where.description = Raw((alias) => `${alias} LIKE '%${search}%'`);
 
-    const [jobs, total] = await Promise.all([
-      this.prisma.job.findMany({
-        where,
-        orderBy: { [sortBy]: sortOrder },
-        skip,
-        take: limit,
-      }),
-      this.prisma.job.count({ where }),
-    ]);
+    const [jobs, total] = await this.jobRepo.findAndCount({
+      where,
+      order: { [sortBy]: sortOrder.toUpperCase() },
+      take: limit,
+      skip: (page - 1) * limit,
+    });
 
     return {
       data: jobs,

@@ -1,37 +1,42 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+  ) {}
 
   async getUserById(id: number) {
-    return this.prisma.user.findUnique({
+    const user = await this.userRepo.findOne({
       where: { id },
-      include: {
-        country: true,
-        language: true,
-        work_experience: true,
-        education: true,
-        certifications: true,
-        filters: true,
-      },
+      relations: [
+        'country',
+        'language',
+      ],
     });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    return user;
   }
 
   async updateUser(id: number, data: any) {
-    return this.prisma.user.update({
-      where: { id },
-      data,
-      include: {
-        country: true,
-        language: true,
-        work_experience: true,
-        education: true,
-        certifications: true,
-        filters: true,
-      },
-    });
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    Object.assign(user, data);
+
+    return this.userRepo.save(user);
   }
+
+  async findUsersByIds(ids: number[]) {
+  return this.userRepo.find({
+    where: { id: In(ids) },
+  });
 }
 
+}

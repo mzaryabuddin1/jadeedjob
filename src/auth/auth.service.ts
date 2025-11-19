@@ -1,46 +1,68 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { pbkdf2Sync, randomBytes } from 'crypto';
+import { User } from 'src/users/entities/user.entity';
+import { Country } from 'src/country/entities/country.entity';
+import { Language } from 'twilio/lib/twiml/VoiceResponse';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
-    private prisma: PrismaService,
+
+    @InjectRepository(User)
+    private userRepo: Repository<User>,
+
+    @InjectRepository(Country)
+    private countryRepo: Repository<Country>,
+
+    @InjectRepository(Language)
+    private languageRepo: Repository<Language>,
   ) {}
 
   generateToken(user: any) {
     return this.jwtService.sign({ id: user.id });
   }
 
-  async createOrGetUser(data: any) {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { phone: data.phone },
-    });
-
-    if (existingUser) return existingUser;
-
-    return this.prisma.user.create({
-      data: {
-        ...data,
-        countryId: Number(data.country),
-        languageId: Number(data.language),
-        isBanned: false,
-      },
-    });
-  }
-
+  // ────────────────────────────────────────────────
+  // CHECK USER BY PHONE
+  // ────────────────────────────────────────────────
   async findUserByPhone(phone: string) {
-    return this.prisma.user.findUnique({
+    return this.userRepo.findOne({
       where: { phone },
-      include: {
-        country: true,
-        language: true,
-      },
+      relations: ['country', 'language'],
     });
   }
 
+  // ────────────────────────────────────────────────
+  // CREATE USER IF NOT EXISTS
+  // ────────────────────────────────────────────────
+  async createOrGetUser(data: any) {
+    const existing = await this.findUserByPhone(data.phone);
+    if (existing) return existing;
+
+    const country = await this.countryRepo.findOne({
+      where: { id: Number(data.country) },
+    });
+    const language = await this.languageRepo.findOne({
+      where: { id: Number(data.language) },
+    });
+
+    const user = this.userRepo.create({
+      ...data,
+      country,
+      language,
+      isBanned: false,
+    });
+
+    return this.userRepo.save(user);
+  }
+
+  // ────────────────────────────────────────────────
+  // PASSWORD HELPERS
+  // ────────────────────────────────────────────────
   hashPassword(password: string) {
     const salt = randomBytes(16).toString('hex');
     const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
@@ -52,22 +74,31 @@ export class AuthService {
     return hash === storedHash;
   }
 
+  // ────────────────────────────────────────────────
+  // LOGIN / VALIDATE USER
+  // ────────────────────────────────────────────────
   async validateUser(phone: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { phone },
-      include: {
-        country: true,
-        language: true,
-      },
-    });
-
+    const user = await this.findUserByPhone(phone);
     if (!user) throw new UnauthorizedException('Invalid phone or password');
 
-    const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
+    const isValid = this.validatePassword(
+      password,
+      user.passwordHash,
+      user.passwordSalt,
+    );
+
     if (!isValid) throw new UnauthorizedException('Invalid phone or password');
 
-    if (user.isBanned) throw new UnauthorizedException('Your account is blocked!');
+    if (user.isBanned)
+      throw new UnauthorizedException('Your account is blocked!');
 
     return user;
+  }
+
+  // ────────────────────────────────────────────────
+  // RESET PASSWORD (forgot-password)
+  // ────────────────────────────────────────────────
+  async resetPassword(phone: string, salt: string, hash: string) {
+    await this.userRepo.update({ phone }, { passwordSalt: salt, passwordHash: hash });
   }
 }
