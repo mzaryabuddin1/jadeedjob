@@ -27,7 +27,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({isGlobal: true}), // Load .env
+    ConfigModule.forRoot(), // Load .env
     // MongooseModule.forRoot(process.env.MONGODB_URI),
     TypeOrmModule.forRoot({
       type: 'mysql',
@@ -38,6 +38,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       database: 'jobsloot_staging',
       autoLoadEntities: true,
       synchronize: true,
+      legacySpatialSupport: false, 
     }),
     // Application Modules
     AuthModule,

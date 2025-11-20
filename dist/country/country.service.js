@@ -25,7 +25,6 @@ let CountryService = class CountryService {
         const { limit = 20, page = 1, search = '', sortBy = 'name', sortOrder = 'asc', } = options;
         const skip = (page - 1) * limit;
         const where = {
-            isActive: true,
             ...(search
                 ? { name: (0, typeorm_2.Like)(`%${search}%`) }
                 : {}),

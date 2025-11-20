@@ -14,6 +14,7 @@ const jwt_1 = require("@nestjs/jwt");
 const users_module_1 = require("../users/users.module");
 const otp_module_1 = require("../otp/otp.module");
 const twilio_module_1 = require("../twilio/twilio.module");
+const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const user_entity_1 = require("../users/entities/user.entity");
 const country_module_1 = require("../country/country.module");
@@ -26,13 +27,17 @@ exports.AuthModule = AuthModule;
 exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            jwt_1.JwtModule.register({}),
+            config_1.ConfigModule.forRoot(),
+            jwt_1.JwtModule.register({
+                secret: process.env.JWT_SECRET,
+                signOptions: { expiresIn: '1h' },
+            }),
             typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language]),
-            (0, common_1.forwardRef)(() => users_module_1.UsersModule),
+            users_module_1.UsersModule,
             otp_module_1.OtpModule,
             country_module_1.CountryModule,
             language_module_1.LanguageModule,
-            twilio_module_1.TwilioModule
+            twilio_module_1.TwilioModule,
         ],
         controllers: [auth_controller_1.AuthController],
         providers: [auth_service_1.AuthService],

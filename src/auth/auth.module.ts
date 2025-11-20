@@ -12,21 +12,22 @@ import { CountryModule } from 'src/country/country.module';
 import { LanguageModule } from 'src/language/language.module';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
-
 @Module({
   imports: [
-    JwtModule.register({}),
+    ConfigModule.forRoot(),
+    JwtModule.register({
+      secret: process.env.JWT_SECRET,
+      signOptions: { expiresIn: '1h' },
+    }),
     TypeOrmModule.forFeature([User, Country, Language]),
-
-    forwardRef(() => UsersModule),
+    UsersModule,
     OtpModule,
     CountryModule,
     LanguageModule,
-    TwilioModule
+    TwilioModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],
   exports: [AuthService],
 })
-
 export class AuthModule {}

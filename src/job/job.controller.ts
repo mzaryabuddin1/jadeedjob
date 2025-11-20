@@ -22,7 +22,7 @@ export class JobController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        filter: Joi.number().required(),
+        filterId: Joi.number().required(),
         description: Joi.string().required(),
         requirements: Joi.string().optional(),
         benefits: Joi.array().items(Joi.string()).optional(),
@@ -76,8 +76,5 @@ export class JobController {
     return this.jobService.findJobs(query);
   }
 
-  @Get('nearby')
-  async findNearbyJobs(@Query() query: any) {
-    return this.jobService.findNearbyJobs(query);
-  }
+ 
 }

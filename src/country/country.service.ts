@@ -28,7 +28,6 @@ export class CountryService {
     const skip = (page - 1) * limit;
 
     const where = {
-      isActive: true,
       ...(search
         ? { name: Like(`%${search}%`) }
         : {}),

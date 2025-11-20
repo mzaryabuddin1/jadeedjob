@@ -22,6 +22,7 @@ __decorate([
 ], Job.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => filter_entity_1.Filter, (filter) => filter.jobs),
+    (0, typeorm_1.JoinColumn)({ name: 'filterId' }),
     __metadata("design:type", filter_entity_1.Filter)
 ], Job.prototype, "filter", void 0);
 __decorate([

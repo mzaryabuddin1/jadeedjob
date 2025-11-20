@@ -31,15 +31,12 @@ let JobController = class JobController {
     async findJobs(query) {
         return this.jobService.findJobs(query);
     }
-    async findNearbyJobs(query) {
-        return this.jobService.findNearbyJobs(query);
-    }
 };
 exports.JobController = JobController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        filter: joi_1.default.number().required(),
+        filterId: joi_1.default.number().required(),
         description: joi_1.default.string().required(),
         requirements: joi_1.default.string().optional(),
         benefits: joi_1.default.array().items(joi_1.default.string()).optional(),
@@ -73,13 +70,6 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "findJobs", null);
-__decorate([
-    (0, common_1.Get)('nearby'),
-    __param(0, (0, common_1.Query)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], JobController.prototype, "findNearbyJobs", null);
 exports.JobController = JobController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('job'),

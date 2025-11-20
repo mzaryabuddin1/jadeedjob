@@ -3,7 +3,6 @@ import {
   Controller,
   Post,
   Get,
-  Put,
   Delete,
   Param,
   Body,
@@ -11,6 +10,7 @@ import {
   Req,
   UseGuards,
   UsePipes,
+  Patch,
 } from '@nestjs/common';
 import { PagesService } from './pages.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -80,7 +80,7 @@ export class PagesController {
     return this.pagesService.getPageById(Number(id));
   }
 
-  @Put(':id')
+  @Patch(':id')
   updatePage(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     return this.pagesService.updatePage(Number(id), body, req.user.id);
   }

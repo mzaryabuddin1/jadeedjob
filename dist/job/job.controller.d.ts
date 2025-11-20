@@ -9,10 +9,4 @@ export declare class JobController {
         totalPages: number;
         currentPage: any;
     }>;
-    findNearbyJobs(query: any): Promise<{
-        data: any;
-        total: number;
-        totalPages: number;
-        currentPage: any;
-    }>;
 }

@@ -105,7 +105,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PagesController.prototype, "getPageById", null);
 __decorate([
-    (0, common_1.Put)(':id'),
+    (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Req)()),

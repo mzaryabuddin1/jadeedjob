@@ -33,7 +33,7 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            config_1.ConfigModule.forRoot({ isGlobal: true }),
+            config_1.ConfigModule.forRoot(),
             typeorm_1.TypeOrmModule.forRoot({
                 type: 'mysql',
                 host: 'localhost',
@@ -43,6 +43,7 @@ exports.AppModule = AppModule = __decorate([
                 database: 'jobsloot_staging',
                 autoLoadEntities: true,
                 synchronize: true,
+                legacySpatialSupport: false,
             }),
             auth_module_1.AuthModule,
             users_module_1.UsersModule,

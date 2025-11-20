@@ -79,7 +79,6 @@ export class AuthController {
       isVerified: true,
     });
 
-
     const token = this.authService.generateToken(user);
     this.otpService.deleteOtp(phone);
 
