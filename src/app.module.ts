@@ -27,15 +27,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(), // Load .env
+    ConfigModule.forRoot(),
     // MongooseModule.forRoot(process.env.MONGODB_URI),
     TypeOrmModule.forRoot({
       type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'root',
-      password: '',
-      database: 'jobsloot_staging',
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT)  ,
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_DATABASE,
       autoLoadEntities: true,
       synchronize: true,
       legacySpatialSupport: false, 
