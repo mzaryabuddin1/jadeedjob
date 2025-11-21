@@ -17,17 +17,22 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const job_entity_1 = require("./entities/job.entity");
+const user_entity_1 = require("../users/entities/user.entity");
+const firebase_service_1 = require("../firebase/firebase.service");
 let JobService = class JobService {
-    constructor(jobRepo) {
+    constructor(jobRepo, userRepo, firebaseService) {
         this.jobRepo = jobRepo;
+        this.userRepo = userRepo;
+        this.firebaseService = firebaseService;
     }
     async createJob(data) {
         const { location, ...rest } = data;
         const job = this.jobRepo.create({
             ...rest,
-            location: () => `POINT(${location.lng}, ${location.lat})`,
+            location: () => `ST_GeomFromText('POINT(${location.lng} ${location.lat})')`,
         });
-        return this.jobRepo.save(job);
+        const savedJob = await this.jobRepo.save(job);
+        return savedJob;
     }
     async findNearbyJobs(query) {
         const { lat, lng, page = 1, limit = 10, search = '', sortBy = 'createdAt', sortOrder = 'DESC', radiusKm = 1, } = query;
@@ -35,24 +40,24 @@ let JobService = class JobService {
         const radiusMeters = radiusKm * 1000;
         const jobs = await this.jobRepo.query(`
       SELECT 
-        *, 
-        ST_Distance_Sphere(location, POINT(${lng}, ${lat})) AS distance
-      FROM jobs
-      WHERE isActive = 1
-      AND ST_Distance_Sphere(location, POINT(${lng}, ${lat})) <= ${radiusMeters}
-      ${search ? `AND description LIKE '%${search}%'` : ''}
+        j.*, 
+        ST_Distance_Sphere(j.location, POINT(${lng}, ${lat})) AS distance
+      FROM jobs j
+      WHERE j.isActive = 1
+      AND ST_Distance_Sphere(j.location, POINT(${lng}, ${lat})) <= ${radiusMeters}
+      ${search ? `AND j.description LIKE '%${search}%'` : ''}
       ORDER BY ${sortBy} ${sortOrder}
       LIMIT ${limit}
       OFFSET ${offset}
     `);
-        const totalResult = await this.jobRepo.query(`
+        const countResult = await this.jobRepo.query(`
       SELECT COUNT(*) AS count
-      FROM jobs
-      WHERE isActive = 1
-      AND ST_Distance_Sphere(location, POINT(${lng}, ${lat})) <= ${radiusMeters}
-      ${search ? `AND description LIKE '%${search}%'` : ''}
+      FROM jobs j
+      WHERE j.isActive = 1
+      AND ST_Distance_Sphere(j.location, POINT(${lng}, ${lat})) <= ${radiusMeters}
+      ${search ? `AND j.description LIKE '%${search}%'` : ''}
     `);
-        const total = Number(totalResult[0].count);
+        const total = Number(countResult[0].count);
         return {
             data: jobs,
             total,
@@ -62,12 +67,11 @@ let JobService = class JobService {
     }
     async findJobs(query) {
         const { filter, page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'DESC', lat, lng, } = query;
-        if (lat && lng) {
+        if (lat && lng)
             return this.findNearbyJobs(query);
-        }
         const where = { isActive: true };
         if (filter)
-            where.filterId = filter;
+            where.filterId = Number(filter);
         if (search)
             where.description = (0, typeorm_2.Raw)((alias) => `${alias} LIKE '%${search}%'`);
         const [jobs, total] = await this.jobRepo.findAndCount({
@@ -88,6 +92,9 @@ exports.JobService = JobService;
 exports.JobService = JobService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
+        firebase_service_1.FirebaseService])
 ], JobService);
 //# sourceMappingURL=job.service.js.map

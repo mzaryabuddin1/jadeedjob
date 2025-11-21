@@ -24,6 +24,7 @@ import { OrganizationModule } from './organization/organization.module';
 import { FilesModule } from './files/files.module';
 import { PagesModule } from './pages/pages.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { FirebaseModule } from './firebase/firebase.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     OrganizationModule,
     FilesModule,
     PagesModule,
+    FirebaseModule,
   ],
   controllers: [AppController],
   providers: [

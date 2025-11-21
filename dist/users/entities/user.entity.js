@@ -186,6 +186,10 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "notes", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "fcmToken", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => country_entity_1.Country, (country) => country.users, { eager: true }),
     __metadata("design:type", country_entity_1.Country)
 ], User.prototype, "country", void 0);

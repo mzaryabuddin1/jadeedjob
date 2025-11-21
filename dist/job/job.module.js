@@ -13,12 +13,14 @@ const job_service_1 = require("./job.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const job_entity_1 = require("./entities/job.entity");
 const filter_entity_1 = require("../filter/entities/filter.entity");
+const firebase_module_1 = require("../firebase/firebase.module");
+const user_entity_1 = require("../users/entities/user.entity");
 let JobModule = class JobModule {
 };
 exports.JobModule = JobModule;
 exports.JobModule = JobModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([job_entity_1.Job, filter_entity_1.Filter])],
+        imports: [typeorm_1.TypeOrmModule.forFeature([job_entity_1.Job, filter_entity_1.Filter, user_entity_1.User]), firebase_module_1.FirebaseModule],
         controllers: [job_controller_1.JobController],
         providers: [job_service_1.JobService],
     })

@@ -37,6 +37,7 @@ export class UsersService {
   return this.userRepo.find({
     where: { id: In(ids) },
   });
+  
 }
 
 }

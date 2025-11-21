@@ -47,6 +47,7 @@ export declare class User {
     verification_date: Date;
     rejection_reason: string;
     notes: string;
+    fcmToken: string;
     country: Country;
     language: Language;
     work_experience: WorkExperience[];

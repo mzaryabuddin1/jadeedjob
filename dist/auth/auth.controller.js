@@ -22,11 +22,13 @@ const otp_service_1 = require("../otp/otp.service");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const joi_1 = __importDefault(require("joi"));
 const twilio_service_1 = require("../twilio/twilio.service");
+const users_service_1 = require("../users/users.service");
 let AuthController = class AuthController {
-    constructor(authService, otpService, twilioService) {
+    constructor(authService, otpService, twilioService, usersService) {
         this.authService = authService;
         this.otpService = otpService;
         this.twilioService = twilioService;
+        this.usersService = usersService;
     }
     async sendOtp(body) {
         const existing = await this.authService.findUserByPhone(body.phone);
@@ -40,7 +42,7 @@ let AuthController = class AuthController {
         return { message: `OTP sent to ${body.phone}`, otp };
     }
     async verifyOtp(body) {
-        const { phone, code } = body;
+        const { phone, code, fcmToken = null } = body;
         const entry = this.otpService.getOtpEntry(phone);
         if (!entry)
             throw new common_1.UnauthorizedException('OTP not found');
@@ -57,6 +59,11 @@ let AuthController = class AuthController {
             ...entry.registrationData,
             isVerified: true,
         });
+        if (fcmToken) {
+            await this.usersService.updateUser(user.id, {
+                fcmToken,
+            });
+        }
         const token = this.authService.generateToken(user);
         this.otpService.deleteOtp(phone);
         return { access_token: token, user };
@@ -66,6 +73,8 @@ let AuthController = class AuthController {
         delete user.passwordHash;
         delete user.passwordSalt;
         const token = this.authService.generateToken(user);
+        const { fcmToken = null } = dto;
+        await this.usersService.updateUser(user.id, { "fcmToken": fcmToken });
         return { access_token: token, user };
     }
     async sendForgotPasswordOtp(body) {
@@ -132,6 +141,7 @@ __decorate([
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
         password: joi_1.default.string().required(),
+        fcmToken: joi_1.default.string().optional(),
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -156,6 +166,7 @@ exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,
         otp_service_1.OtpService,
-        twilio_service_1.TwilioService])
+        twilio_service_1.TwilioService,
+        users_service_1.UsersService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

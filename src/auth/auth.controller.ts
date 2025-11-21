@@ -11,6 +11,8 @@ import { OtpService } from 'src/otp/otp.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
 import { TwilioService } from 'src/twilio/twilio.service';
+import { UsersService } from 'src/users/users.service';
+import { User } from 'src/users/entities/user.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -18,6 +20,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly otpService: OtpService,
     private readonly twilioService: TwilioService,
+    private readonly usersService: UsersService,
   ) {}
 
   // ────────────────────────────────────────────────
@@ -61,7 +64,7 @@ export class AuthController {
   // ────────────────────────────────────────────────
   @Post('register/verify-otp')
   async verifyOtp(@Body() body: any) {
-    const { phone, code } = body;
+    const { phone, code, fcmToken = null } = body;
 
     const entry = this.otpService.getOtpEntry(phone);
     if (!entry) throw new UnauthorizedException('OTP not found');
@@ -77,13 +80,23 @@ export class AuthController {
     const user = await this.authService.createOrGetUser({
       ...entry.registrationData,
       isVerified: true,
+    }) as User;
+
+    // 👉 Save FCM token if present
+  if (fcmToken) {
+    await this.usersService.updateUser(user.id, {
+      fcmToken,
     });
+  }
 
     const token = this.authService.generateToken(user);
     this.otpService.deleteOtp(phone);
 
+
     return { access_token: token, user };
   }
+
+
 
   // ────────────────────────────────────────────────
   // LOGIN
@@ -94,6 +107,7 @@ export class AuthController {
       Joi.object({
         phone: Joi.string().required(),
         password: Joi.string().required(),
+        fcmToken: Joi.string().optional(),
       }),
     ),
   )
@@ -103,6 +117,9 @@ export class AuthController {
     delete user.passwordSalt;
 
     const token = this.authService.generateToken(user);
+
+    const { fcmToken = null } = dto;
+    await this.usersService.updateUser(user.id, {"fcmToken":fcmToken});
 
     return { access_token: token, user };
   }

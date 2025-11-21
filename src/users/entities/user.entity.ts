@@ -147,6 +147,9 @@ export class User {
 
   @Column({ nullable: true })
   notes: string;
+  
+  @Column({ nullable: true })
+  fcmToken: string;
 
   // Many-to-one with Country
   @ManyToOne(() => Country, (country) => country.users, { eager: true })

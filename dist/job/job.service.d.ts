@@ -1,8 +1,12 @@
 import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
+import { User } from '../users/entities/user.entity';
+import { FirebaseService } from '../firebase/firebase.service';
 export declare class JobService {
     private jobRepo;
-    constructor(jobRepo: Repository<Job>);
+    private userRepo;
+    private firebaseService;
+    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, firebaseService: FirebaseService);
     createJob(data: any): Promise<Job[]>;
     findNearbyJobs(query: any): Promise<{
         data: any;

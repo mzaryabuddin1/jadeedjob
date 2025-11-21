@@ -27,6 +27,7 @@ const organization_module_1 = require("./organization/organization.module");
 const files_module_1 = require("./files/files.module");
 const pages_module_1 = require("./pages/pages.module");
 const typeorm_1 = require("@nestjs/typeorm");
+const firebase_module_1 = require("./firebase/firebase.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -65,6 +66,7 @@ exports.AppModule = AppModule = __decorate([
             organization_module_1.OrganizationModule,
             files_module_1.FilesModule,
             pages_module_1.PagesModule,
+            firebase_module_1.FirebaseModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [
