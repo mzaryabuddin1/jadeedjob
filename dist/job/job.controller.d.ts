@@ -2,7 +2,7 @@ import { JobService } from './job.service';
 export declare class JobController {
     private readonly jobService;
     constructor(jobService: JobService);
-    createJob(body: any): Promise<import("./entities/job.entity").Job[]>;
+    createJob(body: any, req: any): Promise<import("./entities/job.entity").Job[]>;
     findJobs(query: any): Promise<{
         data: any;
         total: number;

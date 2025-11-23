@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat Socket Test</title>
+</head>
+<body>
+  <h2>Socket.io Chat Test</h2>
+
+  <label>JWT Token:</label><br>
+  <input type="text" id="token" style="width: 400px" placeholder="Bearer token here"><br><br>
+
+  <label>Job Application ID:</label><br>
+  <input type="number" id="jobApplicationId" value="12"><br><br>
+
+  <label>Message:</label><br>
+  <input type="text" id="message" style="width: 300px"><br><br>
+
+  <button onclick="connectSocket()">Connect</button>
+  <button onclick="joinRoom()">Join Room</button>
+  <button onclick="sendMessage()">Send Message</button>
+
+  <h3>Logs</h3>
+  <pre id="logs" style="background:#eee; padding:10px; width:500px; height:200px; overflow:auto;"></pre>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <script>
+    let socket;
+
+    function log(msg) {
+      const logs = document.getElementById("logs");
+      logs.textContent += msg + "\n";
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    function connectSocket() {
+      const token = document.getElementById("token").value.trim();
+
+      socket = io("ws://localhost:3000/chat", {
+        auth: {
+          token: token
+        }
+      });
+
+      socket.on("connect", () => {
+        log("✅ Connected to /chat namespace");
+      });
+
+      socket.on("disconnect", () => {
+        log("❌ Disconnected");
+      });
+
+      socket.on("newMessage", (data) => {
+        log("📩 New message received:");
+        log(JSON.stringify(data, null, 2));
+      });
+
+      socket.on("connect_error", (err) => {
+        log("❌ Connection error: " + err.message);
+      });
+    }
+
+    function joinRoom() {
+      const jobApplicationId = Number(document.getElementById("jobApplicationId").value);
+
+      socket.emit("joinApplication", { jobApplicationId }, (response) => {
+        log("➡️ joinApplication response:");
+        log(JSON.stringify(response, null, 2));
+      });
+    }
+
+    function sendMessage() {
+      const jobApplicationId = Number(document.getElementById("jobApplicationId").value);
+      const message = document.getElementById("message").value;
+
+      socket.emit("sendMessage", { jobApplicationId, message }, (response) => {
+        log("➡️ sendMessage response:");
+        log(JSON.stringify(response, null, 2));
+      });
+    }
+  </script>
+</body>
+</html>

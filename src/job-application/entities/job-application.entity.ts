@@ -5,9 +5,11 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
+import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 
 @Entity('job_applications')
 export class JobApplication {
@@ -34,6 +36,9 @@ export class JobApplication {
     default: 'pending',
   })
   status: string;
+
+  @OneToMany(() => ChatMessage, (msg) => msg.jobApplication)
+  messages: ChatMessage[];
 
   @CreateDateColumn()
   createdAt: Date;

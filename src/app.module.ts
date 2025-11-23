@@ -25,6 +25,7 @@ import { FilesModule } from './files/files.module';
 import { PagesModule } from './pages/pages.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FirebaseModule } from './firebase/firebase.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { FirebaseModule } from './firebase/firebase.module';
     FilesModule,
     PagesModule,
     FirebaseModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [

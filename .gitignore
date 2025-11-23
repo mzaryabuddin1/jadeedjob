@@ -4,7 +4,8 @@
 /build
 /uploads
 /src/firebase/*.json
-/dist/jobslootstaging-8fa70d6ad08a.json
+/dist/firebase/*.json
+
 
 # Logs
 logs

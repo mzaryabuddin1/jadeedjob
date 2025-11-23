@@ -67,7 +67,8 @@ export class JobController {
       }),
     ),
   )
-  async createJob(@Body() body: any) {
+  async createJob(@Body() body: any, @Req() req: any) {
+    body.createdBy = req.user.id
     return this.jobService.createJob(body);
   }
 

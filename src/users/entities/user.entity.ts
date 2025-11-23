@@ -14,6 +14,8 @@ import { Certification } from 'src/users/entities/certification.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { Filter } from 'src/filter/entities/filter.entity';
 import { WorkExperience } from './work-experience.entity';
+import { ChatMessage } from 'src/chat/entities/chat-message.entity';
+import { Job } from 'src/job/entities/job.entity';
 
 @Entity('users')
 export class User {
@@ -147,7 +149,7 @@ export class User {
 
   @Column({ nullable: true })
   notes: string;
-  
+
   @Column({ nullable: true })
   fcmToken: string;
 
@@ -160,33 +162,35 @@ export class User {
   language: Language;
 
   // Nested Arrays → OneToMany relations
-  @OneToMany(
-    () => WorkExperience,
-    (workExp) => workExp.user,
-    { cascade: true, eager: true },
-  )
+  @OneToMany(() => WorkExperience, (workExp) => workExp.user, {
+    cascade: true,
+    eager: true,
+  })
   work_experience: WorkExperience[];
 
-  @OneToMany(
-    () => Education,
-    (education) => education.user,
-    { cascade: true, eager: true },
-  )
+  @OneToMany(() => Education, (education) => education.user, {
+    cascade: true,
+    eager: true,
+  })
   education: Education[];
 
-  @OneToMany(
-    () => Certification,
-    (cert) => cert.user,
-    { cascade: true, eager: true },
-  )
+  @OneToMany(() => Certification, (cert) => cert.user, {
+    cascade: true,
+    eager: true,
+  })
   certifications: Certification[];
 
-@OneToMany(() => JobApplication, (app) => app.applicant)
-applications: JobApplication[];
+  @OneToMany(() => JobApplication, (app) => app.applicant)
+  applications: JobApplication[];
 
-@OneToMany(() => Filter, (filter) => filter.creator)
-createdFilters: Filter[];
+  @OneToMany(() => Filter, (filter) => filter.creator)
+  createdFilters: Filter[];
 
+  @OneToMany(() => ChatMessage, (msg) => msg.sender)
+  messagesSent: ChatMessage[];
+
+  @OneToMany(() => Job, (job) => job.creator)
+  jobsCreated: Job[];
 
   // Auto timestamps
   @CreateDateColumn()

@@ -25,7 +25,8 @@ let JobController = class JobController {
     constructor(jobService) {
         this.jobService = jobService;
     }
-    async createJob(body) {
+    async createJob(body, req) {
+        body.createdBy = req.user.id;
         return this.jobService.createJob(body);
     }
     async findJobs(query) {
@@ -59,8 +60,9 @@ __decorate([
         languageRequirements: joi_1.default.array().items(joi_1.default.string()).optional(),
     }))),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "createJob", null);
 __decorate([

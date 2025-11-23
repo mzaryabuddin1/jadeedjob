@@ -5,6 +5,8 @@ import { Certification } from 'src/users/entities/certification.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { Filter } from 'src/filter/entities/filter.entity';
 import { WorkExperience } from './work-experience.entity';
+import { ChatMessage } from 'src/chat/entities/chat-message.entity';
+import { Job } from 'src/job/entities/job.entity';
 export declare class User {
     id: number;
     email: string;
@@ -55,6 +57,8 @@ export declare class User {
     certifications: Certification[];
     applications: JobApplication[];
     createdFilters: Filter[];
+    messagesSent: ChatMessage[];
+    jobsCreated: Job[];
     createdAt: Date;
     updatedAt: Date;
 }

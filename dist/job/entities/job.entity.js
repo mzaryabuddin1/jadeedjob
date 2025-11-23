@@ -13,6 +13,7 @@ exports.Job = void 0;
 const typeorm_1 = require("typeorm");
 const filter_entity_1 = require("../../filter/entities/filter.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
+const user_entity_1 = require("../../users/entities/user.entity");
 let Job = class Job {
 };
 exports.Job = Job;
@@ -105,6 +106,15 @@ __decorate([
     (0, typeorm_1.UpdateDateColumn)(),
     __metadata("design:type", Date)
 ], Job.prototype, "updatedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Number)
+], Job.prototype, "createdBy", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.jobsCreated, { eager: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'createdBy' }),
+    __metadata("design:type", user_entity_1.User)
+], Job.prototype, "creator", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => job_application_entity_1.JobApplication, (app) => app.job),
     __metadata("design:type", Array)

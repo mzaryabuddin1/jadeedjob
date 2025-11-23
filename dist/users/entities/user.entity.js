@@ -18,6 +18,8 @@ const certification_entity_1 = require("./certification.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
 const filter_entity_1 = require("../../filter/entities/filter.entity");
 const work_experience_entity_1 = require("./work-experience.entity");
+const chat_message_entity_1 = require("../../chat/entities/chat-message.entity");
+const job_entity_1 = require("../../job/entities/job.entity");
 let User = class User {
 };
 exports.User = User;
@@ -198,15 +200,24 @@ __decorate([
     __metadata("design:type", language_entity_1.Language)
 ], User.prototype, "language", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => work_experience_entity_1.WorkExperience, (workExp) => workExp.user, { cascade: true, eager: true }),
+    (0, typeorm_1.OneToMany)(() => work_experience_entity_1.WorkExperience, (workExp) => workExp.user, {
+        cascade: true,
+        eager: true,
+    }),
     __metadata("design:type", Array)
 ], User.prototype, "work_experience", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => education_entity_1.Education, (education) => education.user, { cascade: true, eager: true }),
+    (0, typeorm_1.OneToMany)(() => education_entity_1.Education, (education) => education.user, {
+        cascade: true,
+        eager: true,
+    }),
     __metadata("design:type", Array)
 ], User.prototype, "education", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => certification_entity_1.Certification, (cert) => cert.user, { cascade: true, eager: true }),
+    (0, typeorm_1.OneToMany)(() => certification_entity_1.Certification, (cert) => cert.user, {
+        cascade: true,
+        eager: true,
+    }),
     __metadata("design:type", Array)
 ], User.prototype, "certifications", void 0);
 __decorate([
@@ -217,6 +228,14 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => filter_entity_1.Filter, (filter) => filter.creator),
     __metadata("design:type", Array)
 ], User.prototype, "createdFilters", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => chat_message_entity_1.ChatMessage, (msg) => msg.sender),
+    __metadata("design:type", Array)
+], User.prototype, "messagesSent", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => job_entity_1.Job, (job) => job.creator),
+    __metadata("design:type", Array)
+], User.prototype, "jobsCreated", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
