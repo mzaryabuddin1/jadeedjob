@@ -16,6 +16,7 @@ import { Filter } from 'src/filter/entities/filter.entity';
 import { WorkExperience } from './work-experience.entity';
 import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
+import { Rating } from 'src/rating/entities/rating.entity';
 
 @Entity('users')
 export class User {
@@ -152,6 +153,18 @@ export class User {
 
   @Column({ nullable: true })
   fcmToken: string;
+
+  @OneToMany(() => Rating, (rating) => rating.ratedUser)
+  ratingsReceived: Rating[];
+
+  @OneToMany(() => Rating, (rating) => rating.rater)
+  ratingsGiven: Rating[];
+
+  @Column({ type: 'float', default: 0 })
+  ratingAverage: number;
+
+  @Column({ type: 'int', default: 0 })
+  ratingCount: number;
 
   // Many-to-one with Country
   @ManyToOne(() => Country, (country) => country.users, { eager: true })

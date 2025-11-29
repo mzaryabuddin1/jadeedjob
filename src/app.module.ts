@@ -26,6 +26,7 @@ import { PagesModule } from './pages/pages.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
+import { RatingModule } from './rating/rating.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { ChatModule } from './chat/chat.module';
     PagesModule,
     FirebaseModule,
     ChatModule,
+    RatingModule,
   ],
   controllers: [AppController],
   providers: [

@@ -20,6 +20,7 @@ const filter_entity_1 = require("../../filter/entities/filter.entity");
 const work_experience_entity_1 = require("./work-experience.entity");
 const chat_message_entity_1 = require("../../chat/entities/chat-message.entity");
 const job_entity_1 = require("../../job/entities/job.entity");
+const rating_entity_1 = require("../../rating/entities/rating.entity");
 let User = class User {
 };
 exports.User = User;
@@ -191,6 +192,22 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], User.prototype, "fcmToken", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => rating_entity_1.Rating, (rating) => rating.ratedUser),
+    __metadata("design:type", Array)
+], User.prototype, "ratingsReceived", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => rating_entity_1.Rating, (rating) => rating.rater),
+    __metadata("design:type", Array)
+], User.prototype, "ratingsGiven", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'float', default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "ratingAverage", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "ratingCount", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => country_entity_1.Country, (country) => country.users, { eager: true }),
     __metadata("design:type", country_entity_1.Country)

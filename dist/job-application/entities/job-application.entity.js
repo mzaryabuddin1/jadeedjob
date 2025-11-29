@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const job_entity_1 = require("../../job/entities/job.entity");
 const user_entity_1 = require("../../users/entities/user.entity");
 const chat_message_entity_1 = require("../../chat/entities/chat-message.entity");
+const rating_entity_1 = require("../../rating/entities/rating.entity");
 let JobApplication = class JobApplication {
 };
 exports.JobApplication = JobApplication;
@@ -51,6 +52,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => chat_message_entity_1.ChatMessage, (msg) => msg.jobApplication),
     __metadata("design:type", Array)
 ], JobApplication.prototype, "messages", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => rating_entity_1.Rating, (rating) => rating.jobApplication),
+    __metadata("design:type", Array)
+], JobApplication.prototype, "ratings", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

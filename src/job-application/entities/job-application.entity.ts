@@ -10,6 +10,7 @@ import {
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { ChatMessage } from 'src/chat/entities/chat-message.entity';
+import { Rating } from 'src/rating/entities/rating.entity';
 
 @Entity('job_applications')
 export class JobApplication {
@@ -39,6 +40,9 @@ export class JobApplication {
 
   @OneToMany(() => ChatMessage, (msg) => msg.jobApplication)
   messages: ChatMessage[];
+
+  @OneToMany(() => Rating, (rating) => rating.jobApplication)
+  ratings: Rating[];
 
   @CreateDateColumn()
   createdAt: Date;

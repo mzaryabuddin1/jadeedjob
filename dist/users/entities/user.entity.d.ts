@@ -7,6 +7,7 @@ import { Filter } from 'src/filter/entities/filter.entity';
 import { WorkExperience } from './work-experience.entity';
 import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
+import { Rating } from 'src/rating/entities/rating.entity';
 export declare class User {
     id: number;
     email: string;
@@ -50,6 +51,10 @@ export declare class User {
     rejection_reason: string;
     notes: string;
     fcmToken: string;
+    ratingsReceived: Rating[];
+    ratingsGiven: Rating[];
+    ratingAverage: number;
+    ratingCount: number;
     country: Country;
     language: Language;
     work_experience: WorkExperience[];
