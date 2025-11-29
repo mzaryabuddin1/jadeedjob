@@ -39,9 +39,21 @@ __decorate([
     __metadata("design:type", user_entity_1.User)
 ], ChatMessage.prototype, "sender", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'text' }),
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
 ], ChatMessage.prototype, "content", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], ChatMessage.prototype, "mediaUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['text', 'image', 'video', 'audio', 'file'],
+        default: 'text',
+    }),
+    __metadata("design:type", String)
+], ChatMessage.prototype, "messageType", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

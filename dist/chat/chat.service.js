@@ -39,20 +39,28 @@ let ChatService = class ChatService {
         return isApplicant || isOwner;
     }
     async sendMessage(senderId, dto) {
-        const { jobApplicationId, content } = dto;
+        const { jobApplicationId, content, mediaUrl, messageType } = dto;
         const app = await this.appRepo.findOne({
             where: { id: jobApplicationId },
-            relations: ['job'],
+            relations: ['job', 'job.creator'],
         });
         if (!app)
             throw new common_1.NotFoundException('Job application not found');
         const allowed = await this.userCanAccessApplication(senderId, jobApplicationId);
         if (!allowed)
             throw new common_1.ForbiddenException('You cannot chat on this application');
+        if (messageType === 'text' && !content) {
+            throw new common_1.BadRequestException('Text messages must include content');
+        }
+        if (messageType !== 'text' && !mediaUrl) {
+            throw new common_1.BadRequestException('Media messages must include mediaUrl');
+        }
         const msg = this.messageRepo.create({
             jobApplicationId,
             senderId,
-            content,
+            content: content || null,
+            mediaUrl: mediaUrl || null,
+            messageType,
         });
         await this.messageRepo.save(msg);
         return this.messageRepo.findOne({

@@ -19,8 +19,21 @@ __decorate([
     __metadata("design:type", Number)
 ], SendMessageDto.prototype, "jobApplicationId", void 0);
 __decorate([
+    (0, class_validator_1.ValidateIf)((o) => o.messageType === 'text'),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(1000),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], SendMessageDto.prototype, "content", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((o) => o.messageType !== 'text'),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(2000),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], SendMessageDto.prototype, "mediaUrl", void 0);
+__decorate([
+    (0, class_validator_1.IsEnum)(['text', 'image', 'video', 'audio', 'file']),
+    __metadata("design:type", String)
+], SendMessageDto.prototype, "messageType", void 0);
 //# sourceMappingURL=send-message.dto.js.map

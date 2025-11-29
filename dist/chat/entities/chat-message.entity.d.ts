@@ -7,5 +7,7 @@ export declare class ChatMessage {
     senderId: number;
     sender: User;
     content: string;
+    mediaUrl: string;
+    messageType: string;
     createdAt: Date;
 }

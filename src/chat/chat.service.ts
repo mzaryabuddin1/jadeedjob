@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,12 +29,14 @@ export class ChatService {
     private readonly userRepo: Repository<User>,
   ) {}
 
-  async userCanAccessApplication(userId: number, appId: number): Promise<boolean> {
+  async userCanAccessApplication(
+    userId: number,
+    appId: number,
+  ): Promise<boolean> {
     const app = await this.appRepo.findOne({
       where: { id: appId },
       relations: ['job', 'job.creator'],
     });
-
 
     if (!app) return false;
 
@@ -44,35 +47,61 @@ export class ChatService {
   }
 
   async sendMessage(senderId: number, dto: SendMessageDto) {
-    const { jobApplicationId, content } = dto;
+    const { jobApplicationId, content, mediaUrl, messageType } = dto;
 
+    // 1. Validate application exists
     const app = await this.appRepo.findOne({
       where: { id: jobApplicationId },
-      relations: ['job'],
+      relations: ['job', 'job.creator'],
     });
 
     if (!app) throw new NotFoundException('Job application not found');
 
-    const allowed = await this.userCanAccessApplication(senderId, jobApplicationId);
-    if (!allowed) throw new ForbiddenException('You cannot chat on this application');
+    // 2. Check if user can chat here
+    const allowed = await this.userCanAccessApplication(
+      senderId,
+      jobApplicationId,
+    );
+    if (!allowed)
+      throw new ForbiddenException('You cannot chat on this application');
 
+    // 3. Safety validation (DTO already handles most cases)
+    if (messageType === 'text' && !content) {
+      throw new BadRequestException('Text messages must include content');
+    }
+
+    if (messageType !== 'text' && !mediaUrl) {
+      throw new BadRequestException('Media messages must include mediaUrl');
+    }
+
+    // 4. Create message
     const msg = this.messageRepo.create({
       jobApplicationId,
       senderId,
-      content,
+      content: content || null,
+      mediaUrl: mediaUrl || null,
+      messageType,
     });
 
     await this.messageRepo.save(msg);
 
-    // Return with sender relation
+    // 5. Return with sender information
     return this.messageRepo.findOne({
       where: { id: msg.id },
       relations: ['sender'],
     });
   }
 
-  async getMessages(jobApplicationId: number, userId: number, page = 1, limit = 20) {
-    const allowed = await this.userCanAccessApplication(userId, jobApplicationId);
+  async getMessages(
+    jobApplicationId: number,
+    userId: number,
+    page = 1,
+    limit = 20,
+  ) {
+    const allowed = await this.userCanAccessApplication(
+      userId,
+      jobApplicationId,
+    );
     if (!allowed) throw new ForbiddenException('You cannot view this chat');
 
     const [data, total] = await this.messageRepo.findAndCount({

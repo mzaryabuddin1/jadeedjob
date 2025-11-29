@@ -29,8 +29,18 @@ export class ChatMessage {
   @JoinColumn({ name: 'senderId' })
   sender: User;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: true })
   content: string;
+
+  @Column({ nullable: true })
+  mediaUrl: string; 
+
+  @Column({
+    type: 'enum',
+    enum: ['text', 'image', 'video', 'audio', 'file'],
+    default: 'text',
+  })
+  messageType: string;
 
   @CreateDateColumn()
   createdAt: Date;
