@@ -17,7 +17,7 @@ import { Language } from 'src/language/entities/language.entity';
     ConfigModule.forRoot(),
     JwtModule.register({
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '1h' },
+      signOptions: { expiresIn: '365d' },
     }),
     TypeOrmModule.forFeature([User, Country, Language]),
     UsersModule,

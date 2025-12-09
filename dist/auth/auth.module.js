@@ -30,7 +30,7 @@ exports.AuthModule = AuthModule = __decorate([
             config_1.ConfigModule.forRoot(),
             jwt_1.JwtModule.register({
                 secret: process.env.JWT_SECRET,
-                signOptions: { expiresIn: '1h' },
+                signOptions: { expiresIn: '365d' },
             }),
             typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language]),
             users_module_1.UsersModule,
