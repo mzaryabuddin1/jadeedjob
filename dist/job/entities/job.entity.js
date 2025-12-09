@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Job.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => filter_entity_1.Filter, (filter) => filter.jobs),
+    (0, typeorm_1.ManyToOne)(() => filter_entity_1.Filter, (filter) => filter.jobs, { eager: true }),
     (0, typeorm_1.JoinColumn)({ name: 'filterId' }),
     __metadata("design:type", filter_entity_1.Filter)
 ], Job.prototype, "filter", void 0);
@@ -111,7 +111,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Job.prototype, "createdBy", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.jobsCreated, { eager: true }),
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.jobsCreated),
     (0, typeorm_1.JoinColumn)({ name: 'createdBy' }),
     __metadata("design:type", user_entity_1.User)
 ], Job.prototype, "creator", void 0);

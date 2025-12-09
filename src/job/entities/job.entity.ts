@@ -17,7 +17,7 @@ export class Job {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Filter, (filter) => filter.jobs)
+  @ManyToOne(() => Filter, (filter) => filter.jobs, { eager: true })
   @JoinColumn({ name: 'filterId' })
   filter: Filter;
 
@@ -86,7 +86,7 @@ export class Job {
   @Column()
   createdBy: number;
 
-  @ManyToOne(() => User, (user) => user.jobsCreated, { eager: true })
+  @ManyToOne(() => User, (user) => user.jobsCreated)
   @JoinColumn({ name: 'createdBy' })
   creator: User;
 
