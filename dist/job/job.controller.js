@@ -40,6 +40,7 @@ exports.JobController = JobController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        title: joi_1.default.string().required(),
         filterId: joi_1.default.number().required(),
         description: joi_1.default.string().required(),
         requirements: joi_1.default.string().optional(),

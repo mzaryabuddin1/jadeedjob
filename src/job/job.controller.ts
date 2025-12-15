@@ -23,6 +23,7 @@ export class JobController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
+        title: Joi.string().required(),
         filterId: Joi.number().required(),
         description: Joi.string().required(),
         requirements: Joi.string().optional(),

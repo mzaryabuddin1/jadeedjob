@@ -5,6 +5,7 @@ export declare class Job {
     id: number;
     filter: Filter;
     filterId: number;
+    title: string;
     description: string;
     requirements: string;
     benefits: string[];

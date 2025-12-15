@@ -25,6 +25,9 @@ export class Job {
   filterId: number;
 
   @Column()
+  title: string;
+
+  @Column()
   description: string;
 
   @Column({ nullable: true })
