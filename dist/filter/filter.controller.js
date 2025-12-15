@@ -58,7 +58,8 @@ exports.FilterController = FilterController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        name: joi_1.default.string().required(),
+        name: joi_1.default.string().trim().required(),
+        icon: joi_1.default.string().trim().pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/).required(),
         status: joi_1.default.string().valid('active', 'inactive').default('active'),
     }))),
     __param(0, (0, common_1.Body)()),

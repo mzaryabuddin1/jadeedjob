@@ -32,7 +32,7 @@ let FilterService = class FilterService {
         }
         const filter = this.filterRepo.create({
             name: data.name,
-            icon: data.icon ?? 'fas fa-user-tie',
+            icon: data.icon ?? "{icon: 'infinity'}",
             status: data.status ?? 'active',
             approvalStatus: 'pending',
             createdBy: data.createdBy,

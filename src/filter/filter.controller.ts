@@ -33,7 +33,8 @@ export class FilterController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        name: Joi.string().required(),
+        name: Joi.string().trim().required(),
+        icon: Joi.string().trim().pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/).required(),
         status: Joi.string().valid('active', 'inactive').default('active'),
       }),
     ),
