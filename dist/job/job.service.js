@@ -87,6 +87,18 @@ let JobService = class JobService {
             currentPage: page,
         };
     }
+    async findJobById(id) {
+        const job = await this.jobRepo.findOne({
+            where: {
+                id,
+                isActive: true,
+            },
+        });
+        if (!job) {
+            throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+        }
+        return job;
+    }
 };
 exports.JobService = JobService;
 exports.JobService = JobService = __decorate([

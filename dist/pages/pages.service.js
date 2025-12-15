@@ -16,51 +16,75 @@ exports.PagesService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
-const page_entity_1 = require("./entities/page.entity");
+const company_page_entity_1 = require("./entities/company-page.entity");
 let PagesService = class PagesService {
     constructor(pageRepo) {
         this.pageRepo = pageRepo;
     }
     async createPage(data, userId) {
-        const existing = await this.pageRepo.findOne({
-            where: { ownerId: userId },
-        });
-        if (existing) {
-            throw new common_1.BadRequestException('User already has a company page.');
+        let username = data.username?.toLowerCase();
+        if (username) {
+            if (!/^[a-z0-9.-]+$/.test(username)) {
+                throw new common_1.BadRequestException('Username can only contain a-z, 0-9, dot(.) and dash(-)');
+            }
+            const exists = await this.pageRepo.findOne({ where: { username } });
+            if (exists)
+                throw new common_1.BadRequestException('Username already taken');
+        }
+        else {
+            username = data.company_name
+                .toLowerCase()
+                .replace(/[^a-z0-9.-]/g, '-')
+                .replace(/-+/g, '-');
+            let counter = 0;
+            let unique = username;
+            while (await this.pageRepo.findOne({ where: { username: unique } })) {
+                counter++;
+                unique = `${username}-${counter}`;
+            }
+            username = unique;
         }
         const page = this.pageRepo.create({
             ...data,
+            username,
             ownerId: userId,
+            members: [
+                {
+                    userId,
+                    role: 'owner',
+                },
+            ],
         });
         await this.pageRepo.save(page);
         return {
-            message: 'Company page created successfully',
+            message: 'Page created successfully',
             data: page,
         };
     }
     async getPages(query, userId) {
-        const { page = 1, limit = 20, search = '', mine = false, } = query;
-        const where = {};
+        const { page = 1, limit = 20, search, mine = false, } = query;
+        const qb = this.pageRepo
+            .createQueryBuilder('page')
+            .leftJoinAndSelect('page.members', 'member');
         if (search) {
-            where.company_name = (0, typeorm_2.Like)(`%${search}%`);
+            qb.andWhere('(page.company_name LIKE :search OR page.username LIKE :search)', { search: `%${search}%` });
         }
-        if (mine && userId) {
-            where.ownerId = userId;
+        if (mine) {
+            qb.andWhere('(page.ownerId = :userId OR member.userId = :userId)', { userId });
         }
-        const [data, total] = await this.pageRepo.findAndCount({
-            where,
-            take: Number(limit),
-            skip: (Number(page) - 1) * Number(limit),
-            order: { createdAt: 'DESC' },
-        });
+        qb.orderBy('page.createdAt', 'DESC')
+            .skip((page - 1) * limit)
+            .take(limit);
+        const [data, total] = await qb.getManyAndCount();
         return {
-            data,
-            pagination: {
-                total,
-                totalPages: Math.ceil(total / limit),
-                currentPage: Number(page),
-                limit: Number(limit),
-            },
+            data: data.map((p) => ({
+                ...p,
+                mine: p.ownerId === userId ||
+                    p.members.some((m) => m.userId === userId),
+            })),
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: Number(page),
         };
     }
     async getPageById(id) {
@@ -72,16 +96,19 @@ let PagesService = class PagesService {
     }
     async updatePage(id, data, userId) {
         const page = await this.pageRepo.findOne({
-            where: { id, ownerId: userId },
+            where: { id },
+            relations: ['members'],
         });
-        if (!page) {
-            throw new common_1.BadRequestException('Page not found or you are not authorized to update it');
+        if (!page)
+            throw new common_1.BadRequestException('Page not found');
+        const member = page.members.find((m) => m.userId === userId);
+        if (!member || !['owner', 'admin'].includes(member.role)) {
+            throw new common_1.BadRequestException('You are not allowed to update this page');
         }
         await this.pageRepo.update(id, data);
-        const updated = await this.pageRepo.findOne({ where: { id } });
         return {
             message: 'Page updated successfully',
-            data: updated,
+            data: await this.pageRepo.findOne({ where: { id } }),
         };
     }
     async deletePage(id, userId) {
@@ -98,7 +125,7 @@ let PagesService = class PagesService {
 exports.PagesService = PagesService;
 exports.PagesService = PagesService = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
+    __param(0, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
     __metadata("design:paramtypes", [typeorm_2.Repository])
 ], PagesService);
 //# sourceMappingURL=pages.service.js.map

@@ -18,6 +18,9 @@ export class Organization {
   @Column()
   name: string;
 
+  @Column({ unique: true })
+  username: string;
+
   @Column()
   industry: string;
 

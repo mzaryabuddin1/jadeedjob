@@ -1,8 +1,10 @@
 import { User } from 'src/users/entities/user.entity';
-export declare class Page {
+import { PageMember } from './page-member.entity';
+export declare class CompanyPage {
     id: number;
     company_name: string;
     business_name: string;
+    username: string;
     company_logo: string;
     website_url: string;
     official_email: string;
@@ -40,6 +42,7 @@ export declare class Page {
     company_rating: number;
     ownerId: number;
     owner: User;
+    members: PageMember[];
     createdAt: Date;
     updatedAt: Date;
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Raw, Not, IsNull } from 'typeorm';
 import { Job } from './entities/job.entity';
@@ -135,4 +135,21 @@ export class JobService {
       currentPage: page,
     };
   }
+
+  async findJobById(id: number) {
+    const job = await this.jobRepo.findOne({
+      where: {
+        id,
+        isActive: true,
+      },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+
+    return job;
+  }
+
+  
 }

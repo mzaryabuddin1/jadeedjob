@@ -1,72 +1,110 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
-import { Page } from './entities/page.entity';
+import { CompanyPage } from './entities/company-page.entity';
 
 @Injectable()
 export class PagesService {
   constructor(
-    @InjectRepository(Page)
-    private readonly pageRepo: Repository<Page>,
+    @InjectRepository(CompanyPage)
+    private readonly pageRepo: Repository<CompanyPage>,
   ) {}
 
-  async createPage(data: any, userId: number) {
-    const existing = await this.pageRepo.findOne({
-      where: { ownerId: userId },
-    });
+async createPage(data: any, userId: number) {
+  let username = data.username?.toLowerCase();
 
-    if (existing) {
-      throw new BadRequestException('User already has a company page.');
+  if (username) {
+    if (!/^[a-z0-9.-]+$/.test(username)) {
+      throw new BadRequestException(
+        'Username can only contain a-z, 0-9, dot(.) and dash(-)',
+      );
     }
 
-    const page = this.pageRepo.create({
-      ...data,
-      ownerId: userId,
-    });
+    const exists = await this.pageRepo.findOne({ where: { username } });
+    if (exists) throw new BadRequestException('Username already taken');
+  } else {
+    // 🔥 Auto-generate username
+    username = data.company_name
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, '-')
+      .replace(/-+/g, '-');
 
-    await this.pageRepo.save(page);
+    let counter = 0;
+    let unique = username;
 
-    return {
-      message: 'Company page created successfully',
-      data: page,
-    };
+    while (await this.pageRepo.findOne({ where: { username: unique } })) {
+      counter++;
+      unique = `${username}-${counter}`;
+    }
+
+    username = unique;
   }
 
-  async getPages(query: any, userId?: number) {
-    const {
-      page = 1,
-      limit = 20,
-      search = '',
-      mine = false,
-    } = query;
-
-    const where: any = {};
-
-    if (search) {
-      where.company_name = Like(`%${search}%`);
-    }
-
-    if (mine && userId) {
-      where.ownerId = userId;
-    }
-
-    const [data, total] = await this.pageRepo.findAndCount({
-      where,
-      take: Number(limit),
-      skip: (Number(page) - 1) * Number(limit),
-      order: { createdAt: 'DESC' },
-    });
-
-    return {
-      data,
-      pagination: {
-        total,
-        totalPages: Math.ceil(total / limit),
-        currentPage: Number(page),
-        limit: Number(limit),
+  const page = this.pageRepo.create({
+    ...data,
+    username,
+    ownerId: userId,
+    members: [
+      {
+        userId,
+        role: 'owner',
       },
-    };
+    ],
+  });
+
+  await this.pageRepo.save(page);
+
+  return {
+    message: 'Page created successfully',
+    data: page,
+  };
+}
+
+
+async getPages(query: any, userId: number) {
+  const {
+    page = 1,
+    limit = 20,
+    search,
+    mine = false,
+  } = query;
+
+  const qb = this.pageRepo
+    .createQueryBuilder('page')
+    .leftJoinAndSelect('page.members', 'member');
+
+  if (search) {
+    qb.andWhere(
+      '(page.company_name LIKE :search OR page.username LIKE :search)',
+      { search: `%${search}%` },
+    );
   }
+
+  if (mine) {
+    qb.andWhere(
+      '(page.ownerId = :userId OR member.userId = :userId)',
+      { userId },
+    );
+  }
+
+  qb.orderBy('page.createdAt', 'DESC')
+    .skip((page - 1) * limit)
+    .take(limit);
+
+  const [data, total] = await qb.getManyAndCount();
+
+  return {
+    data: data.map((p) => ({
+      ...p,
+      mine:
+        p.ownerId === userId ||
+        p.members.some((m) => m.userId === userId),
+    })),
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: Number(page),
+  };
+}
 
   async getPageById(id: number) {
     const page = await this.pageRepo.findOne({ where: { id } });
@@ -78,26 +116,28 @@ export class PagesService {
     return page;
   }
 
-  async updatePage(id: number, data: any, userId: number) {
-    const page = await this.pageRepo.findOne({
-      where: { id, ownerId: userId },
-    });
+async updatePage(id: number, data: any, userId: number) {
+  const page = await this.pageRepo.findOne({
+    where: { id },
+    relations: ['members'],
+  });
 
-    if (!page) {
-      throw new BadRequestException(
-        'Page not found or you are not authorized to update it',
-      );
-    }
+  if (!page) throw new BadRequestException('Page not found');
 
-    await this.pageRepo.update(id, data);
+  const member = page.members.find((m) => m.userId === userId);
 
-    const updated = await this.pageRepo.findOne({ where: { id } });
-
-    return {
-      message: 'Page updated successfully',
-      data: updated,
-    };
+  if (!member || !['owner', 'admin'].includes(member.role)) {
+    throw new BadRequestException('You are not allowed to update this page');
   }
+
+  await this.pageRepo.update(id, data);
+
+  return {
+    message: 'Page updated successfully',
+    data: await this.pageRepo.findOne({ where: { id } }),
+  };
+}
+
 
   async deletePage(id: number, userId: number) {
     const page = await this.pageRepo.findOne({

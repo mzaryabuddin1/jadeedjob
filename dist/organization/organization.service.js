@@ -26,9 +26,6 @@ let OrganizationService = class OrganizationService {
         this.usersService = usersService;
     }
     async createOrg(data) {
-        const exists = await this.orgRepo.findOne({ where: { name: data.name } });
-        if (exists)
-            throw new common_1.BadRequestException('Organization name already exists');
         const memberMap = new Map();
         data.members?.forEach((m) => memberMap.set(m.user, m.role));
         const allUserIds = [...memberMap.keys(), data.createdBy];
@@ -36,6 +33,18 @@ let OrganizationService = class OrganizationService {
         const validUsers = await this.usersService.findUsersByIds(uniqueIds);
         if (validUsers.length !== uniqueIds.length)
             throw new common_1.BadRequestException('One or more user IDs are invalid');
+        let username;
+        if (data.username) {
+            const exists = await this.orgRepo.findOne({
+                where: { username: data.username },
+            });
+            if (exists)
+                throw new common_1.BadRequestException('Username already taken');
+            username = data.username.toLowerCase();
+        }
+        else {
+            username = await this.generateUniqueUsername(data.name);
+        }
         const membersToCreate = [
             { userId: data.createdBy, role: 'owner' },
             ...Array.from(memberMap.entries()).map(([userId, role]) => ({
@@ -45,6 +54,7 @@ let OrganizationService = class OrganizationService {
         ];
         const org = this.orgRepo.create({
             name: data.name,
+            username,
             industry: data.industry,
             createdBy: data.createdBy,
             members: membersToCreate.map((m) => this.orgMemberRepo.create({
@@ -90,6 +100,77 @@ let OrganizationService = class OrganizationService {
             where: { id: orgId },
             relations: ['members', 'members.user'],
         });
+    }
+    async removeMember(orgId, targetUserId, requesterId) {
+        const org = await this.orgRepo.findOne({
+            where: { id: orgId },
+            relations: ['members'],
+        });
+        if (!org) {
+            throw new common_1.BadRequestException('Organization not found');
+        }
+        const requesterMember = org.members.find((m) => m.userId === requesterId);
+        const isAllowed = org.createdBy === requesterId ||
+            requesterMember?.role === 'admin';
+        if (!isAllowed) {
+            throw new common_1.BadRequestException('Only owner or admin can remove members');
+        }
+        const targetMember = org.members.find((m) => m.userId === targetUserId);
+        if (!targetMember) {
+            throw new common_1.BadRequestException('User is not a member of this organization');
+        }
+        if (targetMember.role === 'owner') {
+            throw new common_1.BadRequestException('Owner cannot be removed');
+        }
+        await this.orgMemberRepo.delete({
+            organizationId: orgId,
+            userId: targetUserId,
+        });
+        return {
+            message: 'Member removed successfully',
+        };
+    }
+    async generateUniqueUsername(base) {
+        const slug = base
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+        let username = slug;
+        let counter = 1;
+        while (await this.orgRepo.findOne({ where: { username } })) {
+            username = `${slug}-${counter}`;
+            counter++;
+        }
+        return username;
+    }
+    async getOrganizations(options) {
+        const { userId, mine = false, search, page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'DESC', } = options;
+        const qb = this.orgRepo
+            .createQueryBuilder('org')
+            .leftJoinAndSelect('org.members', 'member')
+            .leftJoinAndSelect('member.user', 'memberUser')
+            .leftJoinAndSelect('org.creator', 'creator');
+        if (search) {
+            qb.andWhere('(org.name LIKE :search OR org.username LIKE :search)', { search: `%${search}%` });
+        }
+        if (mine) {
+            qb.andWhere('(org.createdBy = :userId OR member.userId = :userId)', { userId });
+        }
+        qb.orderBy(`org.${sortBy}`, sortOrder);
+        qb.skip((page - 1) * limit).take(limit);
+        const [data, total] = await qb.getManyAndCount();
+        const enrichedData = data.map((org) => ({
+            ...org,
+            mine: org.createdBy === userId ||
+                org.members?.some((m) => m.userId === userId),
+        }));
+        return {
+            data: enrichedData,
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: page,
+        };
     }
 };
 exports.OrganizationService = OrganizationService;

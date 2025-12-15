@@ -11,6 +11,7 @@ export declare class OrganizationService {
         name: string;
         industry: string;
         createdBy: number;
+        username?: string;
         members?: {
             user: number;
             role: 'admin' | 'user';
@@ -21,4 +22,33 @@ export declare class OrganizationService {
         userId: number;
         role: 'admin' | 'user';
     }, requesterId: number): Promise<Organization>;
+    removeMember(orgId: number, targetUserId: number, requesterId: number): Promise<{
+        message: string;
+    }>;
+    private generateUniqueUsername;
+    getOrganizations(options: {
+        userId: number;
+        mine?: boolean;
+        search?: string;
+        page?: number;
+        limit?: number;
+        sortBy?: string;
+        sortOrder?: 'ASC' | 'DESC';
+    }): Promise<{
+        data: {
+            mine: boolean;
+            id: number;
+            name: string;
+            username: string;
+            industry: string;
+            isActive: string;
+            createdBy: number;
+            creator: import("../users/entities/user.entity").User;
+            createdAt: Date;
+            members: OrgMember[];
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
 }

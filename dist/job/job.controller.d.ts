@@ -9,4 +9,5 @@ export declare class JobController {
         totalPages: number;
         currentPage: any;
     }>;
+    findJob(id: number): Promise<import("./entities/job.entity").Job>;
 }

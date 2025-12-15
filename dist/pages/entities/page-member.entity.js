@@ -9,53 +9,47 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Organization = void 0;
-const typeorm_1 = require("typeorm");
+exports.PageMember = void 0;
 const user_entity_1 = require("../../users/entities/user.entity");
-const org_member_entity_1 = require("./org-member.entity");
-let Organization = class Organization {
+const typeorm_1 = require("typeorm");
+const company_page_entity_1 = require("./company-page.entity");
+let PageMember = class PageMember {
 };
-exports.Organization = Organization;
+exports.PageMember = PageMember;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
-], Organization.prototype, "id", void 0);
-__decorate([
-    (0, typeorm_1.Column)(),
-    __metadata("design:type", String)
-], Organization.prototype, "name", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ unique: true }),
-    __metadata("design:type", String)
-], Organization.prototype, "username", void 0);
-__decorate([
-    (0, typeorm_1.Column)(),
-    __metadata("design:type", String)
-], Organization.prototype, "industry", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ default: 'active' }),
-    __metadata("design:type", String)
-], Organization.prototype, "isActive", void 0);
+], PageMember.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", Number)
-], Organization.prototype, "createdBy", void 0);
+], PageMember.prototype, "pageId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => company_page_entity_1.CompanyPage, (page) => page.members, {
+        onDelete: 'CASCADE',
+    }),
+    __metadata("design:type", company_page_entity_1.CompanyPage)
+], PageMember.prototype, "page", void 0);
+__decorate([
+    (0, typeorm_1.Column)(),
+    __metadata("design:type", Number)
+], PageMember.prototype, "userId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User),
-    (0, typeorm_1.JoinColumn)({ name: 'createdBy' }),
     __metadata("design:type", user_entity_1.User)
-], Organization.prototype, "creator", void 0);
+], PageMember.prototype, "user", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['owner', 'admin', 'editor'],
+    }),
+    __metadata("design:type", String)
+], PageMember.prototype, "role", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
-], Organization.prototype, "createdAt", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => org_member_entity_1.OrgMember, (member) => member.organization, {
-        cascade: true,
-    }),
-    __metadata("design:type", Array)
-], Organization.prototype, "members", void 0);
-exports.Organization = Organization = __decorate([
-    (0, typeorm_1.Entity)('organizations')
-], Organization);
-//# sourceMappingURL=organization.entity.js.map
+], PageMember.prototype, "createdAt", void 0);
+exports.PageMember = PageMember = __decorate([
+    (0, typeorm_1.Entity)('page_members')
+], PageMember);
+//# sourceMappingURL=page-member.entity.js.map

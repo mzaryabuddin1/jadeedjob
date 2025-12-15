@@ -34,8 +34,19 @@ let OrganizationController = class OrganizationController {
     async addMember(body, req) {
         return this.orgService.addMember(body.organization, { userId: body.user, role: body.role }, req.user.id);
     }
-    async getMine(req) {
-        return this.orgService.getMyOrganizations(req.user.id);
+    async removeMember(body, req) {
+        return this.orgService.removeMember(body.organization, body.user, req.user.id);
+    }
+    async getOrganizations(req, mine, search, page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'DESC') {
+        return this.orgService.getOrganizations({
+            userId: req.user.id,
+            mine: mine === 'true',
+            search,
+            page: Number(page),
+            limit: Number(limit),
+            sortBy,
+            sortOrder: sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC',
+        });
     }
 };
 exports.OrganizationController = OrganizationController;
@@ -44,6 +55,11 @@ __decorate([
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().required(),
         industry: joi_1.default.string().required(),
+        username: joi_1.default.string()
+            .regex(/^[a-z0-9.-]+$/)
+            .min(3)
+            .max(50)
+            .optional(),
         members: joi_1.default.array()
             .items(joi_1.default.object({
             user: joi_1.default.number().required(),
@@ -71,12 +87,30 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], OrganizationController.prototype, "addMember", null);
 __decorate([
-    (0, common_1.Get)('my'),
-    __param(0, (0, common_1.Req)()),
+    (0, common_1.Delete)('member/remove'),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        organization: joi_1.default.number().required(),
+        user: joi_1.default.number().required(),
+    }))),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
-], OrganizationController.prototype, "getMine", null);
+], OrganizationController.prototype, "removeMember", null);
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('mine')),
+    __param(2, (0, common_1.Query)('search')),
+    __param(3, (0, common_1.Query)('page')),
+    __param(4, (0, common_1.Query)('limit')),
+    __param(5, (0, common_1.Query)('sortBy')),
+    __param(6, (0, common_1.Query)('sortOrder')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, Object, Object, Object, String]),
+    __metadata("design:returntype", Promise)
+], OrganizationController.prototype, "getOrganizations", null);
 exports.OrganizationController = OrganizationController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('organization'),

@@ -20,4 +20,5 @@ export declare class JobService {
         totalPages: number;
         currentPage: any;
     }>;
+    findJobById(id: number): Promise<Job>;
 }

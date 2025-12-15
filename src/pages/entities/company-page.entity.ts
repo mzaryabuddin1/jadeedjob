@@ -6,11 +6,13 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
+import { PageMember } from './page-member.entity';
 
 @Entity('pages')
-export class Page {
+export class CompanyPage  {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -19,6 +21,9 @@ export class Page {
 
   @Column({ nullable: true })
   business_name: string;
+
+  @Column({ unique: true })
+  username: string;
 
   @Column({ nullable: true })
   company_logo: string;
@@ -131,6 +136,11 @@ export class Page {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'ownerId' })
   owner: User;
+
+  @OneToMany(() => PageMember, (member) => member.page, {
+    cascade: true,
+  })
+  members: PageMember[];
 
   @CreateDateColumn()
   createdAt: Date;

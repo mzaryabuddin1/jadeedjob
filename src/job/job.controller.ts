@@ -7,6 +7,7 @@ import {
   UseGuards,
   Get,
   Query,
+  Param,
 } from '@nestjs/common';
 import { JobService } from './job.service';
 import Joi from 'joi';
@@ -77,5 +78,9 @@ export class JobController {
     return this.jobService.findJobs(query);
   }
 
+@Get(':id')
+async findJob(@Param('id') id: number) {
+  return this.jobService.findJobById(id);
+}
  
 }

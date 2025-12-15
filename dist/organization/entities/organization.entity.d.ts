@@ -3,6 +3,7 @@ import { OrgMember } from './org-member.entity';
 export declare class Organization {
     id: number;
     name: string;
+    username: string;
     industry: string;
     isActive: string;
     createdBy: number;
