@@ -70,4 +70,54 @@ export class FilterController {
   async getFilterById(@Param() params: any) {
     return this.filterService.filterById(Number(params.id));
   }
+
+  @Post('seed')
+  async seedFilters(@Req() req: any) {
+    const FAKE_FILTERS = [
+      { icon: 'wrench',      name: 'Labor' },
+      { icon: 'broom',       name: 'Housekeeping' },
+      { icon: 'motorcycle',  name: 'Delivery' },
+      { icon: 'utensils',    name: 'Kitchen' },
+      { icon: 'file-alt',    name: 'Admin' },
+      { icon: 'ellipsis-h',  name: 'Other' },
+      { icon: 'bolt',        name: 'Electrician' },
+      { icon: 'tint',        name: 'Plumber' },
+      { icon: 'car',         name: 'Driver' },
+      { icon: 'paint-brush', name: 'Painter' },
+      { icon: 'user-shield', name: 'Security' },
+      { icon: 'truck',       name: 'Loader' },
+      { icon: 'utensils',    name: 'Cook' },
+      { icon: 'wrench',      name: 'Mechanic' },
+      { icon: 'broom',       name: 'Cleaner' },
+      { icon: 'briefcase',   name: 'Office Helper' },
+    ];
+
+    const created = [];
+
+    for (const item of FAKE_FILTERS) {
+      const name = toSentenceCase(item.name);
+
+      const existing = await this.filterRepo.findOne({
+        where: { name },
+      });
+
+      // Skip if already exists
+      if (existing) continue;
+
+      const filter = await this.filterService.createFilter({
+        name,
+        icon: item.icon,
+        status: 'active',
+        createdBy: Number(req.user.id),
+      });
+
+      created.push(filter);
+    }
+
+    return {
+      message: 'Fake filters seeded successfully',
+      count: created.length,
+      filters: created,
+    };
+  }
 }

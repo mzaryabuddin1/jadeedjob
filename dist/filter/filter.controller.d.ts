@@ -30,4 +30,9 @@ export declare class FilterController {
         currentPage: number;
     }>;
     getFilterById(params: any): Promise<Filter>;
+    seedFilters(req: any): Promise<{
+        message: string;
+        count: number;
+        filters: any[];
+    }>;
 }
