@@ -6,22 +6,8 @@ export declare class FilterService {
     private userRepo;
     constructor(filterRepo: Repository<Filter>, userRepo: Repository<User>);
     createFilter(data: any): Promise<Filter>;
-    getFilters(query: any): Promise<{
-        data: {
-            jobCount: number;
-            isPreferred: any;
-            jobs: any;
-            id: number;
-            name: string;
-            icon: string;
-            status: "active" | "inactive";
-            approvalStatus: "pending" | "approved" | "rejected";
-            rejectionReason: string;
-            createdBy: number;
-            creator: User;
-            createdAt: Date;
-            updatedAt: Date;
-        }[];
+    getFilters(query: any, userId?: number): Promise<{
+        data: Filter[];
         total: number;
         totalPages: number;
         currentPage: number;

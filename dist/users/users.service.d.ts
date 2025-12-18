@@ -6,4 +6,7 @@ export declare class UsersService {
     getUserById(id: number): Promise<User>;
     updateUser(id: number, data: any): Promise<User>;
     findUsersByIds(ids: number[]): Promise<User[]>;
+    getUserPreference(userId: number): Promise<{
+        data: number[];
+    }>;
 }

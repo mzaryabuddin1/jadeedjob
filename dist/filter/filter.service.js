@@ -39,8 +39,8 @@ let FilterService = class FilterService {
         });
         return this.filterRepo.save(filter);
     }
-    async getFilters(query) {
-        const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, createdBy, preference_ids = [], } = query;
+    async getFilters(query, userId) {
+        const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, createdBy, preference = true, } = query;
         const where = {};
         if (search) {
             where.name = (0, typeorm_2.Like)(`%${search}%`);
@@ -51,23 +51,37 @@ let FilterService = class FilterService {
         if (createdBy) {
             where.createdBy = createdBy;
         }
-        const [filters, total] = await this.filterRepo.findAndCount({
+        const filters = await this.filterRepo.find({
             where,
-            take: limit,
-            skip: (page - 1) * limit,
             order: {
                 [sortBy]: sortOrder.toUpperCase(),
             },
-            relations: ['jobs'],
         });
-        const data = filters.map((f) => ({
-            ...f,
-            jobCount: f.jobs.length,
-            isPreferred: preference_ids.includes(f.id),
-            jobs: undefined,
-        }));
+        let orderedFilters = filters;
+        if (preference === true && userId) {
+            const user = await this.userRepo.findOne({
+                where: { id: userId },
+                select: ['filter_preferences'],
+            });
+            const preferences = user?.filter_preferences ?? [];
+            if (preferences.length) {
+                const preferred = [];
+                const others = [];
+                for (const filter of filters) {
+                    if (preferences.includes(filter.id)) {
+                        preferred.push(filter);
+                    }
+                    else {
+                        others.push(filter);
+                    }
+                }
+                orderedFilters = [...preferred, ...others];
+            }
+        }
+        const total = orderedFilters.length;
+        const paginatedData = orderedFilters.slice((page - 1) * limit, page * limit);
         return {
-            data,
+            data: paginatedData,
             total,
             totalPages: Math.ceil(total / limit),
             currentPage: Number(page),

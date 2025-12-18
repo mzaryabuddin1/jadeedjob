@@ -13,10 +13,7 @@ export class UsersService {
   async getUserById(id: number) {
     const user = await this.userRepo.findOne({
       where: { id },
-      relations: [
-        'country',
-        'language',
-      ],
+      relations: ['country', 'language'],
     });
 
     if (!user) throw new NotFoundException('User not found');
@@ -34,10 +31,16 @@ export class UsersService {
   }
 
   async findUsersByIds(ids: number[]) {
-  return this.userRepo.find({
-    where: { id: In(ids) },
-  });
-  
-}
+    return this.userRepo.find({
+      where: { id: In(ids) },
+    });
+  }
 
+  async getUserPreference(userId: number) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+    });
+
+    return {data: user.filter_preferences ?? []};
+  }
 }

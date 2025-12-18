@@ -64,6 +64,7 @@ export declare class User {
     createdFilters: Filter[];
     messagesSent: ChatMessage[];
     jobsCreated: Job[];
+    filter_preferences: number[];
     createdAt: Date;
     updatedAt: Date;
 }

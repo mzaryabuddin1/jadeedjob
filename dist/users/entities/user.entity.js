@@ -254,6 +254,10 @@ __decorate([
     __metadata("design:type", Array)
 ], User.prototype, "jobsCreated", void 0);
 __decorate([
+    (0, typeorm_1.Column)('simple-array', { nullable: true }),
+    __metadata("design:type", Array)
+], User.prototype, "filter_preferences", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], User.prototype, "createdAt", void 0);

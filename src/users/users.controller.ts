@@ -6,6 +6,7 @@ import {
   Req,
   NotFoundException,
   UsePipes,
+  Get,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,6 +15,7 @@ import * as Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { AuthService } from 'src/auth/auth.service';
 
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(
@@ -21,7 +23,6 @@ export class UsersController {
     private readonly authService: AuthService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
   @Patch('me')
   @UsePipes(
     new JoiValidationPipe(
@@ -37,6 +38,9 @@ export class UsersController {
             'Password must include uppercase, lowercase, number, and special character',
           )
           .optional(),
+          filter_preferences: Joi.array()
+        .items(Joi.number())
+        .optional(),
 
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
@@ -107,5 +111,10 @@ export class UsersController {
       message: 'Profile updated successfully',
       user: updatedUser,
     };
+  }
+
+  @Get('me/preferences')
+  async getMyPreferences(@Req() req: any) {
+    return await this.usersService.getUserPreference(req.user.id)
   }
 }

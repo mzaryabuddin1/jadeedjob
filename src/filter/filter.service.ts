@@ -34,56 +34,82 @@ export class FilterService {
     return this.filterRepo.save(filter);
   }
 
-  async getFilters(query: any) {
-    const {
-      page = 1,
-      limit = 20,
-      search,
-      sortBy = 'createdAt',
-      sortOrder = 'DESC',
-      approvalStatus,
-      createdBy,
-      preference_ids = [],
-    } = query;
+async getFilters(query: any, userId?: number) {
+  const {
+    page = 1,
+    limit = 20,
+    search,
+    sortBy = 'createdAt',
+    sortOrder = 'DESC',
+    approvalStatus,
+    createdBy,
+    preference = true,
+  } = query;
 
-    const where: any = {};
+  const where: any = {};
 
-    if (search) {
-      where.name = Like(`%${search}%`);
-    }
+  if (search) {
+    where.name = Like(`%${search}%`);
+  }
 
-    if (approvalStatus) {
-      where.approvalStatus = approvalStatus;
-    }
+  if (approvalStatus) {
+    where.approvalStatus = approvalStatus;
+  }
 
-    if (createdBy) {
-      where.createdBy = createdBy;
-    }
+  if (createdBy) {
+    where.createdBy = createdBy;
+  }
 
-    const [filters, total] = await this.filterRepo.findAndCount({
-      where,
-      take: limit,
-      skip: (page - 1) * limit,
-      order: {
-        [sortBy]: sortOrder.toUpperCase(),
-      },
-      relations: ['jobs'],
+  // 1️⃣ Get all filters (no pagination yet)
+  const filters = await this.filterRepo.find({
+    where,
+    order: {
+      [sortBy]: sortOrder.toUpperCase(),
+    },
+  });
+
+  let orderedFilters = filters;
+
+  // 2️⃣ Reorder based on user preferences
+  if (preference === true && userId) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['filter_preferences'],
     });
 
-    const data = filters.map((f) => ({
-      ...f,
-      jobCount: f.jobs.length,
-      isPreferred: preference_ids.includes(f.id),
-      jobs: undefined,
-    }));
+    const preferences = user?.filter_preferences ?? [];
 
-    return {
-      data,
-      total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: Number(page),
-    };
+    if (preferences.length) {
+      const preferred = [];
+      const others = [];
+
+      for (const filter of filters) {
+        if (preferences.includes(filter.id)) {
+          preferred.push(filter);
+        } else {
+          others.push(filter);
+        }
+      }
+
+      orderedFilters = [...preferred, ...others];
+    }
   }
+
+  // 3️⃣ Apply pagination AFTER reordering
+  const total = orderedFilters.length;
+  const paginatedData = orderedFilters.slice(
+    (page - 1) * limit,
+    page * limit,
+  );
+
+  return {
+    data: paginatedData,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: Number(page),
+  };
+}
+
 
   async filterById(id: number) {
     const filter = await this.filterRepo.findOne({

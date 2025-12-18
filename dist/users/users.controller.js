@@ -83,10 +83,12 @@ let UsersController = class UsersController {
             user: updatedUser,
         };
     }
+    async getMyPreferences(req) {
+        return await this.usersService.getUserPreference(req.user.id);
+    }
 };
 exports.UsersController = UsersController;
 __decorate([
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Patch)('me'),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(Joi.object({
         email: Joi.string().email().optional(),
@@ -97,6 +99,9 @@ __decorate([
             .min(6)
             .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
             .message('Password must include uppercase, lowercase, number, and special character')
+            .optional(),
+        filter_preferences: Joi.array()
+            .items(Joi.number())
             .optional(),
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
@@ -135,7 +140,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "updateMe", null);
+__decorate([
+    (0, common_1.Get)('me/preferences'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getMyPreferences", null);
 exports.UsersController = UsersController = __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('users'),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         auth_service_1.AuthService])

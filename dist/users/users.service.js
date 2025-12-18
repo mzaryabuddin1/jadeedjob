@@ -24,10 +24,7 @@ let UsersService = class UsersService {
     async getUserById(id) {
         const user = await this.userRepo.findOne({
             where: { id },
-            relations: [
-                'country',
-                'language',
-            ],
+            relations: ['country', 'language'],
         });
         if (!user)
             throw new common_1.NotFoundException('User not found');
@@ -44,6 +41,12 @@ let UsersService = class UsersService {
         return this.userRepo.find({
             where: { id: (0, typeorm_2.In)(ids) },
         });
+    }
+    async getUserPreference(userId) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+        });
+        return { data: user.filter_preferences ?? [] };
     }
 };
 exports.UsersService = UsersService;

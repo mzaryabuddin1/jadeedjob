@@ -9,4 +9,7 @@ export declare class UsersController {
         message: string;
         user: import("./entities/user.entity").User;
     }>;
+    getMyPreferences(req: any): Promise<{
+        data: number[];
+    }>;
 }

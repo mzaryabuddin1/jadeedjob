@@ -205,6 +205,9 @@ export class User {
   @OneToMany(() => Job, (job) => job.creator)
   jobsCreated: Job[];
 
+  @Column('simple-array', { nullable: true })
+  filter_preferences: number[];
+
   // Auto timestamps
   @CreateDateColumn()
   createdAt: Date;
