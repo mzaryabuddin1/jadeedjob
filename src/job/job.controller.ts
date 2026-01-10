@@ -75,9 +75,9 @@ export class JobController {
   }
 
   @Get()
-  async findJobs(@Query() query: any) {
-    return this.jobService.findJobs(query);
-  }
+async findJobs(@Query() query: any, @Req() req: any) {
+  return this.jobService.findJobs(query, req.user.id);
+}
 
 @Get(':id')
 async findJob(@Param('id') id: number) {

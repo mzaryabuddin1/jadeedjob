@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Raw, Not, IsNull } from 'typeorm';
 import { Job } from './entities/job.entity';
@@ -100,7 +104,7 @@ export class JobService {
   // ────────────────────────────────────────────────
   // NORMAL SEARCH (NO GEO)
   // ────────────────────────────────────────────────
-  async findJobs(query: any) {
+  async findJobs(query: any, userId?: number) {
     const {
       filter,
       page = 1,
@@ -110,16 +114,33 @@ export class JobService {
       sortOrder = 'DESC',
       lat,
       lng,
+      myjobs = false,
     } = query;
 
-    // If geo → delegate
-    if (lat && lng) return this.findNearbyJobs(query);
+    // 🔹 GEO SEARCH (public jobs only)
+    if (lat && lng && myjobs !== 'true') {
+      return this.findNearbyJobs(query);
+    }
 
-    const where: any = { isActive: true };
+    const where: any = {};
+
+    // 🔥 MY JOBS MODE
+    if (myjobs === 'true') {
+      if (!userId) {
+        throw new BadRequestException('User not authenticated');
+      }
+
+      where.createdBy = userId; // 👈 ONLY MY JOBS
+      // ❗ no isActive filter (active + inactive)
+    } else {
+      where.isActive = true; // 👈 public jobs only
+    }
 
     if (filter) where.filterId = Number(filter);
-    if (search)
+
+    if (search) {
       where.description = Raw((alias) => `${alias} LIKE '%${search}%'`);
+    }
 
     const [jobs, total] = await this.jobRepo.findAndCount({
       where,
@@ -132,7 +153,7 @@ export class JobService {
       data: jobs,
       total,
       totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      currentPage: Number(page),
     };
   }
 
@@ -150,6 +171,4 @@ export class JobService {
 
     return job;
   }
-
-  
 }

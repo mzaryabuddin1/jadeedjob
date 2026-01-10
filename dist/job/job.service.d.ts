@@ -14,7 +14,7 @@ export declare class JobService {
         totalPages: number;
         currentPage: any;
     }>;
-    findJobs(query: any): Promise<{
+    findJobs(query: any, userId?: number): Promise<{
         data: any;
         total: number;
         totalPages: number;

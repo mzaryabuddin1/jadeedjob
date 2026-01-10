@@ -65,15 +65,26 @@ let JobService = class JobService {
             currentPage: page,
         };
     }
-    async findJobs(query) {
-        const { filter, page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'DESC', lat, lng, } = query;
-        if (lat && lng)
+    async findJobs(query, userId) {
+        const { filter, page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'DESC', lat, lng, myjobs = false, } = query;
+        if (lat && lng && myjobs !== 'true') {
             return this.findNearbyJobs(query);
-        const where = { isActive: true };
+        }
+        const where = {};
+        if (myjobs === 'true') {
+            if (!userId) {
+                throw new common_1.BadRequestException('User not authenticated');
+            }
+            where.createdBy = userId;
+        }
+        else {
+            where.isActive = true;
+        }
         if (filter)
             where.filterId = Number(filter);
-        if (search)
+        if (search) {
             where.description = (0, typeorm_2.Raw)((alias) => `${alias} LIKE '%${search}%'`);
+        }
         const [jobs, total] = await this.jobRepo.findAndCount({
             where,
             order: { [sortBy]: sortOrder.toUpperCase() },
@@ -84,7 +95,7 @@ let JobService = class JobService {
             data: jobs,
             total,
             totalPages: Math.ceil(total / limit),
-            currentPage: page,
+            currentPage: Number(page),
         };
     }
     async findJobById(id) {
