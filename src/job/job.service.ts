@@ -106,13 +106,21 @@ async findNearbyJobs(query: any) {
     limit = 10,
     radiusKm = 1,
     search = '',
+    sortBy = 'createdAt',
+    sortOrder = 'DESC',
   } = query;
 
-  const offset = (page - 1) * limit;
-  const radiusMeters = radiusKm * 1000;
+  const currentPage = Number(page);
+  const take = Number(limit);
+  const offset = (currentPage - 1) * take;
+  const radiusMeters = Number(radiusKm) * 1000;
 
+  // 🔥 SRID-safe point
   const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
 
+  // ────────────────────────────────────────────────
+  // 1️⃣ DATA QUERY
+  // ────────────────────────────────────────────────
   const jobs = await this.jobRepo.query(`
     SELECT
       j.*,
@@ -134,22 +142,38 @@ async findNearbyJobs(query: any) {
         ${point}
       ) <= ${radiusMeters}
       ${search ? `AND j.description LIKE '%${search}%'` : ''}
-    LIMIT ${limit}
+    ORDER BY ${sortBy} ${sortOrder}
+    LIMIT ${take}
     OFFSET ${offset}
   `);
 
+  // ────────────────────────────────────────────────
+  // 2️⃣ COUNT QUERY
+  // ────────────────────────────────────────────────
+  const countResult = await this.jobRepo.query(`
+    SELECT COUNT(*) AS total
+    FROM jobs j
+    WHERE j.isActive = 1
+      AND ST_Distance_Sphere(
+        ST_SRID(j.location, 4326),
+        ${point}
+      ) <= ${radiusMeters}
+      ${search ? `AND j.description LIKE '%${search}%'` : ''}
+  `);
+
+  const total = Number(countResult[0]?.total || 0);
+
+  // ────────────────────────────────────────────────
+  // 3️⃣ RESPONSE NORMALIZATION
+  // ────────────────────────────────────────────────
   return {
     data: jobs.map((j) => ({
       ...j,
-
-      // 🔥 FORCE SAME SHAPE AS NON-GEO API
       location: {
         lat: j.lat,
         lng: j.lng,
       },
-
       jobType: j.page_id ? 'page' : 'open',
-
       page: j.page_id
         ? {
             id: j.page_id,
@@ -159,7 +183,9 @@ async findNearbyJobs(query: any) {
           }
         : null,
     })),
-    currentPage: Number(page),
+    total,
+    totalPages: Math.ceil(total / take),
+    currentPage,
   };
 }
 

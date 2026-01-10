@@ -65,9 +65,11 @@ let JobService = class JobService {
         return this.jobRepo.save(job);
     }
     async findNearbyJobs(query) {
-        const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', } = query;
-        const offset = (page - 1) * limit;
-        const radiusMeters = radiusKm * 1000;
+        const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', sortBy = 'createdAt', sortOrder = 'DESC', } = query;
+        const currentPage = Number(page);
+        const take = Number(limit);
+        const offset = (currentPage - 1) * take;
+        const radiusMeters = Number(radiusKm) * 1000;
         const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
         const jobs = await this.jobRepo.query(`
     SELECT
@@ -90,9 +92,21 @@ let JobService = class JobService {
         ${point}
       ) <= ${radiusMeters}
       ${search ? `AND j.description LIKE '%${search}%'` : ''}
-    LIMIT ${limit}
+    ORDER BY ${sortBy} ${sortOrder}
+    LIMIT ${take}
     OFFSET ${offset}
   `);
+        const countResult = await this.jobRepo.query(`
+    SELECT COUNT(*) AS total
+    FROM jobs j
+    WHERE j.isActive = 1
+      AND ST_Distance_Sphere(
+        ST_SRID(j.location, 4326),
+        ${point}
+      ) <= ${radiusMeters}
+      ${search ? `AND j.description LIKE '%${search}%'` : ''}
+  `);
+        const total = Number(countResult[0]?.total || 0);
         return {
             data: jobs.map((j) => ({
                 ...j,
@@ -110,7 +124,9 @@ let JobService = class JobService {
                     }
                     : null,
             })),
-            currentPage: Number(page),
+            total,
+            totalPages: Math.ceil(total / take),
+            currentPage,
         };
     }
     async findJobs(query, userId) {
