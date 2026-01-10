@@ -57,8 +57,28 @@ export class Job {
     type: 'point',
     spatialFeatureType: 'Point',
     srid: 4326,
+    nullable: true,
+    transformer: {
+      from: (value: any) => {
+        if (!value) return null;
+
+        // mysql2 object
+        if (value.x !== undefined) {
+          return { lng: value.x, lat: value.y };
+        }
+
+        // raw SQL WKT
+        if (typeof value === 'string') {
+          const m = value.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
+          if (m) return { lng: +m[1], lat: +m[2] };
+        }
+
+        return null;
+      },
+      to: (value) => value,
+    },
   })
-  location: string;
+  location: { lat: number; lng: number };
 
   @Column({ type: 'date', nullable: true })
   startDate: Date;

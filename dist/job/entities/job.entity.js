@@ -72,8 +72,25 @@ __decorate([
         type: 'point',
         spatialFeatureType: 'Point',
         srid: 4326,
+        nullable: true,
+        transformer: {
+            from: (value) => {
+                if (!value)
+                    return null;
+                if (value.x !== undefined) {
+                    return { lng: value.x, lat: value.y };
+                }
+                if (typeof value === 'string') {
+                    const m = value.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
+                    if (m)
+                        return { lng: +m[1], lat: +m[2] };
+                }
+                return null;
+            },
+            to: (value) => value,
+        },
     }),
-    __metadata("design:type", String)
+    __metadata("design:type", Object)
 ], Job.prototype, "location", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'date', nullable: true }),

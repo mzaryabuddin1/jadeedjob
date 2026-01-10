@@ -15,7 +15,10 @@ export declare class Job {
     salaryType: string;
     salaryAmount: number;
     currency: string;
-    location: string;
+    location: {
+        lat: number;
+        lng: number;
+    };
     startDate: Date;
     endDate: Date;
     industry: string;

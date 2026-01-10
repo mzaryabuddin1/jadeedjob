@@ -98,75 +98,70 @@ export class JobService {
   // ────────────────────────────────────────────────
   // GEO: FIND NEARBY JOBS
   // ────────────────────────────────────────────────
-  async findNearbyJobs(query: any) {
-    const {
-      lat,
-      lng,
-      page = 1,
-      limit = 10,
-      search = '',
-      sortBy = 'createdAt',
-      sortOrder = 'DESC',
-      radiusKm = 1,
-    } = query;
+async findNearbyJobs(query: any) {
+  const {
+    lat,
+    lng,
+    page = 1,
+    limit = 10,
+    radiusKm = 1,
+    search = '',
+  } = query;
 
-    const offset = (page - 1) * limit;
-    const radiusMeters = radiusKm * 1000;
+  const offset = (page - 1) * limit;
+  const radiusMeters = radiusKm * 1000;
 
-    const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
+  const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
 
-const jobs = await this.jobRepo.query(`
-  SELECT 
-    j.*,
-    p.id AS page_id,
-    p.company_name,
-    p.username AS page_username,
-    p.company_logo,
-    ST_Distance_Sphere(
-      ST_SRID(j.location, 4326),
-      ST_GeomFromText('POINT(${lng} ${lat})', 4326)
-    ) AS distance
-  FROM jobs j
-  LEFT JOIN pages p ON p.id = j.pageId
-  WHERE j.isActive = 1
-    AND ST_Distance_Sphere(
-      ST_SRID(j.location, 4326),
-      ST_GeomFromText('POINT(${lng} ${lat})', 4326)
-    ) <= ${radiusMeters}
-  ${search ? `AND j.description LIKE '%${search}%'` : ''}
-  ORDER BY ${sortBy} ${sortOrder}
-  LIMIT ${limit}
-  OFFSET ${offset}
-`);
-
-    const countResult = await this.jobRepo.query(`
-    SELECT COUNT(*) AS count
+  const jobs = await this.jobRepo.query(`
+    SELECT
+      j.*,
+      ST_X(j.location) AS lng,
+      ST_Y(j.location) AS lat,
+      p.id AS page_id,
+      p.company_name,
+      p.username AS page_username,
+      p.company_logo,
+      ST_Distance_Sphere(
+        ST_SRID(j.location, 4326),
+        ${point}
+      ) AS distance
     FROM jobs j
+    LEFT JOIN pages p ON p.id = j.pageId
     WHERE j.isActive = 1
-    AND ST_Distance_Sphere(j.location, ${point}) <= ${radiusMeters}
-    ${search ? `AND j.description LIKE '%${search}%'` : ''}
+      AND ST_Distance_Sphere(
+        ST_SRID(j.location, 4326),
+        ${point}
+      ) <= ${radiusMeters}
+      ${search ? `AND j.description LIKE '%${search}%'` : ''}
+    LIMIT ${limit}
+    OFFSET ${offset}
   `);
 
-    const total = Number(countResult[0].count);
+  return {
+    data: jobs.map((j) => ({
+      ...j,
 
-return {
-  data: jobs.map((j) => ({
-    ...j,
-    pageTaggedJob: j.page_id ? true : false,
-    page: j.page_id
-      ? {
-          id: j.page_id,
-          company_name: j.company_name,
-          username: j.page_username,
-          company_logo: j.company_logo,
-        }
-      : null,
-  })),
-  total,
-  totalPages: Math.ceil(total / limit),
-  currentPage: page,
-};
-  }
+      // 🔥 FORCE SAME SHAPE AS NON-GEO API
+      location: {
+        lat: j.lat,
+        lng: j.lng,
+      },
+
+      jobType: j.page_id ? 'page' : 'open',
+
+      page: j.page_id
+        ? {
+            id: j.page_id,
+            company_name: j.company_name,
+            username: j.page_username,
+            company_logo: j.company_logo,
+          }
+        : null,
+    })),
+    currentPage: Number(page),
+  };
+}
 
   // ────────────────────────────────────────────────
   // NORMAL SEARCH (NO GEO)
