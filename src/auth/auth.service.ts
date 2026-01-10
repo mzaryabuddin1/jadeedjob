@@ -6,6 +6,7 @@ import { pbkdf2Sync, randomBytes } from 'crypto';
 import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'twilio/lib/twiml/VoiceResponse';
+import { FilterService } from 'src/filter/filter.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,8 @@ export class AuthService {
 
     @InjectRepository(Language)
     private languageRepo: Repository<Language>,
+
+    private filterService: FilterService, // 👈 add this
   ) {}
 
   generateToken(user: any) {
@@ -46,15 +49,21 @@ export class AuthService {
     const country = await this.countryRepo.findOne({
       where: { id: Number(data.country) },
     });
+
     const language = await this.languageRepo.findOne({
       where: { id: Number(data.language) },
     });
+
+    // 🔥 Get top 9 filters by job availability
+    const defaultFilterPreferences =
+      await this.filterService.getTopFiltersByJobs(9);
 
     const user = this.userRepo.create({
       ...data,
       country,
       language,
       isBanned: false,
+      filter_preferences: defaultFilterPreferences, // ✅ AUTO SET
     });
 
     return this.userRepo.save(user);
@@ -99,6 +108,9 @@ export class AuthService {
   // RESET PASSWORD (forgot-password)
   // ────────────────────────────────────────────────
   async resetPassword(phone: string, salt: string, hash: string) {
-    await this.userRepo.update({ phone }, { passwordSalt: salt, passwordHash: hash });
+    await this.userRepo.update(
+      { phone },
+      { passwordSalt: salt, passwordHash: hash },
+    );
   }
 }

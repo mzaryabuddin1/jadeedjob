@@ -13,4 +13,5 @@ export declare class FilterService {
         currentPage: number;
     }>;
     filterById(id: number): Promise<Filter>;
+    getTopFiltersByJobs(limit?: number): Promise<number[]>;
 }

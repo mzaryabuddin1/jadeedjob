@@ -122,4 +122,20 @@ async getFilters(query: any, userId?: number) {
 
     return filter;
   }
+
+async getTopFiltersByJobs(limit = 9): Promise<number[]> {
+  const result = await this.filterRepo
+    .createQueryBuilder('filter')
+    .leftJoin('filter.jobs', 'job')
+    .select('filter.id', 'filterId')
+    .addSelect('COUNT(job.id)', 'jobCount')
+    .where('filter.status = :status', { status: 'active' })
+    .groupBy('filter.id')
+    .orderBy('jobCount', 'DESC')
+    .limit(limit)
+    .getRawMany();
+
+  return result.map(r => Number(r.filterId));
+}
+
 }

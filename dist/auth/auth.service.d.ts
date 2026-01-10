@@ -3,12 +3,14 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'twilio/lib/twiml/VoiceResponse';
+import { FilterService } from 'src/filter/filter.service';
 export declare class AuthService {
     private jwtService;
     private userRepo;
     private countryRepo;
     private languageRepo;
-    constructor(jwtService: JwtService, userRepo: Repository<User>, countryRepo: Repository<Country>, languageRepo: Repository<Language>);
+    private filterService;
+    constructor(jwtService: JwtService, userRepo: Repository<User>, countryRepo: Repository<Country>, languageRepo: Repository<Language>, filterService: FilterService);
     generateToken(user: any): string;
     findUserByPhone(phone: string): Promise<User>;
     createOrGetUser(data: any): Promise<User | User[]>;

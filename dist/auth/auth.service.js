@@ -21,12 +21,14 @@ const crypto_1 = require("crypto");
 const user_entity_1 = require("../users/entities/user.entity");
 const country_entity_1 = require("../country/entities/country.entity");
 const VoiceResponse_1 = require("twilio/lib/twiml/VoiceResponse");
+const filter_service_1 = require("../filter/filter.service");
 let AuthService = class AuthService {
-    constructor(jwtService, userRepo, countryRepo, languageRepo) {
+    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService) {
         this.jwtService = jwtService;
         this.userRepo = userRepo;
         this.countryRepo = countryRepo;
         this.languageRepo = languageRepo;
+        this.filterService = filterService;
     }
     generateToken(user) {
         return this.jwtService.sign({ id: user.id });
@@ -47,11 +49,13 @@ let AuthService = class AuthService {
         const language = await this.languageRepo.findOne({
             where: { id: Number(data.language) },
         });
+        const defaultFilterPreferences = await this.filterService.getTopFiltersByJobs(9);
         const user = this.userRepo.create({
             ...data,
             country,
             language,
             isBanned: false,
+            filter_preferences: defaultFilterPreferences,
         });
         return this.userRepo.save(user);
     }
@@ -88,6 +92,7 @@ exports.AuthService = AuthService = __decorate([
     __metadata("design:paramtypes", [jwt_1.JwtService,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        filter_service_1.FilterService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

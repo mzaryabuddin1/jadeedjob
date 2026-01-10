@@ -12,6 +12,7 @@ import { CountryModule } from 'src/country/country.module';
 import { LanguageModule } from 'src/language/language.module';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import { FilterModule } from 'src/filter/filter.module';
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -25,6 +26,7 @@ import { Language } from 'src/language/entities/language.entity';
     CountryModule,
     LanguageModule,
     TwilioModule,
+    FilterModule
   ],
   controllers: [AuthController],
   providers: [AuthService],
