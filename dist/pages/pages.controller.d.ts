@@ -8,7 +8,7 @@ export declare class PagesController {
     }>;
     getPages(query: any, req: any): Promise<{
         data: {
-            mine: boolean;
+            association: string;
             id: number;
             company_name: string;
             business_name: string;
@@ -65,5 +65,24 @@ export declare class PagesController {
     }>;
     deletePage(id: string, req: any): Promise<{
         message: string;
+    }>;
+    addMember(pageId: string, body: any, req: any): Promise<{
+        message: string;
+        data: {
+            pageId: number;
+            userId: number;
+            role: "admin" | "editor";
+        };
+    }>;
+    removeMember(pageId: string, memberId: string, req: any): Promise<{
+        message: string;
+    }>;
+    changeMemberRole(pageId: string, userId: string, body: any, req: any): Promise<{
+        message: string;
+        data: {
+            pageId: number;
+            userId: number;
+            role: "admin" | "editor";
+        };
     }>;
 }

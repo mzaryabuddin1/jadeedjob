@@ -13,13 +13,14 @@ const pages_service_1 = require("./pages.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const company_page_entity_1 = require("./entities/company-page.entity");
 const page_member_entity_1 = require("./entities/page-member.entity");
+const user_entity_1 = require("../users/entities/user.entity");
 let PagesModule = class PagesModule {
 };
 exports.PagesModule = PagesModule;
 exports.PagesModule = PagesModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([company_page_entity_1.CompanyPage, page_member_entity_1.PageMember]),
+            typeorm_1.TypeOrmModule.forFeature([company_page_entity_1.CompanyPage, page_member_entity_1.PageMember, user_entity_1.User]),
         ],
         controllers: [pages_controller_1.PagesController],
         providers: [pages_service_1.PagesService],

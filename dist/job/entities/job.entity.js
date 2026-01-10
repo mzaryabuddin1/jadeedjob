@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const filter_entity_1 = require("../../filter/entities/filter.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
 const user_entity_1 = require("../../users/entities/user.entity");
+const company_page_entity_1 = require("../../pages/entities/company-page.entity");
 let Job = class Job {
 };
 exports.Job = Job;
@@ -123,6 +124,15 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => job_application_entity_1.JobApplication, (app) => app.job),
     __metadata("design:type", Array)
 ], Job.prototype, "applications", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], Job.prototype, "pageId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => company_page_entity_1.CompanyPage, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'pageId' }),
+    __metadata("design:type", company_page_entity_1.CompanyPage)
+], Job.prototype, "page", void 0);
 exports.Job = Job = __decorate([
     (0, typeorm_1.Entity)('jobs')
 ], Job);

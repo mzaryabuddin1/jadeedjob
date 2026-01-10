@@ -11,6 +11,7 @@ import {
 import { Filter } from 'src/filter/entities/filter.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { User } from 'src/users/entities/user.entity';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 
 @Entity('jobs')
 export class Job {
@@ -95,4 +96,11 @@ export class Job {
 
   @OneToMany(() => JobApplication, (app) => app.job)
   applications: JobApplication[];
+
+  @Column({ nullable: true })
+  pageId?: number;
+
+  @ManyToOne(() => CompanyPage, { nullable: true })
+  @JoinColumn({ name: 'pageId' })
+  page?: CompanyPage;
 }

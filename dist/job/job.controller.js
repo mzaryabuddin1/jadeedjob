@@ -27,7 +27,7 @@ let JobController = class JobController {
     }
     async createJob(body, req) {
         body.createdBy = req.user.id;
-        return this.jobService.createJob(body);
+        return this.jobService.createJob(body, req.user.id);
     }
     async findJobs(query, req) {
         return this.jobService.findJobs(query, req.user.id);
@@ -43,6 +43,7 @@ __decorate([
         title: joi_1.default.string().required(),
         filterId: joi_1.default.number().required(),
         description: joi_1.default.string().required(),
+        pageId: joi_1.default.number().optional(),
         requirements: joi_1.default.string().optional(),
         benefits: joi_1.default.array().items(joi_1.default.string()).optional(),
         shifts: joi_1.default.array().items(joi_1.default.string().valid('morning', 'evening', 'night', 'rotational')),

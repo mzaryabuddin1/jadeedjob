@@ -40,6 +40,15 @@ let PagesController = class PagesController {
     deletePage(id, req) {
         return this.pagesService.deletePage(Number(id), req.user.id);
     }
+    addMember(pageId, body, req) {
+        return this.pagesService.addMember(Number(pageId), body.userId, body.role, req.user.id);
+    }
+    removeMember(pageId, memberId, req) {
+        return this.pagesService.removeMember(Number(pageId), Number(memberId), req.user.id);
+    }
+    changeMemberRole(pageId, userId, body, req) {
+        return this.pagesService.changeMemberRole(Number(pageId), Number(userId), body.role, req.user.id);
+    }
 };
 exports.PagesController = PagesController;
 __decorate([
@@ -121,6 +130,34 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], PagesController.prototype, "deletePage", null);
+__decorate([
+    (0, common_1.Post)(':pageId/members'),
+    __param(0, (0, common_1.Param)('pageId')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PagesController.prototype, "addMember", null);
+__decorate([
+    (0, common_1.Delete)(':pageId/members/:userId'),
+    __param(0, (0, common_1.Param)('pageId')),
+    __param(1, (0, common_1.Param)('userId')),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], PagesController.prototype, "removeMember", null);
+__decorate([
+    (0, common_1.Patch)(':pageId/members/:userId/role'),
+    __param(0, (0, common_1.Param)('pageId')),
+    __param(1, (0, common_1.Param)('userId')),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PagesController.prototype, "changeMemberRole", null);
 exports.PagesController = PagesController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('pages'),

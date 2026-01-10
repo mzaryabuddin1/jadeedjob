@@ -8,6 +8,7 @@ import { Repository, Raw, Not, IsNull } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
 import { FirebaseService } from '../firebase/firebase.service';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 
 @Injectable()
 export class JobService {
@@ -18,38 +19,80 @@ export class JobService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
 
+    @InjectRepository(CompanyPage)
+    private pageRepo: Repository<CompanyPage>,
+
     private firebaseService: FirebaseService,
   ) {}
 
   // ────────────────────────────────────────────────
   // CREATE JOB + SEND NOTIFICATION
   // ────────────────────────────────────────────────
-  async createJob(data: any) {
-    const { location, ...rest } = data;
+  async createJob(data: any, userId: number) {
+    let pageId: number | null = null;
 
+    // ────────────────────────────────────────────────
+    // 1️⃣ PAGE PERMISSION CHECK (optional)
+    // ────────────────────────────────────────────────
+    if (data.pageId) {
+      const page = await this.pageRepo.findOne({
+        where: { id: data.pageId },
+        relations: ['members'],
+      });
+
+      if (!page) {
+        throw new BadRequestException('Page not found');
+      }
+
+      const member =
+        page.ownerId === userId
+          ? { role: 'owner' }
+          : page.members.find((m) => m.userId === userId);
+
+      if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
+        throw new BadRequestException(
+          'You are not allowed to create jobs for this page',
+        );
+      }
+
+      pageId = page.id;
+    }
+
+    // ────────────────────────────────────────────────
+    // 2️⃣ LOCATION (lat/lng → MySQL POINT with SRID 4326)
+    // ────────────────────────────────────────────────
+    if (!data.location || data.isRemote === false) {
+      if (
+        typeof data.location?.lat !== 'number' ||
+        typeof data.location?.lng !== 'number'
+      ) {
+        throw new BadRequestException('Valid location is required');
+      }
+    }
+
+    const location =
+      data.isRemote === true
+        ? null
+        : () =>
+            `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+
+    // ────────────────────────────────────────────────
+    // 3️⃣ REMOVE RAW LOCATION OBJECT (VERY IMPORTANT)
+    // ────────────────────────────────────────────────
+    const { location: _location, pageId: _pageId, ...jobData } = data;
+
+    // ────────────────────────────────────────────────
+    // 4️⃣ CREATE JOB
+    // ────────────────────────────────────────────────
     const job = this.jobRepo.create({
-      ...rest,
-      location: () =>
-        `ST_GeomFromText('POINT(${location.lng} ${location.lat})')`,
+      ...jobData,
+      createdBy: userId,
+      pageId,
+      location,
+      isActive: true,
     });
 
-    // Save job first so it has ID
-    const savedJob = await this.jobRepo.save(job);
-
-    // FCM
-    // const users = await this.userRepo.find({
-    //   where: { fcmToken: Not(IsNull()) },
-    // });
-    // const tokens = users.map((u) => u.fcmToken).filter(Boolean);
-    // if (tokens.length > 0) {
-    //   await this.firebaseService.sendNotification(
-    //     tokens,
-    //     'New Job Posted',
-    //     "Descriptin",
-    //   );
-    // }
-
-    return savedJob;
+    return this.jobRepo.save(job);
   }
 
   // ────────────────────────────────────────────────
@@ -70,35 +113,59 @@ export class JobService {
     const offset = (page - 1) * limit;
     const radiusMeters = radiusKm * 1000;
 
-    const jobs = await this.jobRepo.query(`
-      SELECT 
-        j.*, 
-        ST_Distance_Sphere(j.location, POINT(${lng}, ${lat})) AS distance
-      FROM jobs j
-      WHERE j.isActive = 1
-      AND ST_Distance_Sphere(j.location, POINT(${lng}, ${lat})) <= ${radiusMeters}
-      ${search ? `AND j.description LIKE '%${search}%'` : ''}
-      ORDER BY ${sortBy} ${sortOrder}
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `);
+    const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
+
+const jobs = await this.jobRepo.query(`
+  SELECT 
+    j.*,
+    p.id AS page_id,
+    p.company_name,
+    p.username AS page_username,
+    p.company_logo,
+    ST_Distance_Sphere(
+      ST_SRID(j.location, 4326),
+      ST_GeomFromText('POINT(${lng} ${lat})', 4326)
+    ) AS distance
+  FROM jobs j
+  LEFT JOIN pages p ON p.id = j.pageId
+  WHERE j.isActive = 1
+    AND ST_Distance_Sphere(
+      ST_SRID(j.location, 4326),
+      ST_GeomFromText('POINT(${lng} ${lat})', 4326)
+    ) <= ${radiusMeters}
+  ${search ? `AND j.description LIKE '%${search}%'` : ''}
+  ORDER BY ${sortBy} ${sortOrder}
+  LIMIT ${limit}
+  OFFSET ${offset}
+`);
 
     const countResult = await this.jobRepo.query(`
-      SELECT COUNT(*) AS count
-      FROM jobs j
-      WHERE j.isActive = 1
-      AND ST_Distance_Sphere(j.location, POINT(${lng}, ${lat})) <= ${radiusMeters}
-      ${search ? `AND j.description LIKE '%${search}%'` : ''}
-    `);
+    SELECT COUNT(*) AS count
+    FROM jobs j
+    WHERE j.isActive = 1
+    AND ST_Distance_Sphere(j.location, ${point}) <= ${radiusMeters}
+    ${search ? `AND j.description LIKE '%${search}%'` : ''}
+  `);
 
     const total = Number(countResult[0].count);
 
-    return {
-      data: jobs,
-      total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-    };
+return {
+  data: jobs.map((j) => ({
+    ...j,
+    pageTaggedJob: j.page_id ? true : false,
+    page: j.page_id
+      ? {
+          id: j.page_id,
+          company_name: j.company_name,
+          username: j.page_username,
+          company_logo: j.company_logo,
+        }
+      : null,
+  })),
+  total,
+  totalPages: Math.ceil(total / limit),
+  currentPage: page,
+};
   }
 
   // ────────────────────────────────────────────────
@@ -144,13 +211,26 @@ export class JobService {
 
     const [jobs, total] = await this.jobRepo.findAndCount({
       where,
+      relations: ['page'], // 👈 IMPORTANT
       order: { [sortBy]: sortOrder.toUpperCase() },
       take: limit,
       skip: (page - 1) * limit,
     });
 
+
     return {
-      data: jobs,
+      data: jobs.map((job) => ({
+        ...job,
+        pageTaggedJob: job.pageId ? true : false,
+        page: job.pageId
+          ? {
+              id: job.page.id,
+              company_name: job.page.company_name,
+              username: job.page.username,
+              company_logo: job.page.company_logo,
+            }
+          : null,
+      })),
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),

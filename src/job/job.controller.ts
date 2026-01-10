@@ -26,6 +26,7 @@ export class JobController {
         title: Joi.string().required(),
         filterId: Joi.number().required(),
         description: Joi.string().required(),
+        pageId: Joi.number().optional(),
         requirements: Joi.string().optional(),
         benefits: Joi.array().items(Joi.string()).optional(),
         shifts: Joi.array().items(
@@ -71,7 +72,7 @@ export class JobController {
   )
   async createJob(@Body() body: any, @Req() req: any) {
     body.createdBy = req.user.id
-    return this.jobService.createJob(body);
+    return this.jobService.createJob(body, req.user.id);
   }
 
   @Get()

@@ -89,4 +89,54 @@ export class PagesController {
   deletePage(@Param('id') id: string, @Req() req: any) {
     return this.pagesService.deletePage(Number(id), req.user.id);
   }
+
+  @Post(':pageId/members')
+  // @UsePipes(
+  //   new JoiValidationPipe(
+  //     Joi.object({
+  //       userId: Joi.number().required(),
+  //       role: Joi.string().valid('admin', 'editor').required(),
+  //     }),
+  //   ),
+  // )
+  addMember(
+    @Param('pageId') pageId: string,
+    @Body() body: any,
+    @Req() req: any,
+  ) {
+    return this.pagesService.addMember(
+      Number(pageId),
+      body.userId,
+      body.role,
+      req.user.id,
+    );
+  }
+
+  @Delete(':pageId/members/:userId')
+  removeMember(
+    @Param('pageId') pageId: string,
+    @Param('userId') memberId: string,
+    @Req() req: any,
+  ) {
+    return this.pagesService.removeMember(
+      Number(pageId),
+      Number(memberId),
+      req.user.id,
+    );
+  }
+
+  @Patch(':pageId/members/:userId/role')
+  changeMemberRole(
+    @Param('pageId') pageId: string,
+    @Param('userId') userId: string,
+    @Body() body: any,
+    @Req() req: any,
+  ) {
+    return this.pagesService.changeMemberRole(
+      Number(pageId),
+      Number(userId),
+      body.role,
+      req.user.id,
+    );
+  }
 }

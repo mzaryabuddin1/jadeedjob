@@ -1,15 +1,19 @@
 import { Repository } from 'typeorm';
 import { CompanyPage } from './entities/company-page.entity';
+import { PageMember } from './entities/page-member.entity';
+import { User } from 'src/users/entities/user.entity';
 export declare class PagesService {
     private readonly pageRepo;
-    constructor(pageRepo: Repository<CompanyPage>);
+    private readonly memberRepo;
+    private readonly userRepo;
+    constructor(pageRepo: Repository<CompanyPage>, memberRepo: Repository<PageMember>, userRepo: Repository<User>);
     createPage(data: any, userId: number): Promise<{
         message: string;
         data: CompanyPage[];
     }>;
     getPages(query: any, userId: number): Promise<{
         data: {
-            mine: boolean;
+            association: string;
             id: number;
             company_name: string;
             business_name: string;
@@ -50,14 +54,22 @@ export declare class PagesService {
             certifications: string[];
             company_rating: number;
             ownerId: number;
-            owner: import("../users/entities/user.entity").User;
-            members: import("./entities/page-member.entity").PageMember[];
+            owner: User;
+            members: PageMember[];
             createdAt: Date;
             updatedAt: Date;
         }[];
         total: number;
         totalPages: number;
         currentPage: number;
+    }>;
+    addMember(pageId: number, targetUserId: number, role: 'admin' | 'editor', requesterId: number): Promise<{
+        message: string;
+        data: {
+            pageId: number;
+            userId: number;
+            role: "admin" | "editor";
+        };
     }>;
     getPageById(id: number): Promise<CompanyPage>;
     updatePage(id: number, data: any, userId: number): Promise<{
@@ -66,5 +78,16 @@ export declare class PagesService {
     }>;
     deletePage(id: number, userId: number): Promise<{
         message: string;
+    }>;
+    removeMember(pageId: number, memberId: number, requesterId: number): Promise<{
+        message: string;
+    }>;
+    changeMemberRole(pageId: number, targetUserId: number, newRole: 'admin' | 'editor', requesterId: number): Promise<{
+        message: string;
+        data: {
+            pageId: number;
+            userId: number;
+            role: "admin" | "editor";
+        };
     }>;
 }
