@@ -151,8 +151,8 @@ export class User {
   @Column({ nullable: true })
   notes: string;
 
-  @Column({ nullable: true })
-  fcmToken: string;
+  @Column({ type: 'simple-array', nullable: true })
+  fcmTokens: string[];
 
   @OneToMany(() => Rating, (rating) => rating.ratedUser)
   ratingsReceived: Rating[];

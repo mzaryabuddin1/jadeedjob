@@ -22,6 +22,7 @@ const language_module_1 = require("../language/language.module");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
 const filter_module_1 = require("../filter/filter.module");
+const firebase_module_1 = require("../firebase/firebase.module");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -39,7 +40,8 @@ exports.AuthModule = AuthModule = __decorate([
             country_module_1.CountryModule,
             language_module_1.LanguageModule,
             twilio_module_1.TwilioModule,
-            filter_module_1.FilterModule
+            filter_module_1.FilterModule,
+            firebase_module_1.FirebaseModule
         ],
         controllers: [auth_controller_1.AuthController],
         providers: [auth_service_1.AuthService],

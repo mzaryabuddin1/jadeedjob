@@ -17,9 +17,13 @@ export declare class AuthController {
         access_token: string;
         user: User;
     }>;
-    login(dto: any): Promise<{
+    login(dto: {
+        phone: string;
+        password: string;
+        fcmToken?: string;
+    }): Promise<{
         access_token: string;
-        user: User;
+        user: any;
     }>;
     sendForgotPasswordOtp(body: any): Promise<{
         message: string;

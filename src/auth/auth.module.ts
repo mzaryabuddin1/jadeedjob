@@ -13,6 +13,7 @@ import { LanguageModule } from 'src/language/language.module';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { FilterModule } from 'src/filter/filter.module';
+import { FirebaseModule } from 'src/firebase/firebase.module';
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -26,7 +27,8 @@ import { FilterModule } from 'src/filter/filter.module';
     CountryModule,
     LanguageModule,
     TwilioModule,
-    FilterModule
+    FilterModule,
+    FirebaseModule
   ],
   controllers: [AuthController],
   providers: [AuthService],

@@ -7,6 +7,7 @@ import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'twilio/lib/twiml/VoiceResponse';
 import { FilterService } from 'src/filter/filter.service';
+import { FirebaseService } from 'src/firebase/firebase.service';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +24,7 @@ export class AuthService {
     private languageRepo: Repository<Language>,
 
     private filterService: FilterService, // 👈 add this
+    private firebaseService: FirebaseService, // 👈 add this
   ) {}
 
   generateToken(user: any) {
@@ -113,4 +115,28 @@ export class AuthService {
       { passwordSalt: salt, passwordHash: hash },
     );
   }
+
+  async attachFcmToken(userId: number, fcmToken: string) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'fcmTokens', 'filter_preferences'],
+    });
+
+    if (!user) return;
+
+    const tokens = new Set(user.fcmTokens || []);
+    tokens.add(fcmToken);
+
+    user.fcmTokens = Array.from(tokens);
+    await this.userRepo.save(user);
+
+    // 🔥 Subscribe this token to current filters
+    const filters = user.filter_preferences || [];
+    if (filters.length) {
+      await this.firebaseService.subscribeTokenToFilters(fcmToken, filters);
+    }
+  }
+
+
+
 }

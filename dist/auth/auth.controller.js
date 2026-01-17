@@ -55,10 +55,10 @@ let AuthController = class AuthController {
             throw new common_1.UnauthorizedException('OTP expired');
         }
         this.otpService.markUsed(phone);
-        const user = await this.authService.createOrGetUser({
+        const user = (await this.authService.createOrGetUser({
             ...entry.registrationData,
             isVerified: true,
-        });
+        }));
         if (fcmToken) {
             await this.usersService.updateUser(user.id, {
                 fcmToken,
@@ -70,12 +70,15 @@ let AuthController = class AuthController {
     }
     async login(dto) {
         const user = await this.authService.validateUser(dto.phone, dto.password);
-        delete user.passwordHash;
-        delete user.passwordSalt;
+        const { passwordHash, passwordSalt, ...publicUser } = user;
+        if (dto.fcmToken) {
+            await this.authService.attachFcmToken(user.id, dto.fcmToken);
+        }
         const token = this.authService.generateToken(user);
-        const { fcmToken = null } = dto;
-        await this.usersService.updateUser(user.id, { "fcmToken": fcmToken });
-        return { access_token: token, user };
+        return {
+            access_token: token,
+            user: publicUser,
+        };
     }
     async sendForgotPasswordOtp(body) {
         const user = await this.authService.findUserByPhone(body.phone);

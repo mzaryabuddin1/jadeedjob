@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { FirebaseService } from './firebase.service';
+import { FirebaseController } from './firebase.controller';
 
 @Module({
   providers: [
@@ -17,5 +18,6 @@ import { FirebaseService } from './firebase.service';
     },
   ],
   exports: [FirebaseService],
+  controllers: [FirebaseController],
 })
 export class FirebaseModule {}

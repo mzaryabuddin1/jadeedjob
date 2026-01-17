@@ -50,7 +50,7 @@ export declare class User {
     verification_date: Date;
     rejection_reason: string;
     notes: string;
-    fcmToken: string;
+    fcmTokens: string[];
     ratingsReceived: Rating[];
     ratingsGiven: Rating[];
     ratingAverage: number;

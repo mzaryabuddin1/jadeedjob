@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UsePipes,
   Get,
+  Post,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,6 +15,7 @@ import { Request } from 'express';
 import * as Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { AuthService } from 'src/auth/auth.service';
+import { FirebaseService } from 'src/firebase/firebase.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -21,6 +23,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
+    private firebaseService: FirebaseService, // 👈 add this
   ) {}
 
   @Patch('me')
@@ -38,9 +41,9 @@ export class UsersController {
             'Password must include uppercase, lowercase, number, and special character',
           )
           .optional(),
-          filter_preferences: Joi.array()
-        .items(Joi.number())
-        .optional(),
+
+        // 🔥 filter_preferences allowed here
+        filter_preferences: Joi.array().items(Joi.number()).optional(),
 
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
@@ -85,6 +88,13 @@ export class UsersController {
     const userId = (req.user as any)?.id;
     if (!userId) throw new NotFoundException('User not found or unauthorized');
 
+    // Extract filter_preferences if present
+    let newFilterPreferences: number[] | undefined;
+    if (Array.isArray(body.filter_preferences)) {
+      newFilterPreferences = body.filter_preferences;
+      delete body.filter_preferences; // avoid double handling in usersService
+    }
+
     // Remove forbidden fields
     const forbidden = [
       'passwordHash',
@@ -105,7 +115,18 @@ export class UsersController {
       delete body.password;
     }
 
+    // Update normal profile fields
     const updatedUser = await this.usersService.updateUser(userId, body);
+
+    // 🔥 If filter_preferences changed, update DB + Firebase topics
+    if (newFilterPreferences) {
+      await this.usersService.updateUserFilterPreferences(
+        userId,
+        newFilterPreferences,
+      );
+      // reflect in response
+      (updatedUser as any).filter_preferences = newFilterPreferences;
+    }
 
     return {
       message: 'Profile updated successfully',
@@ -115,6 +136,10 @@ export class UsersController {
 
   @Get('me/preferences')
   async getMyPreferences(@Req() req: any) {
-    return await this.usersService.getUserPreference(req.user.id)
+    return await this.usersService.getUserPreference(req.user.id);
   }
+
+
+
+  
 }

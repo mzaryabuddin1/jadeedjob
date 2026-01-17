@@ -17,9 +17,11 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("./entities/user.entity");
+const firebase_service_1 = require("../firebase/firebase.service");
 let UsersService = class UsersService {
-    constructor(userRepo) {
+    constructor(userRepo, firebaseService) {
         this.userRepo = userRepo;
+        this.firebaseService = firebaseService;
     }
     async getUserById(id) {
         const user = await this.userRepo.findOne({
@@ -48,11 +50,26 @@ let UsersService = class UsersService {
         });
         return { data: user.filter_preferences ?? [] };
     }
+    async updateUserFilterPreferences(userId, newFilters) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            select: ['id', 'filter_preferences', 'fcmTokens'],
+        });
+        if (!user)
+            return;
+        const oldFilters = user.filter_preferences || [];
+        user.filter_preferences = newFilters;
+        await this.userRepo.save(user);
+        for (const token of user.fcmTokens || []) {
+            await this.firebaseService.updateFilterSubscriptions(token, oldFilters, newFilters);
+        }
+    }
 };
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        firebase_service_1.FirebaseService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

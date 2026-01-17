@@ -52,15 +52,22 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const Joi = __importStar(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const auth_service_1 = require("../auth/auth.service");
+const firebase_service_1 = require("../firebase/firebase.service");
 let UsersController = class UsersController {
-    constructor(usersService, authService) {
+    constructor(usersService, authService, firebaseService) {
         this.usersService = usersService;
         this.authService = authService;
+        this.firebaseService = firebaseService;
     }
     async updateMe(req, body) {
         const userId = req.user?.id;
         if (!userId)
             throw new common_1.NotFoundException('User not found or unauthorized');
+        let newFilterPreferences;
+        if (Array.isArray(body.filter_preferences)) {
+            newFilterPreferences = body.filter_preferences;
+            delete body.filter_preferences;
+        }
         const forbidden = [
             'passwordHash',
             'passwordSalt',
@@ -78,6 +85,10 @@ let UsersController = class UsersController {
             delete body.password;
         }
         const updatedUser = await this.usersService.updateUser(userId, body);
+        if (newFilterPreferences) {
+            await this.usersService.updateUserFilterPreferences(userId, newFilterPreferences);
+            updatedUser.filter_preferences = newFilterPreferences;
+        }
         return {
             message: 'Profile updated successfully',
             user: updatedUser,
@@ -100,9 +111,7 @@ __decorate([
             .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
             .message('Password must include uppercase, lowercase, number, and special character')
             .optional(),
-        filter_preferences: Joi.array()
-            .items(Joi.number())
-            .optional(),
+        filter_preferences: Joi.array().items(Joi.number()).optional(),
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
         gender: Joi.string().valid('Male', 'Female', 'Other').optional(),
@@ -151,6 +160,7 @@ exports.UsersController = UsersController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('users'),
     __metadata("design:paramtypes", [users_service_1.UsersService,
-        auth_service_1.AuthService])
+        auth_service_1.AuthService,
+        firebase_service_1.FirebaseService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map

@@ -43,6 +43,7 @@ exports.FirebaseModule = void 0;
 const common_1 = require("@nestjs/common");
 const admin = __importStar(require("firebase-admin"));
 const firebase_service_1 = require("./firebase.service");
+const firebase_controller_1 = require("./firebase.controller");
 let FirebaseModule = class FirebaseModule {
 };
 exports.FirebaseModule = FirebaseModule;
@@ -61,6 +62,7 @@ exports.FirebaseModule = FirebaseModule = __decorate([
             },
         ],
         exports: [firebase_service_1.FirebaseService],
+        controllers: [firebase_controller_1.FirebaseController],
     })
 ], FirebaseModule);
 //# sourceMappingURL=firebase.module.js.map

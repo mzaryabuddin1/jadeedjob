@@ -58,6 +58,54 @@ let FirebaseService = class FirebaseService {
             notification: { title, body },
         });
     }
+    async subscribeTokenToFilters(token, filterIds) {
+        const topics = filterIds.map((id) => `filter_${id}`);
+        for (const topic of topics) {
+            await this.firebaseApp.messaging().subscribeToTopic(token, topic);
+        }
+    }
+    async updateFilterSubscriptions(token, oldFilters, newFilters) {
+        const oldSet = new Set(oldFilters || []);
+        const newSet = new Set(newFilters || []);
+        const toSubscribe = [];
+        const toUnsubscribe = [];
+        for (const id of newSet) {
+            if (!oldSet.has(id)) {
+                toSubscribe.push(`filter_${id}`);
+            }
+        }
+        for (const id of oldSet) {
+            if (!newSet.has(id)) {
+                toUnsubscribe.push(`filter_${id}`);
+            }
+        }
+        if (toSubscribe.length) {
+            for (const topic of toSubscribe) {
+                await this.firebaseApp.messaging().subscribeToTopic(token, topic);
+            }
+        }
+        if (toUnsubscribe.length) {
+            for (const topic of toUnsubscribe) {
+                await this.firebaseApp.messaging().unsubscribeFromTopic(token, topic);
+            }
+        }
+    }
+    async sendToFilterTopic(filterId, title, body, data) {
+        return this.firebaseApp.messaging().send({
+            topic: `filter_${filterId}`,
+            notification: { title, body },
+            data,
+        });
+    }
+    async sendTestToToken(token) {
+        return this.firebaseApp.messaging().send({
+            token,
+            notification: {
+                title: "🔥 Test Notification",
+                body: "Your browser is receiving push notifications!",
+            },
+        });
+    }
 };
 exports.FirebaseService = FirebaseService;
 exports.FirebaseService = FirebaseService = __decorate([

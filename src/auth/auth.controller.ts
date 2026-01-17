@@ -77,26 +77,23 @@ export class AuthController {
 
     this.otpService.markUsed(phone);
 
-    const user = await this.authService.createOrGetUser({
+    const user = (await this.authService.createOrGetUser({
       ...entry.registrationData,
       isVerified: true,
-    }) as User;
+    })) as User;
 
     // 👉 Save FCM token if present
-  if (fcmToken) {
-    await this.usersService.updateUser(user.id, {
-      fcmToken,
-    });
-  }
+    if (fcmToken) {
+      await this.usersService.updateUser(user.id, {
+        fcmToken,
+      });
+    }
 
     const token = this.authService.generateToken(user);
     this.otpService.deleteOtp(phone);
 
-
     return { access_token: token, user };
   }
-
-
 
   // ────────────────────────────────────────────────
   // LOGIN
@@ -111,17 +108,25 @@ export class AuthController {
       }),
     ),
   )
-  async login(@Body() dto: any) {
+  async login(
+    @Body() dto: { phone: string; password: string; fcmToken?: string },
+  ) {
     const user = await this.authService.validateUser(dto.phone, dto.password);
-    delete user.passwordHash;
-    delete user.passwordSalt;
+
+    // create a safe copy for response (don't mutate entity)
+    const { passwordHash, passwordSalt, ...publicUser } = user as any;
+
+    // 🔥 attach FCM token + subscribe to filter topics (if provided)
+    if (dto.fcmToken) {
+      await this.authService.attachFcmToken(user.id, dto.fcmToken);
+    }
 
     const token = this.authService.generateToken(user);
 
-    const { fcmToken = null } = dto;
-    await this.usersService.updateUser(user.id, {"fcmToken":fcmToken});
-
-    return { access_token: token, user };
+    return {
+      access_token: token,
+      user: publicUser,
+    };
   }
 
   // ────────────────────────────────────────────────

@@ -22,13 +22,15 @@ const user_entity_1 = require("../users/entities/user.entity");
 const country_entity_1 = require("../country/entities/country.entity");
 const VoiceResponse_1 = require("twilio/lib/twiml/VoiceResponse");
 const filter_service_1 = require("../filter/filter.service");
+const firebase_service_1 = require("../firebase/firebase.service");
 let AuthService = class AuthService {
-    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService) {
+    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService, firebaseService) {
         this.jwtService = jwtService;
         this.userRepo = userRepo;
         this.countryRepo = countryRepo;
         this.languageRepo = languageRepo;
         this.filterService = filterService;
+        this.firebaseService = firebaseService;
     }
     generateToken(user) {
         return this.jwtService.sign({ id: user.id });
@@ -82,6 +84,22 @@ let AuthService = class AuthService {
     async resetPassword(phone, salt, hash) {
         await this.userRepo.update({ phone }, { passwordSalt: salt, passwordHash: hash });
     }
+    async attachFcmToken(userId, fcmToken) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            select: ['id', 'fcmTokens', 'filter_preferences'],
+        });
+        if (!user)
+            return;
+        const tokens = new Set(user.fcmTokens || []);
+        tokens.add(fcmToken);
+        user.fcmTokens = Array.from(tokens);
+        await this.userRepo.save(user);
+        const filters = user.filter_preferences || [];
+        if (filters.length) {
+            await this.firebaseService.subscribeTokenToFilters(fcmToken, filters);
+        }
+    }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([
@@ -93,6 +111,7 @@ exports.AuthService = AuthService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        filter_service_1.FilterService])
+        filter_service_1.FilterService,
+        firebase_service_1.FirebaseService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

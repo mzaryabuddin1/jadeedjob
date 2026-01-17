@@ -7,6 +7,7 @@ import { Certification } from './entities/certification.entity';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { AuthModule } from 'src/auth/auth.module';
+import { FirebaseModule } from 'src/firebase/firebase.module';
 
 @Module({
   imports: [
@@ -16,7 +17,9 @@ import { AuthModule } from 'src/auth/auth.module';
       Education,
       Certification,
     ]),
-    forwardRef(() => AuthModule)
+    forwardRef(() => AuthModule),
+      FirebaseModule
+
   ],
   controllers: [UsersController],
   providers: [UsersService],

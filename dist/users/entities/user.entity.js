@@ -189,9 +189,9 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "notes", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    __metadata("design:type", String)
-], User.prototype, "fcmToken", void 0);
+    (0, typeorm_1.Column)({ type: 'simple-array', nullable: true }),
+    __metadata("design:type", Array)
+], User.prototype, "fcmTokens", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => rating_entity_1.Rating, (rating) => rating.ratedUser),
     __metadata("design:type", Array)

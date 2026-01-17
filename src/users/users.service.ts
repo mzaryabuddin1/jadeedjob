@@ -2,12 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
+import { FirebaseService } from 'src/firebase/firebase.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+
+    private firebaseService: FirebaseService, // 👈 add this
   ) {}
 
   async getUserById(id: number) {
@@ -41,6 +44,30 @@ export class UsersService {
       where: { id: userId },
     });
 
-    return {data: user.filter_preferences ?? []};
+    return { data: user.filter_preferences ?? [] };
+  }
+
+  async updateUserFilterPreferences(userId: number, newFilters: number[]) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'filter_preferences', 'fcmTokens'],
+    });
+
+    if (!user) return;
+
+    const oldFilters = user.filter_preferences || [];
+
+    // update in DB
+    user.filter_preferences = newFilters;
+    await this.userRepo.save(user);
+
+    // sync Firebase topics for all user's tokens
+    for (const token of user.fcmTokens || []) {
+      await this.firebaseService.updateFilterSubscriptions(
+        token,
+        oldFilters,
+        newFilters,
+      );
+    }
   }
 }
