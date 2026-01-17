@@ -15,7 +15,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FirebaseController = void 0;
 const common_1 = require("@nestjs/common");
 const firebase_service_1 = require("./firebase.service");
-const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 let FirebaseController = class FirebaseController {
     constructor(firebaseService) {
         this.firebaseService = firebaseService;
@@ -33,7 +32,6 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], FirebaseController.prototype, "test", null);
 exports.FirebaseController = FirebaseController = __decorate([
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('firebase'),
     __metadata("design:paramtypes", [firebase_service_1.FirebaseService])
 ], FirebaseController);
