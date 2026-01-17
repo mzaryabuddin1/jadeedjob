@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { FirebaseService } from './firebase.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
@@ -9,8 +9,8 @@ export class FirebaseController {
     private firebaseService: FirebaseService, // 👈 add this
   ) {}
 
-  @Post('test-notification')
-  async test(@Body('token') token: string) {
+  @Get('test-notification')
+  async test(@Query('token') token: string) {
     return this.firebaseService.sendTestToToken(token);
   }
 }

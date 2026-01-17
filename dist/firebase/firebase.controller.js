@@ -26,8 +26,8 @@ let FirebaseController = class FirebaseController {
 };
 exports.FirebaseController = FirebaseController;
 __decorate([
-    (0, common_1.Post)('test-notification'),
-    __param(0, (0, common_1.Body)('token')),
+    (0, common_1.Get)('test-notification'),
+    __param(0, (0, common_1.Query)('token')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
