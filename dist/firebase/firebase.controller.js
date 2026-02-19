@@ -22,6 +22,19 @@ let FirebaseController = class FirebaseController {
     async test(token) {
         return this.firebaseService.sendTestToToken(token);
     }
+    async subscribeToFilter(filterId, token) {
+        if (!filterId || !token) {
+            return {
+                success: false,
+                message: 'filterId and token are required',
+            };
+        }
+        await this.firebaseService.subscribeTokenToFilters(token, [filterId]);
+        return {
+            success: true,
+            message: `Subscribed token to filter_${filterId}`,
+        };
+    }
 };
 exports.FirebaseController = FirebaseController;
 __decorate([
@@ -31,6 +44,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], FirebaseController.prototype, "test", null);
+__decorate([
+    (0, common_1.Post)('subscribe-filter'),
+    __param(0, (0, common_1.Body)('filterId')),
+    __param(1, (0, common_1.Body)('token')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], FirebaseController.prototype, "subscribeToFilter", null);
 exports.FirebaseController = FirebaseController = __decorate([
     (0, common_1.Controller)('firebase'),
     __metadata("design:paramtypes", [firebase_service_1.FirebaseService])

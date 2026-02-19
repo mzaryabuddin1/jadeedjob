@@ -84,44 +84,69 @@ export class JobService {
     // ────────────────────────────────────────────────
     // 4️⃣ CREATE JOB
     // ────────────────────────────────────────────────
-    const job = this.jobRepo.create({
+    const insertResult = await this.jobRepo.insert({
       ...jobData,
       createdBy: userId,
-      pageId,
+      pageId: pageId ?? null,
       location,
       isActive: true,
     });
 
-    return this.jobRepo.save(job);
+    const insertedId = insertResult.identifiers?.[0]?.id;
+    if (!insertedId) {
+      throw new BadRequestException('Failed to create job');
+    }
+
+    const savedJob = await this.jobRepo.findOne({ where: { id: insertedId } });
+    if (!savedJob) {
+      throw new BadRequestException('Failed to load created job');
+    }
+
+    // ────────────────────────────────────────────────
+    // 5️⃣ SEND NOTIFICATION TO FILTER SUBSCRIBERS
+    // ────────────────────────────────────────────────
+    if (savedJob.filterId) {
+      await this.firebaseService.sendToFilterTopic(
+        savedJob.filterId,
+        'New Job Posted',
+        savedJob.title ?? 'A new job matches your preferences!',
+        {
+          jobId: savedJob.id.toString(),
+          filterId: savedJob.filterId.toString(),
+        },
+      );
+    }
+
+    return savedJob;
   }
 
   // ────────────────────────────────────────────────
   // GEO: FIND NEARBY JOBS
   // ────────────────────────────────────────────────
-async findNearbyJobs(query: any) {
-  const {
-    lat,
-    lng,
-    page = 1,
-    limit = 10,
-    radiusKm = 1,
-    search = '',
-    sortBy = 'createdAt',
-    sortOrder = 'DESC',
-  } = query;
+  async findNearbyJobs(query: any) {
+    const {
+      lat,
+      lng,
+      page = 1,
+      limit = 10,
+      radiusKm = 1,
+      search = '',
+      sortBy = 'createdAt',
+      sortOrder = 'DESC',
+    } = query;
 
-  const currentPage = Number(page);
-  const take = Number(limit);
-  const offset = (currentPage - 1) * take;
-  const radiusMeters = Number(radiusKm) * 1000;
+    const currentPage = Number(page);
+    const take = Number(limit);
+    const offset = (currentPage - 1) * take;
+    const radiusMeters = Number(radiusKm) * 1000;
 
-  // 🔥 SRID-safe point
-  const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
+    // 🔥 SRID-safe point
+    const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
 
-  // ────────────────────────────────────────────────
-  // 1️⃣ DATA QUERY
-  // ────────────────────────────────────────────────
-  const jobs = await this.jobRepo.query(`
+    // ────────────────────────────────────────────────
+    // 1️⃣ DATA QUERY
+    // ────────────────────────────────────────────────
+    const jobs = await this.jobRepo.query(`
     SELECT
       j.*,
       ST_X(j.location) AS lng,
@@ -147,10 +172,10 @@ async findNearbyJobs(query: any) {
     OFFSET ${offset}
   `);
 
-  // ────────────────────────────────────────────────
-  // 2️⃣ COUNT QUERY
-  // ────────────────────────────────────────────────
-  const countResult = await this.jobRepo.query(`
+    // ────────────────────────────────────────────────
+    // 2️⃣ COUNT QUERY
+    // ────────────────────────────────────────────────
+    const countResult = await this.jobRepo.query(`
     SELECT COUNT(*) AS total
     FROM jobs j
     WHERE j.isActive = 1
@@ -161,33 +186,33 @@ async findNearbyJobs(query: any) {
       ${search ? `AND j.description LIKE '%${search}%'` : ''}
   `);
 
-  const total = Number(countResult[0]?.total || 0);
+    const total = Number(countResult[0]?.total || 0);
 
-  // ────────────────────────────────────────────────
-  // 3️⃣ RESPONSE NORMALIZATION
-  // ────────────────────────────────────────────────
-  return {
-    data: jobs.map((j) => ({
-      ...j,
-      location: {
-        lat: j.lat,
-        lng: j.lng,
-      },
-      jobType: j.page_id ? 'page' : 'open',
-      page: j.page_id
-        ? {
-            id: j.page_id,
-            company_name: j.company_name,
-            username: j.page_username,
-            company_logo: j.company_logo,
-          }
-        : null,
-    })),
-    total,
-    totalPages: Math.ceil(total / take),
-    currentPage,
-  };
-}
+    // ────────────────────────────────────────────────
+    // 3️⃣ RESPONSE NORMALIZATION
+    // ────────────────────────────────────────────────
+    return {
+      data: jobs.map((j) => ({
+        ...j,
+        location: {
+          lat: j.lat,
+          lng: j.lng,
+        },
+        jobType: j.page_id ? 'page' : 'open',
+        page: j.page_id
+          ? {
+              id: j.page_id,
+              company_name: j.company_name,
+              username: j.page_username,
+              company_logo: j.company_logo,
+            }
+          : null,
+      })),
+      total,
+      totalPages: Math.ceil(total / take),
+      currentPage,
+    };
+  }
 
   // ────────────────────────────────────────────────
   // NORMAL SEARCH (NO GEO)
@@ -237,7 +262,6 @@ async findNearbyJobs(query: any) {
       take: limit,
       skip: (page - 1) * limit,
     });
-
 
     return {
       data: jobs.map((job) => ({

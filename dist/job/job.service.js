@@ -55,14 +55,28 @@ let JobService = class JobService {
             ? null
             : () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
         const { location: _location, pageId: _pageId, ...jobData } = data;
-        const job = this.jobRepo.create({
+        const insertResult = await this.jobRepo.insert({
             ...jobData,
             createdBy: userId,
-            pageId,
+            pageId: pageId ?? null,
             location,
             isActive: true,
         });
-        return this.jobRepo.save(job);
+        const insertedId = insertResult.identifiers?.[0]?.id;
+        if (!insertedId) {
+            throw new common_1.BadRequestException('Failed to create job');
+        }
+        const savedJob = await this.jobRepo.findOne({ where: { id: insertedId } });
+        if (!savedJob) {
+            throw new common_1.BadRequestException('Failed to load created job');
+        }
+        if (savedJob.filterId) {
+            await this.firebaseService.sendToFilterTopic(savedJob.filterId, 'New Job Posted', savedJob.title ?? 'A new job matches your preferences!', {
+                jobId: savedJob.id.toString(),
+                filterId: savedJob.filterId.toString(),
+            });
+        }
+        return savedJob;
     }
     async findNearbyJobs(query) {
         const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', sortBy = 'createdAt', sortOrder = 'DESC', } = query;

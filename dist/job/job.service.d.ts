@@ -9,7 +9,7 @@ export declare class JobService {
     private pageRepo;
     private firebaseService;
     constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, firebaseService: FirebaseService);
-    createJob(data: any, userId: number): Promise<Job[]>;
+    createJob(data: any, userId: number): Promise<Job>;
     findNearbyJobs(query: any): Promise<{
         data: any;
         total: number;

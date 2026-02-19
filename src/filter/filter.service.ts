@@ -34,81 +34,81 @@ export class FilterService {
     return this.filterRepo.save(filter);
   }
 
-async getFilters(query: any, userId?: number) {
-  const {
-    page = 1,
-    limit = 20,
-    search,
-    sortBy = 'createdAt',
-    sortOrder = 'DESC',
-    approvalStatus,
-    createdBy,
-    preference = true,
-  } = query;
+  async getFilters(query: any, userId?: number) {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC',
+      approvalStatus,
+      createdBy,
+      preference = true,
+    } = query;
 
-  const where: any = {};
+    const where: any = {};
 
-  if (search) {
-    where.name = Like(`%${search}%`);
-  }
+    if (search) {
+      where.name = Like(`%${search}%`);
+    }
 
-  if (approvalStatus) {
-    where.approvalStatus = approvalStatus;
-  }
+    if (approvalStatus) {
+      where.approvalStatus = approvalStatus;
+    }
 
-  if (createdBy) {
-    where.createdBy = createdBy;
-  }
+    if (createdBy) {
+      where.createdBy = createdBy;
+    }
 
-  // 1️⃣ Get all filters (no pagination yet)
-  const filters = await this.filterRepo.find({
-    where,
-    order: {
-      [sortBy]: sortOrder.toUpperCase(),
-    },
-  });
-
-  let orderedFilters = filters;
-
-  // 2️⃣ Reorder based on user preferences
-  if (preference === true && userId) {
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: ['filter_preferences'],
+    // 1️⃣ Get all filters (no pagination yet)
+    const filters = await this.filterRepo.find({
+      where,
+      order: {
+        [sortBy]: sortOrder.toUpperCase(),
+      },
     });
 
-    const preferences = user?.filter_preferences ?? [];
+    let orderedFilters = filters;
 
-    if (preferences.length) {
-      const preferred = [];
-      const others = [];
+    // 2️⃣ Reorder based on user preferences
+    if (preference === true && userId) {
+      const user = await this.userRepo.findOne({
+        where: { id: userId },
+        select: ['filter_preferences'],
+      });
 
-      for (const filter of filters) {
-        if (preferences.includes(filter.id)) {
-          preferred.push(filter);
-        } else {
-          others.push(filter);
+      const preferences = user?.filter_preferences ?? [];
+
+      if (preferences.length) {
+        const preferred = [];
+        const others = [];
+
+        for (const filter of filters) {
+          if (preferences.includes(filter.id)) {
+            preferred.push(filter);
+          } else {
+            others.push(filter);
+          }
         }
+
+        orderedFilters = [...preferred, ...others];
       }
-
-      orderedFilters = [...preferred, ...others];
     }
+
+    // 3️⃣ Apply pagination AFTER reordering
+    const total = orderedFilters.length;
+    const paginatedData = orderedFilters.slice(
+      (page - 1) * limit,
+      page * limit,
+    );
+
+    return {
+      data: paginatedData,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: Number(page),
+    };
   }
-
-  // 3️⃣ Apply pagination AFTER reordering
-  const total = orderedFilters.length;
-  const paginatedData = orderedFilters.slice(
-    (page - 1) * limit,
-    page * limit,
-  );
-
-  return {
-    data: paginatedData,
-    total,
-    totalPages: Math.ceil(total / limit),
-    currentPage: Number(page),
-  };
-}
 
 
   async filterById(id: number) {
@@ -123,19 +123,19 @@ async getFilters(query: any, userId?: number) {
     return filter;
   }
 
-async getTopFiltersByJobs(limit = 9): Promise<number[]> {
-  const result = await this.filterRepo
-    .createQueryBuilder('filter')
-    .leftJoin('filter.jobs', 'job')
-    .select('filter.id', 'filterId')
-    .addSelect('COUNT(job.id)', 'jobCount')
-    .where('filter.status = :status', { status: 'active' })
-    .groupBy('filter.id')
-    .orderBy('jobCount', 'DESC')
-    .limit(limit)
-    .getRawMany();
+  async getTopFiltersByJobs(limit = 9): Promise<number[]> {
+    const result = await this.filterRepo
+      .createQueryBuilder('filter')
+      .leftJoin('filter.jobs', 'job')
+      .select('filter.id', 'filterId')
+      .addSelect('COUNT(job.id)', 'jobCount')
+      .where('filter.status = :status', { status: 'active' })
+      .groupBy('filter.id')
+      .orderBy('jobCount', 'DESC')
+      .limit(limit)
+      .getRawMany();
 
-  return result.map(r => Number(r.filterId));
-}
+    return result.map(r => Number(r.filterId));
+  }
 
 }

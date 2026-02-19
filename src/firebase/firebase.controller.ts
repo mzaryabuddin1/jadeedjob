@@ -13,4 +13,25 @@ export class FirebaseController {
   async test(@Query('token') token: string) {
     return this.firebaseService.sendTestToToken(token);
   }
+
+  @Post('subscribe-filter')
+  async subscribeToFilter(
+    @Body('filterId') filterId: number,
+    @Body('token') token: string,
+  ) {
+    if (!filterId || !token) {
+      return {
+        success: false,
+        message: 'filterId and token are required',
+      };
+    }
+
+    await this.firebaseService.subscribeTokenToFilters(token, [filterId]);
+
+    return {
+      success: true,
+      message: `Subscribed token to filter_${filterId}`,
+    };
+  }
+  
 }
