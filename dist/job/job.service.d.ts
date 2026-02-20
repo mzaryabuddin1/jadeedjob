@@ -23,4 +23,5 @@ export declare class JobService {
         currentPage: number;
     }>;
     findJobById(id: number): Promise<Job>;
+    updateJob(id: number, data: any, userId: number): Promise<Job>;
 }

@@ -8,6 +8,8 @@ import {
   Get,
   Query,
   Param,
+  Patch,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { JobService } from './job.service';
 import Joi from 'joi';
@@ -71,18 +73,74 @@ export class JobController {
     ),
   )
   async createJob(@Body() body: any, @Req() req: any) {
-    body.createdBy = req.user.id
+    body.createdBy = req.user.id;
     return this.jobService.createJob(body, req.user.id);
   }
 
   @Get()
-async findJobs(@Query() query: any, @Req() req: any) {
-  return this.jobService.findJobs(query, req.user.id);
-}
+  async findJobs(@Query() query: any, @Req() req: any) {
+    return this.jobService.findJobs(query, req.user.id);
+  }
 
-@Get(':id')
-async findJob(@Param('id') id: number) {
-  return this.jobService.findJobById(id);
-}
- 
+  @Get(':id')
+  async findJob(@Param('id') id: number) {
+    return this.jobService.findJobById(id);
+  }
+
+  @Patch(':id')
+  async patchJob(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new JoiValidationPipe(
+      Joi.object({
+        title: Joi.string().optional(),
+        description: Joi.string().optional(),
+        pageId: Joi.number().optional(),
+        filterId: Joi.number().optional(),
+        requirements: Joi.string().optional(),
+        benefits: Joi.array().items(Joi.string()).optional(),
+        shifts: Joi.array().items(
+          Joi.string().valid('morning', 'evening', 'night', 'rotational'),
+        ),
+        jobTypes: Joi.array().items(
+          Joi.string().valid(
+            'full-time',
+            'part-time',
+            'contract',
+            'temporary',
+            'freelance',
+            'internship',
+          ),
+        ),
+        salaryType: Joi.string()
+          .valid(
+            'piece-rate',
+            'daily-wage',
+            'hourly',
+            'monthly',
+            'fixed',
+            'commission',
+            'negotiable',
+          )
+          .optional(),
+        salaryAmount: Joi.number().optional(),
+        currency: Joi.string().optional(),
+
+        location: Joi.object({
+          lat: Joi.number().required(),
+          lng: Joi.number().required(),
+        }).optional(),
+
+        startDate: Joi.date().optional(),
+        endDate: Joi.date().optional(),
+        industry: Joi.string().optional(),
+        educationLevel: Joi.string().optional(),
+        experienceRequired: Joi.string().optional(),
+        languageRequirements: Joi.array().items(Joi.string()).optional(),
+      }),
+    )) body: any,
+    @Req() req: any,
+  ) {
+    return this.jobService.updateJob(id, body, req.user.id);
+  }
+
 }

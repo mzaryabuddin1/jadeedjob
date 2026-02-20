@@ -10,4 +10,5 @@ export declare class JobController {
         currentPage: number;
     }>;
     findJob(id: number): Promise<import("./entities/job.entity").Job>;
+    patchJob(id: number, body: any, req: any): Promise<import("./entities/job.entity").Job>;
 }

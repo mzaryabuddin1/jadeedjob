@@ -200,6 +200,57 @@ let JobService = class JobService {
         }
         return job;
     }
+    async updateJob(id, data, userId) {
+        const job = await this.jobRepo.findOne({ where: { id } });
+        if (!job)
+            throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+        const effectivePageId = data.pageId !== undefined ? data.pageId : (job.pageId ?? null);
+        if (effectivePageId) {
+            const page = await this.pageRepo.findOne({
+                where: { id: effectivePageId },
+                relations: ['members'],
+            });
+            if (!page)
+                throw new common_1.BadRequestException('Page not found');
+            const member = page.ownerId === userId
+                ? { role: 'owner' }
+                : page.members.find((m) => m.userId === userId);
+            if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
+                throw new common_1.BadRequestException('You are not allowed to update jobs for this page');
+            }
+        }
+        else {
+            if (job.createdBy !== userId) {
+                throw new common_1.BadRequestException('You are not allowed to update this job');
+            }
+        }
+        let locationUpdate = undefined;
+        if (data.isRemote === true) {
+            locationUpdate = null;
+        }
+        else if (data.location) {
+            if (typeof data.location?.lat !== 'number' ||
+                typeof data.location?.lng !== 'number') {
+                throw new common_1.BadRequestException('Valid location is required');
+            }
+            locationUpdate = () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+        }
+        const { createdBy, location, ...patch } = data;
+        const updatePayload = {
+            ...patch,
+        };
+        if (data.pageId !== undefined) {
+            updatePayload.pageId = data.pageId ?? null;
+        }
+        if (locationUpdate !== undefined) {
+            updatePayload.location = locationUpdate;
+        }
+        await this.jobRepo.update({ id }, updatePayload);
+        const updated = await this.jobRepo.findOne({ where: { id } });
+        if (!updated)
+            throw new common_1.BadRequestException('Failed to load updated job');
+        return updated;
+    }
 };
 exports.JobService = JobService;
 exports.JobService = JobService = __decorate([

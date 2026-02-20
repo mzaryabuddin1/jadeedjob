@@ -35,6 +35,9 @@ let JobController = class JobController {
     async findJob(id) {
         return this.jobService.findJobById(id);
     }
+    async patchJob(id, body, req) {
+        return this.jobService.updateJob(id, body, req.user.id);
+    }
 };
 exports.JobController = JobController;
 __decorate([
@@ -85,6 +88,39 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "findJob", null);
+__decorate([
+    (0, common_1.Patch)(':id'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        title: joi_1.default.string().optional(),
+        description: joi_1.default.string().optional(),
+        pageId: joi_1.default.number().optional(),
+        filterId: joi_1.default.number().optional(),
+        requirements: joi_1.default.string().optional(),
+        benefits: joi_1.default.array().items(joi_1.default.string()).optional(),
+        shifts: joi_1.default.array().items(joi_1.default.string().valid('morning', 'evening', 'night', 'rotational')),
+        jobTypes: joi_1.default.array().items(joi_1.default.string().valid('full-time', 'part-time', 'contract', 'temporary', 'freelance', 'internship')),
+        salaryType: joi_1.default.string()
+            .valid('piece-rate', 'daily-wage', 'hourly', 'monthly', 'fixed', 'commission', 'negotiable')
+            .optional(),
+        salaryAmount: joi_1.default.number().optional(),
+        currency: joi_1.default.string().optional(),
+        location: joi_1.default.object({
+            lat: joi_1.default.number().required(),
+            lng: joi_1.default.number().required(),
+        }).optional(),
+        startDate: joi_1.default.date().optional(),
+        endDate: joi_1.default.date().optional(),
+        industry: joi_1.default.string().optional(),
+        educationLevel: joi_1.default.string().optional(),
+        experienceRequired: joi_1.default.string().optional(),
+        languageRequirements: joi_1.default.array().items(joi_1.default.string()).optional(),
+    })))),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:returntype", Promise)
+], JobController.prototype, "patchJob", null);
 exports.JobController = JobController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('job'),
