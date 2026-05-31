@@ -37,8 +37,19 @@ const core_1 = require("@nestjs/core");
 const app_module_1 = require("./app.module");
 const express = __importStar(require("express"));
 const path_1 = require("path");
+const swagger_1 = require("@nestjs/swagger");
+const packageJson = require('../package.json');
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const swaggerConfig = new swagger_1.DocumentBuilder()
+        .setTitle('JadeedJob API')
+        .setVersion(packageJson.version ?? '0.0.1')
+        .addBearerAuth()
+        .build();
+    const swaggerDocument = swagger_1.SwaggerModule.createDocument(app, swaggerConfig);
+    swagger_1.SwaggerModule.setup('docs', app, swaggerDocument, {
+        jsonDocumentUrl: 'docs-json',
+    });
     app.use('/uploads', express.static((0, path_1.join)(__dirname, '..', 'uploads')));
     await app.listen(3000, '0.0.0.0');
 }
