@@ -1,9 +1,16 @@
 import { ConfigService } from '@nestjs/config';
-import { TokenPayload } from 'google-auth-library';
+export interface GoogleProfile {
+    providerId: string;
+    email: string | null;
+    firstName: string;
+    lastName: string;
+    picture: string | null;
+}
 export declare class GoogleAuthService {
     private readonly configService;
-    private readonly client;
+    private readonly oauthClient;
     constructor(configService: ConfigService);
-    private getAudiences;
-    verifyIdToken(idToken: string): Promise<TokenPayload>;
+    private normalizeToken;
+    private getClientIds;
+    getProfileFromToken(rawToken: string): Promise<GoogleProfile>;
 }

@@ -125,10 +125,11 @@ export class AuthController {
     };
   }
 
-  // ────────────────────────────────────────────────
-  // GOOGLE LOGIN / SIGN-UP
-  // Client sends Google ID token from Sign-In SDK
-  // ────────────────────────────────────────────────
+  /**
+   * Google login OR signup (same endpoint).
+   * Body: { "idToken": "<Google Sign-In ID token>" }
+   * Verifies with Google, saves user in DB, returns JWT.
+   */
   @Post('google')
   @UsePipes(
     new JoiValidationPipe(

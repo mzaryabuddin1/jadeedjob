@@ -61,7 +61,7 @@ exports.FirebaseModule = FirebaseModule = __decorate([
                 },
             },
         ],
-        exports: [firebase_service_1.FirebaseService],
+        exports: [firebase_service_1.FirebaseService, 'FIREBASE_ADMIN'],
         controllers: [firebase_controller_1.FirebaseController],
     })
 ], FirebaseModule);

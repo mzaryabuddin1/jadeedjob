@@ -70,8 +70,8 @@ export declare class AuthController {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
-            country: import("../country/entities/country.entity").Country;
-            language: import("../language/entities/language.entity").Language;
+            country: import("../country/entities/country.entity").Country | null;
+            language: import("../language/entities/language.entity").Language | null;
             work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
             education: import("../users/entities/education.entity").Education[];
             certifications: import("../users/entities/certification.entity").Certification[];
@@ -90,6 +90,8 @@ export declare class AuthController {
         country?: number;
         language?: number;
     }): Promise<{
+        message: string;
+        isNewUser: boolean;
         access_token: string;
         user: {
             id: number;
@@ -138,8 +140,8 @@ export declare class AuthController {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
-            country: import("../country/entities/country.entity").Country;
-            language: import("../language/entities/language.entity").Language;
+            country: import("../country/entities/country.entity").Country | null;
+            language: import("../language/entities/language.entity").Language | null;
             work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
             education: import("../users/entities/education.entity").Education[];
             certifications: import("../users/entities/certification.entity").Certification[];
@@ -151,7 +153,6 @@ export declare class AuthController {
             createdAt: Date;
             updatedAt: Date;
         };
-        isNewUser: boolean;
     }>;
     sendForgotPasswordOtp(body: any): Promise<{
         message: string;

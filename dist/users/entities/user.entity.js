@@ -217,11 +217,17 @@ __decorate([
     __metadata("design:type", Number)
 ], User.prototype, "ratingCount", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => country_entity_1.Country, (country) => country.users, { eager: true }),
+    (0, typeorm_1.ManyToOne)(() => country_entity_1.Country, (country) => country.users, {
+        eager: true,
+        nullable: true,
+    }),
     __metadata("design:type", country_entity_1.Country)
 ], User.prototype, "country", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => language_entity_1.Language, (language) => language.users, { eager: true }),
+    (0, typeorm_1.ManyToOne)(() => language_entity_1.Language, (language) => language.users, {
+        eager: true,
+        nullable: true,
+    }),
     __metadata("design:type", language_entity_1.Language)
 ], User.prototype, "language", void 0);
 __decorate([

@@ -173,12 +173,18 @@ export class User {
   ratingCount: number;
 
   // Many-to-one with Country
-  @ManyToOne(() => Country, (country) => country.users, { eager: true })
-  country: Country;
+  @ManyToOne(() => Country, (country) => country.users, {
+    eager: true,
+    nullable: true,
+  })
+  country: Country | null;
 
   // Many-to-one with Language
-  @ManyToOne(() => Language, (language) => language.users, { eager: true })
-  language: Language;
+  @ManyToOne(() => Language, (language) => language.users, {
+    eager: true,
+    nullable: true,
+  })
+  language: Language | null;
 
   // Nested Arrays → OneToMany relations
   @OneToMany(() => WorkExperience, (workExp) => workExp.user, {

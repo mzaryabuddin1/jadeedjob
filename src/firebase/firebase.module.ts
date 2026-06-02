@@ -17,7 +17,7 @@ import { FirebaseController } from './firebase.controller';
       },
     },
   ],
-  exports: [FirebaseService],
+  exports: [FirebaseService, 'FIREBASE_ADMIN'],
   controllers: [FirebaseController],
 })
 export class FirebaseModule {}

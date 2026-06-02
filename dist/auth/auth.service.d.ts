@@ -62,8 +62,8 @@ export declare class AuthService {
         ratingsGiven: import("../rating/entities/rating.entity").Rating[];
         ratingAverage: number;
         ratingCount: number;
-        country: Country;
-        language: Language;
+        country: Country | null;
+        language: Language | null;
         work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
         education: import("../users/entities/education.entity").Education[];
         certifications: import("../users/entities/certification.entity").Certification[];
@@ -93,6 +93,8 @@ export declare class AuthService {
         country?: number;
         language?: number;
     }): Promise<{
+        message: string;
+        isNewUser: boolean;
         access_token: string;
         user: {
             id: number;
@@ -141,8 +143,8 @@ export declare class AuthService {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
-            country: Country;
-            language: Language;
+            country: Country | null;
+            language: Language | null;
             work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
             education: import("../users/entities/education.entity").Education[];
             certifications: import("../users/entities/certification.entity").Certification[];
@@ -154,7 +156,6 @@ export declare class AuthService {
             createdAt: Date;
             updatedAt: Date;
         };
-        isNewUser: boolean;
     }>;
     attachFcmToken(userId: number, fcmToken: string): Promise<void>;
 }

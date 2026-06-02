@@ -16,22 +16,33 @@ const google_auth_library_1 = require("google-auth-library");
 let GoogleAuthService = class GoogleAuthService {
     constructor(configService) {
         this.configService = configService;
-        this.client = new google_auth_library_1.OAuth2Client();
+        this.oauthClient = new google_auth_library_1.OAuth2Client();
     }
-    getAudiences() {
+    normalizeToken(raw) {
+        let token = (raw || '').trim();
+        if (token.toLowerCase().startsWith('bearer ')) {
+            token = token.slice(7).trim();
+        }
+        return token;
+    }
+    getClientIds() {
         const raw = this.configService.get('GOOGLE_CLIENT_ID') || '';
         return raw
             .split(',')
             .map((id) => id.trim())
             .filter(Boolean);
     }
-    async verifyIdToken(idToken) {
-        const audiences = this.getAudiences();
+    async getProfileFromToken(rawToken) {
+        const idToken = this.normalizeToken(rawToken);
+        if (!idToken) {
+            throw new common_1.UnauthorizedException('idToken is required');
+        }
+        const audiences = this.getClientIds();
         if (!audiences.length) {
-            throw new common_1.ServiceUnavailableException('Google sign-in is not configured (set GOOGLE_CLIENT_ID in .env)');
+            throw new common_1.ServiceUnavailableException('Set GOOGLE_CLIENT_ID in .env (your OAuth Web/Android client id)');
         }
         try {
-            const ticket = await this.client.verifyIdToken({
+            const ticket = await this.oauthClient.verifyIdToken({
                 idToken,
                 audience: audiences,
             });
@@ -39,10 +50,22 @@ let GoogleAuthService = class GoogleAuthService {
             if (!payload?.sub) {
                 throw new common_1.UnauthorizedException('Invalid Google token');
             }
-            return payload;
+            return {
+                providerId: payload.sub,
+                email: payload.email?.toLowerCase() ?? null,
+                firstName: payload.given_name || payload.name?.split(' ')[0] || 'User',
+                lastName: payload.family_name ||
+                    payload.name?.split(' ').slice(1).join(' ') ||
+                    '',
+                picture: payload.picture ?? null,
+            };
         }
-        catch {
-            throw new common_1.UnauthorizedException('Invalid or expired Google token');
+        catch (err) {
+            if (err instanceof common_1.UnauthorizedException ||
+                err instanceof common_1.ServiceUnavailableException) {
+                throw err;
+            }
+            throw new common_1.UnauthorizedException('Invalid or expired Google token. Use the ID token from Google Sign-In (not access_token).');
         }
     }
 };

@@ -66,10 +66,7 @@ let AuthService = class AuthService {
         const language = languageId
             ? await this.languageRepo.findOne({ where: { id: languageId } })
             : await this.languageRepo.findOne({ where: {}, order: { id: 'ASC' } });
-        if (!country || !language) {
-            throw new common_1.BadRequestException('Country and language are required. Seed reference data or pass country/language IDs.');
-        }
-        return { country, language };
+        return { country: country ?? null, language: language ?? null };
     }
     async createOrGetUser(data) {
         const existing = await this.findUserByPhone(data.phone);
@@ -118,41 +115,33 @@ let AuthService = class AuthService {
         await this.userRepo.update({ phone }, { passwordSalt: salt, passwordHash: hash });
     }
     async loginWithGoogle(idToken, options) {
-        const payload = await this.googleAuthService.verifyIdToken(idToken);
-        const googleId = payload.sub;
-        const email = payload.email?.toLowerCase();
-        if (payload.email_verified === false) {
-            throw new common_1.UnauthorizedException('Google email is not verified');
+        const profile = await this.googleAuthService.getProfileFromToken(idToken);
+        let user = await this.findUserByGoogleId(profile.providerId);
+        if (!user && profile.email) {
+            user = await this.findUserByEmail(profile.email);
         }
-        let user = await this.findUserByGoogleId(googleId);
         let isNewUser = false;
-        if (!user && email) {
-            user = await this.findUserByEmail(email);
-            if (user) {
-                user.googleId = googleId;
-                user.authProvider = user.phone ? user.authProvider : 'google';
-                if (!user.email)
-                    user.email = email;
-                if (payload.picture && !user.profile_photo) {
-                    user.profile_photo = payload.picture;
-                }
-                user.isVerified = true;
-                user = await this.userRepo.save(user);
-            }
+        if (user) {
+            user.googleId = profile.providerId;
+            user.authProvider = 'google';
+            user.email = profile.email ?? user.email;
+            user.firstName = profile.firstName;
+            user.lastName = profile.lastName;
+            if (profile.picture)
+                user.profile_photo = profile.picture;
+            user.isVerified = true;
+            user = await this.userRepo.save(user);
         }
-        if (!user) {
+        else {
             isNewUser = true;
             const { country, language } = await this.resolveCountryLanguage(options?.country, options?.language);
-            const defaultFilterPreferences = await this.filterService.getTopFiltersByJobs(9);
-            user = this.userRepo.create({
-                googleId,
+            user = await this.userRepo.save(this.userRepo.create({
+                googleId: profile.providerId,
                 authProvider: 'google',
-                email: email ?? null,
-                firstName: payload.given_name || payload.name?.split(' ')[0] || 'User',
-                lastName: payload.family_name ||
-                    payload.name?.split(' ').slice(1).join(' ') ||
-                    '',
-                profile_photo: payload.picture ?? null,
+                email: profile.email,
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                profile_photo: profile.picture,
                 phone: null,
                 passwordHash: null,
                 passwordSalt: null,
@@ -160,25 +149,25 @@ let AuthService = class AuthService {
                 language,
                 isVerified: true,
                 isBanned: false,
-                filter_preferences: defaultFilterPreferences,
-            });
-            user = await this.userRepo.save(user);
-            user = await this.findUserByGoogleId(googleId);
+                filter_preferences: await this.filterService.getTopFiltersByJobs(9),
+            }));
         }
+        user = await this.findUserByGoogleId(profile.providerId);
         if (!user) {
-            throw new common_1.UnauthorizedException('Unable to create Google account');
+            throw new common_1.UnauthorizedException('Could not save Google user');
         }
         if (user.isBanned) {
             throw new common_1.UnauthorizedException('Your account is blocked!');
         }
         if (options?.fcmToken) {
             await this.attachFcmToken(user.id, options.fcmToken);
-            user = (await this.findUserByGoogleId(googleId));
+            user = (await this.findUserByGoogleId(profile.providerId));
         }
         return {
+            message: isNewUser ? 'Signup successful' : 'Login successful',
+            isNewUser,
             access_token: this.generateToken(user),
             user: this.toPublicUser(user),
-            isNewUser,
         };
     }
     async attachFcmToken(userId, fcmToken) {

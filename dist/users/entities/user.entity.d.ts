@@ -57,8 +57,8 @@ export declare class User {
     ratingsGiven: Rating[];
     ratingAverage: number;
     ratingCount: number;
-    country: Country;
-    language: Language;
+    country: Country | null;
+    language: Language | null;
     work_experience: WorkExperience[];
     education: Education[];
     certifications: Certification[];
