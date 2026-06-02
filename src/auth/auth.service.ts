@@ -1,13 +1,18 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
-import { Language } from 'twilio/lib/twiml/VoiceResponse';
+import { Language } from 'src/language/entities/language.entity';
 import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
+import { GoogleAuthService } from './google-auth.service';
 
 @Injectable()
 export class AuthService {
@@ -23,9 +28,18 @@ export class AuthService {
     @InjectRepository(Language)
     private languageRepo: Repository<Language>,
 
-    private filterService: FilterService, // 👈 add this
-    private firebaseService: FirebaseService, // 👈 add this
+    private filterService: FilterService,
+    private firebaseService: FirebaseService,
+    private googleAuthService: GoogleAuthService,
   ) {}
+
+  toPublicUser(user: User) {
+    const { passwordHash, passwordSalt, ...publicUser } = user as User & {
+      passwordHash?: string;
+      passwordSalt?: string;
+    };
+    return publicUser;
+  }
 
   generateToken(user: any) {
     return this.jwtService.sign({ id: user.id });
@@ -39,6 +53,38 @@ export class AuthService {
       where: { phone },
       relations: ['country', 'language'],
     });
+  }
+
+  async findUserByGoogleId(googleId: string) {
+    return this.userRepo.findOne({
+      where: { googleId },
+      relations: ['country', 'language'],
+    });
+  }
+
+  async findUserByEmail(email: string) {
+    return this.userRepo.findOne({
+      where: { email },
+      relations: ['country', 'language'],
+    });
+  }
+
+  private async resolveCountryLanguage(countryId?: number, languageId?: number) {
+    const country = countryId
+      ? await this.countryRepo.findOne({ where: { id: countryId } })
+      : await this.countryRepo.findOne({ where: {}, order: { id: 'ASC' } });
+
+    const language = languageId
+      ? await this.languageRepo.findOne({ where: { id: languageId } })
+      : await this.languageRepo.findOne({ where: {}, order: { id: 'ASC' } });
+
+    if (!country || !language) {
+      throw new BadRequestException(
+        'Country and language are required. Seed reference data or pass country/language IDs.',
+      );
+    }
+
+    return { country, language };
   }
 
   // ────────────────────────────────────────────────
@@ -92,6 +138,12 @@ export class AuthService {
     const user = await this.findUserByPhone(phone);
     if (!user) throw new UnauthorizedException('Invalid phone or password');
 
+    if (!user.passwordHash || !user.passwordSalt) {
+      throw new UnauthorizedException(
+        'This account uses Google sign-in. Please log in with Google.',
+      );
+    }
+
     const isValid = this.validatePassword(
       password,
       user.passwordHash,
@@ -114,6 +166,92 @@ export class AuthService {
       { phone },
       { passwordSalt: salt, passwordHash: hash },
     );
+  }
+
+  // ────────────────────────────────────────────────
+  // GOOGLE SIGN-IN / SIGN-UP (ID token from client SDK)
+  // ────────────────────────────────────────────────
+  async loginWithGoogle(
+    idToken: string,
+    options?: { fcmToken?: string; country?: number; language?: number },
+  ) {
+    const payload = await this.googleAuthService.verifyIdToken(idToken);
+    const googleId = payload.sub!;
+    const email = payload.email?.toLowerCase();
+
+    if (payload.email_verified === false) {
+      throw new UnauthorizedException('Google email is not verified');
+    }
+
+    let user = await this.findUserByGoogleId(googleId);
+    let isNewUser = false;
+
+    if (!user && email) {
+      user = await this.findUserByEmail(email);
+      if (user) {
+        user.googleId = googleId;
+        user.authProvider = user.phone ? user.authProvider : 'google';
+        if (!user.email) user.email = email;
+        if (payload.picture && !user.profile_photo) {
+          user.profile_photo = payload.picture;
+        }
+        user.isVerified = true;
+        user = await this.userRepo.save(user);
+      }
+    }
+
+    if (!user) {
+      isNewUser = true;
+      const { country, language } = await this.resolveCountryLanguage(
+        options?.country,
+        options?.language,
+      );
+
+      const defaultFilterPreferences =
+        await this.filterService.getTopFiltersByJobs(9);
+
+      user = this.userRepo.create({
+        googleId,
+        authProvider: 'google',
+        email: email ?? null,
+        firstName: payload.given_name || payload.name?.split(' ')[0] || 'User',
+        lastName:
+          payload.family_name ||
+          payload.name?.split(' ').slice(1).join(' ') ||
+          '',
+        profile_photo: payload.picture ?? null,
+        phone: null,
+        passwordHash: null,
+        passwordSalt: null,
+        country,
+        language,
+        isVerified: true,
+        isBanned: false,
+        filter_preferences: defaultFilterPreferences,
+      });
+
+      user = await this.userRepo.save(user);
+      user = await this.findUserByGoogleId(googleId);
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('Unable to create Google account');
+    }
+
+    if (user.isBanned) {
+      throw new UnauthorizedException('Your account is blocked!');
+    }
+
+    if (options?.fcmToken) {
+      await this.attachFcmToken(user.id, options.fcmToken);
+      user = (await this.findUserByGoogleId(googleId))!;
+    }
+
+    return {
+      access_token: this.generateToken(user),
+      user: this.toPublicUser(user),
+      isNewUser,
+    };
   }
 
   async attachFcmToken(userId: number, fcmToken: string) {

@@ -14,6 +14,8 @@ import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { FilterModule } from 'src/filter/filter.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
+import { GoogleAuthService } from './google-auth.service';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -31,7 +33,7 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
     FirebaseModule
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, GoogleAuthService],
   exports: [AuthService],
 })
 export class AuthModule {}

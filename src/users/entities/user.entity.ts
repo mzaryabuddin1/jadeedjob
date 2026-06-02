@@ -33,13 +33,19 @@ export class User {
   @Column()
   lastName: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: true })
   phone: string;
 
-  @Column()
+  @Column({ unique: true, nullable: true })
+  googleId: string;
+
+  @Column({ default: 'phone' })
+  authProvider: 'phone' | 'google';
+
+  @Column({ nullable: true })
   passwordHash: string;
 
-  @Column()
+  @Column({ nullable: true })
   passwordSalt: string;
 
   @Column({ default: false })

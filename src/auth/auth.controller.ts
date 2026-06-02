@@ -113,10 +113,6 @@ export class AuthController {
   ) {
     const user = await this.authService.validateUser(dto.phone, dto.password);
 
-    // create a safe copy for response (don't mutate entity)
-    const { passwordHash, passwordSalt, ...publicUser } = user as any;
-
-    // 🔥 attach FCM token + subscribe to filter topics (if provided)
     if (dto.fcmToken) {
       await this.authService.attachFcmToken(user.id, dto.fcmToken);
     }
@@ -125,8 +121,39 @@ export class AuthController {
 
     return {
       access_token: token,
-      user: publicUser,
+      user: this.authService.toPublicUser(user),
     };
+  }
+
+  // ────────────────────────────────────────────────
+  // GOOGLE LOGIN / SIGN-UP
+  // Client sends Google ID token from Sign-In SDK
+  // ────────────────────────────────────────────────
+  @Post('google')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        idToken: Joi.string().required(),
+        fcmToken: Joi.string().optional(),
+        country: Joi.number().optional(),
+        language: Joi.number().optional(),
+      }),
+    ),
+  )
+  async googleAuth(
+    @Body()
+    body: {
+      idToken: string;
+      fcmToken?: string;
+      country?: number;
+      language?: number;
+    },
+  ) {
+    return this.authService.loginWithGoogle(body.idToken, {
+      fcmToken: body.fcmToken,
+      country: body.country,
+      language: body.language,
+    });
   }
 
   // ────────────────────────────────────────────────

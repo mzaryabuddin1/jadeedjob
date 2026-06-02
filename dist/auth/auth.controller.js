@@ -70,15 +70,21 @@ let AuthController = class AuthController {
     }
     async login(dto) {
         const user = await this.authService.validateUser(dto.phone, dto.password);
-        const { passwordHash, passwordSalt, ...publicUser } = user;
         if (dto.fcmToken) {
             await this.authService.attachFcmToken(user.id, dto.fcmToken);
         }
         const token = this.authService.generateToken(user);
         return {
             access_token: token,
-            user: publicUser,
+            user: this.authService.toPublicUser(user),
         };
+    }
+    async googleAuth(body) {
+        return this.authService.loginWithGoogle(body.idToken, {
+            fcmToken: body.fcmToken,
+            country: body.country,
+            language: body.language,
+        });
     }
     async sendForgotPasswordOtp(body) {
         const user = await this.authService.findUserByPhone(body.phone);
@@ -151,6 +157,19 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "login", null);
+__decorate([
+    (0, common_1.Post)('google'),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        idToken: joi_1.default.string().required(),
+        fcmToken: joi_1.default.string().optional(),
+        country: joi_1.default.number().optional(),
+        language: joi_1.default.number().optional(),
+    }))),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "googleAuth", null);
 __decorate([
     (0, common_1.Post)('forgot-password/send-otp'),
     __param(0, (0, common_1.Body)()),
