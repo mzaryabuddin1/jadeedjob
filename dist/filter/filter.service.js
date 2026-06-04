@@ -18,6 +18,8 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const filter_entity_1 = require("./entities/filter.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const utils_util_1 = require("../common/utils/utils.util");
+const seed_filters_data_1 = require("./seed-filters.data");
 let FilterService = class FilterService {
     constructor(filterRepo, userRepo) {
         this.filterRepo = filterRepo;
@@ -39,16 +41,17 @@ let FilterService = class FilterService {
         });
         return this.filterRepo.save(filter);
     }
-    async getFilters(query, userId) {
-        const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, createdBy, preference = true, } = query;
+    async getFilters(query, options) {
+        const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', createdBy, preference = true, } = query;
         const where = {};
+        if (options?.approvedOnly) {
+            where.approvalStatus = 'approved';
+            where.status = 'active';
+        }
         if (search) {
             where.name = (0, typeorm_2.Like)(`%${search}%`);
         }
-        if (approvalStatus) {
-            where.approvalStatus = approvalStatus;
-        }
-        if (createdBy) {
+        if (createdBy && !options?.approvedOnly) {
             where.createdBy = createdBy;
         }
         const filters = await this.filterRepo.find({
@@ -58,6 +61,7 @@ let FilterService = class FilterService {
             },
         });
         let orderedFilters = filters;
+        const userId = options?.userId;
         if (preference === true && userId) {
             const user = await this.userRepo.findOne({
                 where: { id: userId },
@@ -87,10 +91,13 @@ let FilterService = class FilterService {
             currentPage: Number(page),
         };
     }
-    async filterById(id) {
-        const filter = await this.filterRepo.findOne({
-            where: { id },
-        });
+    async filterById(id, options) {
+        const where = { id };
+        if (options?.approvedOnly) {
+            where.approvalStatus = 'approved';
+            where.status = 'active';
+        }
+        const filter = await this.filterRepo.findOne({ where: where });
         if (!filter) {
             throw new common_1.NotFoundException('Filter not found');
         }
@@ -108,6 +115,41 @@ let FilterService = class FilterService {
             .limit(limit)
             .getRawMany();
         return result.map(r => Number(r.filterId));
+    }
+    async seedFakeFilters(options) {
+        const approve = options?.approve !== false;
+        let createdBy = options?.createdBy;
+        if (!createdBy) {
+            const firstUser = await this.userRepo.findOne({
+                where: {},
+                order: { id: 'ASC' },
+                select: ['id'],
+            });
+            if (!firstUser) {
+                throw new common_1.BadRequestException('No users in database. Register a user first, or pass createdBy.');
+            }
+            createdBy = firstUser.id;
+        }
+        const created = [];
+        const skipped = [];
+        for (const item of seed_filters_data_1.SEED_FILTERS) {
+            const name = (0, utils_util_1.toSentenceCase)(item.name);
+            const icon = `{icon: '${item.icon}'}`;
+            const existing = await this.filterRepo.findOne({ where: { name } });
+            if (existing) {
+                skipped.push(name);
+                continue;
+            }
+            const filter = await this.filterRepo.save(this.filterRepo.create({
+                name,
+                icon,
+                status: 'active',
+                approvalStatus: approve ? 'approved' : 'pending',
+                createdBy,
+            }));
+            created.push(filter);
+        }
+        return { created, skipped };
     }
 };
 exports.FilterService = FilterService;

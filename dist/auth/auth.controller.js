@@ -86,6 +86,13 @@ let AuthController = class AuthController {
             language: body.language,
         });
     }
+    async facebookAuth(body) {
+        return this.authService.loginWithFacebook(body.accessToken, {
+            fcmToken: body.fcmToken,
+            country: body.country,
+            language: body.language,
+        });
+    }
     async sendForgotPasswordOtp(body) {
         const user = await this.authService.findUserByPhone(body.phone);
         if (!user)
@@ -170,6 +177,19 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "googleAuth", null);
+__decorate([
+    (0, common_1.Post)('facebook'),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        accessToken: joi_1.default.string().required(),
+        fcmToken: joi_1.default.string().optional(),
+        country: joi_1.default.number().optional(),
+        language: joi_1.default.number().optional(),
+    }))),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "facebookAuth", null);
 __decorate([
     (0, common_1.Post)('forgot-password/send-otp'),
     __param(0, (0, common_1.Body)()),

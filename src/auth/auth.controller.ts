@@ -157,6 +157,37 @@ export class AuthController {
     });
   }
 
+  /**
+   * Facebook login OR signup (same endpoint).
+   * Body: { "accessToken": "<from Facebook Login SDK>" }
+   */
+  @Post('facebook')
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        accessToken: Joi.string().required(),
+        fcmToken: Joi.string().optional(),
+        country: Joi.number().optional(),
+        language: Joi.number().optional(),
+      }),
+    ),
+  )
+  async facebookAuth(
+    @Body()
+    body: {
+      accessToken: string;
+      fcmToken?: string;
+      country?: number;
+      language?: number;
+    },
+  ) {
+    return this.authService.loginWithFacebook(body.accessToken, {
+      fcmToken: body.fcmToken,
+      country: body.country,
+      language: body.language,
+    });
+  }
+
   // ────────────────────────────────────────────────
   // SEND OTP FOR FORGOT PASSWORD
   // ────────────────────────────────────────────────

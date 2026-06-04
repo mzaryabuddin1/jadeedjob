@@ -15,7 +15,8 @@ export declare class User {
     lastName: string;
     phone: string;
     googleId: string;
-    authProvider: 'phone' | 'google';
+    facebookId: string;
+    authProvider: 'phone' | 'google' | 'facebook';
     passwordHash: string;
     passwordSalt: string;
     isVerified: boolean;

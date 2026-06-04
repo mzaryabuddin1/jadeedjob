@@ -13,6 +13,7 @@ import { Language } from 'src/language/entities/language.entity';
 import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { GoogleAuthService } from './google-auth.service';
+import { FacebookAuthService } from './facebook-auth.service';
 
 @Injectable()
 export class AuthService {
@@ -31,6 +32,7 @@ export class AuthService {
     private filterService: FilterService,
     private firebaseService: FirebaseService,
     private googleAuthService: GoogleAuthService,
+    private facebookAuthService: FacebookAuthService,
   ) {}
 
   toPublicUser(user: User) {
@@ -58,6 +60,13 @@ export class AuthService {
   async findUserByGoogleId(googleId: string) {
     return this.userRepo.findOne({
       where: { googleId },
+      relations: ['country', 'language'],
+    });
+  }
+
+  async findUserByFacebookId(facebookId: string) {
+    return this.userRepo.findOne({
+      where: { facebookId },
       relations: ['country', 'language'],
     });
   }
@@ -133,8 +142,14 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid phone or password');
 
     if (!user.passwordHash || !user.passwordSalt) {
+      const hint =
+        user.authProvider === 'facebook'
+          ? 'Facebook'
+          : user.authProvider === 'google'
+            ? 'Google'
+            : 'social';
       throw new UnauthorizedException(
-        'This account uses Google sign-in. Please log in with Google.',
+        `This account uses ${hint} sign-in. Please log in with ${hint}.`,
       );
     }
 
@@ -230,6 +245,83 @@ export class AuthService {
     if (options?.fcmToken) {
       await this.attachFcmToken(user.id, options.fcmToken);
       user = (await this.findUserByGoogleId(profile.providerId))!;
+    }
+
+    return {
+      message: isNewUser ? 'Signup successful' : 'Login successful',
+      isNewUser,
+      access_token: this.generateToken(user),
+      user: this.toPublicUser(user),
+    };
+  }
+
+  // ────────────────────────────────────────────────
+  // FACEBOOK LOGIN / SIGNUP
+  // ────────────────────────────────────────────────
+  async loginWithFacebook(
+    accessToken: string,
+    options?: { fcmToken?: string; country?: number; language?: number },
+  ) {
+    const profile =
+      await this.facebookAuthService.getProfileFromToken(accessToken);
+
+    let user = await this.findUserByFacebookId(profile.providerId);
+
+    if (!user && profile.email) {
+      user = await this.findUserByEmail(profile.email);
+    }
+
+    let isNewUser = false;
+
+    if (user) {
+      user.facebookId = profile.providerId;
+      user.authProvider = 'facebook';
+      user.email = profile.email ?? user.email;
+      user.firstName = profile.firstName;
+      user.lastName = profile.lastName;
+      if (profile.picture) user.profile_photo = profile.picture;
+      user.isVerified = true;
+      user = await this.userRepo.save(user);
+    } else {
+      isNewUser = true;
+      const { country, language } = await this.resolveCountryLanguage(
+        options?.country,
+        options?.language,
+      );
+
+      user = await this.userRepo.save(
+        this.userRepo.create({
+          facebookId: profile.providerId,
+          authProvider: 'facebook',
+          email: profile.email,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          profile_photo: profile.picture,
+          phone: null,
+          passwordHash: null,
+          passwordSalt: null,
+          country,
+          language,
+          isVerified: true,
+          isBanned: false,
+          filter_preferences: await this.filterService.getTopFiltersByJobs(9),
+        }),
+      );
+    }
+
+    user = await this.findUserByFacebookId(profile.providerId);
+
+    if (!user) {
+      throw new UnauthorizedException('Could not save Facebook user');
+    }
+
+    if (user.isBanned) {
+      throw new UnauthorizedException('Your account is blocked!');
+    }
+
+    if (options?.fcmToken) {
+      await this.attachFcmToken(user.id, options.fcmToken);
+      user = (await this.findUserByFacebookId(profile.providerId))!;
     }
 
     return {

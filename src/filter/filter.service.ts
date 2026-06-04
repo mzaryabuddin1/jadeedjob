@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Filter } from './entities/filter.entity';
 import { User } from 'src/users/entities/user.entity';
+import { toSentenceCase } from 'src/common/utils/utils.util';
+import { SEED_FILTERS } from './seed-filters.data';
 
 @Injectable()
 export class FilterService {
@@ -34,29 +36,32 @@ export class FilterService {
     return this.filterRepo.save(filter);
   }
 
-  async getFilters(query: any, userId?: number) {
+  async getFilters(
+    query: any,
+    options?: { approvedOnly?: boolean; userId?: number },
+  ) {
     const {
       page = 1,
       limit = 20,
       search,
       sortBy = 'createdAt',
       sortOrder = 'DESC',
-      approvalStatus,
       createdBy,
       preference = true,
     } = query;
 
     const where: any = {};
 
+    if (options?.approvedOnly) {
+      where.approvalStatus = 'approved';
+      where.status = 'active';
+    }
+
     if (search) {
       where.name = Like(`%${search}%`);
     }
 
-    if (approvalStatus) {
-      where.approvalStatus = approvalStatus;
-    }
-
-    if (createdBy) {
+    if (createdBy && !options?.approvedOnly) {
       where.createdBy = createdBy;
     }
 
@@ -71,6 +76,7 @@ export class FilterService {
     let orderedFilters = filters;
 
     // 2️⃣ Reorder based on user preferences
+    const userId = options?.userId;
     if (preference === true && userId) {
       const user = await this.userRepo.findOne({
         where: { id: userId },
@@ -111,10 +117,15 @@ export class FilterService {
   }
 
 
-  async filterById(id: number) {
-    const filter = await this.filterRepo.findOne({
-      where: { id },
-    });
+  async filterById(id: number, options?: { approvedOnly?: boolean }) {
+    const where: Record<string, unknown> = { id };
+
+    if (options?.approvedOnly) {
+      where.approvalStatus = 'approved';
+      where.status = 'active';
+    }
+
+    const filter = await this.filterRepo.findOne({ where: where as any });
 
     if (!filter) {
       throw new NotFoundException('Filter not found');
@@ -138,4 +149,56 @@ export class FilterService {
     return result.map(r => Number(r.filterId));
   }
 
+  /**
+   * Populate fake filters for testing (CLI: npm run seed:filters).
+   */
+  async seedFakeFilters(options?: {
+    createdBy?: number;
+    approve?: boolean;
+  }): Promise<{ created: Filter[]; skipped: string[] }> {
+    const approve = options?.approve !== false;
+
+    let createdBy = options?.createdBy;
+    if (!createdBy) {
+      const firstUser = await this.userRepo.findOne({
+        where: {},
+        order: { id: 'ASC' },
+        select: ['id'],
+      });
+      if (!firstUser) {
+        throw new BadRequestException(
+          'No users in database. Register a user first, or pass createdBy.',
+        );
+      }
+      createdBy = firstUser.id;
+    }
+
+    const created: Filter[] = [];
+    const skipped: string[] = [];
+
+    for (const item of SEED_FILTERS) {
+      const name = toSentenceCase(item.name);
+      const icon = `{icon: '${item.icon}'}`;
+
+      const existing = await this.filterRepo.findOne({ where: { name } });
+      if (existing) {
+        skipped.push(name);
+        continue;
+      }
+
+      const filter = await this.filterRepo.save(
+        this.filterRepo.create({
+          name,
+          icon,
+          status: 'active',
+          approvalStatus: approve ? 'approved' : 'pending',
+          createdBy,
+        }),
+      );
+
+      created.push(filter);
+    }
+
+    return { created, skipped };
+  }
 }

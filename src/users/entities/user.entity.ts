@@ -39,8 +39,11 @@ export class User {
   @Column({ unique: true, nullable: true })
   googleId: string;
 
+  @Column({ unique: true, nullable: true })
+  facebookId: string;
+
   @Column({ default: 'phone' })
-  authProvider: 'phone' | 'google';
+  authProvider: 'phone' | 'google' | 'facebook';
 
   @Column({ nullable: true })
   passwordHash: string;

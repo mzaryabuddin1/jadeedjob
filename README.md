@@ -1,3 +1,6 @@
+#COMMAND
+npm run seed:filters
+
 
 
 <p align="center">

@@ -48,56 +48,16 @@ let FilterController = class FilterController {
         };
     }
     async getFilter(query) {
-        return this.filterService.getFilters(query);
+        return this.filterService.getFilters(query, { approvedOnly: true });
     }
-    async getFilterById(params) {
-        return this.filterService.filterById(Number(params.id));
-    }
-    async seedFilters(req) {
-        const FAKE_FILTERS = [
-            { icon: 'wrench', name: 'Labor' },
-            { icon: 'broom', name: 'Housekeeping' },
-            { icon: 'motorcycle', name: 'Delivery' },
-            { icon: 'utensils', name: 'Kitchen' },
-            { icon: 'file-alt', name: 'Admin' },
-            { icon: 'ellipsis-h', name: 'Other' },
-            { icon: 'bolt', name: 'Electrician' },
-            { icon: 'tint', name: 'Plumber' },
-            { icon: 'car', name: 'Driver' },
-            { icon: 'paint-brush', name: 'Painter' },
-            { icon: 'user-shield', name: 'Security' },
-            { icon: 'truck', name: 'Loader' },
-            { icon: 'utensils', name: 'Cook' },
-            { icon: 'wrench', name: 'Mechanic' },
-            { icon: 'broom', name: 'Cleaner' },
-            { icon: 'briefcase', name: 'Office Helper' },
-        ];
-        const created = [];
-        for (const item of FAKE_FILTERS) {
-            const name = (0, utils_util_1.toSentenceCase)(item.name);
-            const existing = await this.filterRepo.findOne({
-                where: { name },
-            });
-            if (existing)
-                continue;
-            const filter = await this.filterService.createFilter({
-                name,
-                icon: item.icon,
-                status: 'active',
-                createdBy: Number(req.user.id),
-            });
-            created.push(filter);
-        }
-        return {
-            message: 'Fake filters seeded successfully',
-            count: created.length,
-            filters: created,
-        };
+    async getFilterById(id) {
+        return this.filterService.filterById(Number(id), { approvedOnly: true });
     }
 };
 exports.FilterController = FilterController;
 __decorate([
     (0, common_1.Post)(),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().trim().required(),
         icon: joi_1.default.string().trim().pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/).required(),
@@ -118,20 +78,12 @@ __decorate([
 ], FilterController.prototype, "getFilter", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)()),
+    __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], FilterController.prototype, "getFilterById", null);
-__decorate([
-    (0, common_1.Post)('seed'),
-    __param(0, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], FilterController.prototype, "seedFilters", null);
 exports.FilterController = FilterController = __decorate([
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('filters'),
     __param(1, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [filter_service_1.FilterService,

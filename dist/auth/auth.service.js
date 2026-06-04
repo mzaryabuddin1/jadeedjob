@@ -24,8 +24,9 @@ const language_entity_1 = require("../language/entities/language.entity");
 const filter_service_1 = require("../filter/filter.service");
 const firebase_service_1 = require("../firebase/firebase.service");
 const google_auth_service_1 = require("./google-auth.service");
+const facebook_auth_service_1 = require("./facebook-auth.service");
 let AuthService = class AuthService {
-    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService, firebaseService, googleAuthService) {
+    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService, firebaseService, googleAuthService, facebookAuthService) {
         this.jwtService = jwtService;
         this.userRepo = userRepo;
         this.countryRepo = countryRepo;
@@ -33,6 +34,7 @@ let AuthService = class AuthService {
         this.filterService = filterService;
         this.firebaseService = firebaseService;
         this.googleAuthService = googleAuthService;
+        this.facebookAuthService = facebookAuthService;
     }
     toPublicUser(user) {
         const { passwordHash, passwordSalt, ...publicUser } = user;
@@ -50,6 +52,12 @@ let AuthService = class AuthService {
     async findUserByGoogleId(googleId) {
         return this.userRepo.findOne({
             where: { googleId },
+            relations: ['country', 'language'],
+        });
+    }
+    async findUserByFacebookId(facebookId) {
+        return this.userRepo.findOne({
+            where: { facebookId },
             relations: ['country', 'language'],
         });
     }
@@ -102,7 +110,12 @@ let AuthService = class AuthService {
         if (!user)
             throw new common_1.UnauthorizedException('Invalid phone or password');
         if (!user.passwordHash || !user.passwordSalt) {
-            throw new common_1.UnauthorizedException('This account uses Google sign-in. Please log in with Google.');
+            const hint = user.authProvider === 'facebook'
+                ? 'Facebook'
+                : user.authProvider === 'google'
+                    ? 'Google'
+                    : 'social';
+            throw new common_1.UnauthorizedException(`This account uses ${hint} sign-in. Please log in with ${hint}.`);
         }
         const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
         if (!isValid)
@@ -170,6 +183,62 @@ let AuthService = class AuthService {
             user: this.toPublicUser(user),
         };
     }
+    async loginWithFacebook(accessToken, options) {
+        const profile = await this.facebookAuthService.getProfileFromToken(accessToken);
+        let user = await this.findUserByFacebookId(profile.providerId);
+        if (!user && profile.email) {
+            user = await this.findUserByEmail(profile.email);
+        }
+        let isNewUser = false;
+        if (user) {
+            user.facebookId = profile.providerId;
+            user.authProvider = 'facebook';
+            user.email = profile.email ?? user.email;
+            user.firstName = profile.firstName;
+            user.lastName = profile.lastName;
+            if (profile.picture)
+                user.profile_photo = profile.picture;
+            user.isVerified = true;
+            user = await this.userRepo.save(user);
+        }
+        else {
+            isNewUser = true;
+            const { country, language } = await this.resolveCountryLanguage(options?.country, options?.language);
+            user = await this.userRepo.save(this.userRepo.create({
+                facebookId: profile.providerId,
+                authProvider: 'facebook',
+                email: profile.email,
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                profile_photo: profile.picture,
+                phone: null,
+                passwordHash: null,
+                passwordSalt: null,
+                country,
+                language,
+                isVerified: true,
+                isBanned: false,
+                filter_preferences: await this.filterService.getTopFiltersByJobs(9),
+            }));
+        }
+        user = await this.findUserByFacebookId(profile.providerId);
+        if (!user) {
+            throw new common_1.UnauthorizedException('Could not save Facebook user');
+        }
+        if (user.isBanned) {
+            throw new common_1.UnauthorizedException('Your account is blocked!');
+        }
+        if (options?.fcmToken) {
+            await this.attachFcmToken(user.id, options.fcmToken);
+            user = (await this.findUserByFacebookId(profile.providerId));
+        }
+        return {
+            message: isNewUser ? 'Signup successful' : 'Login successful',
+            isNewUser,
+            access_token: this.generateToken(user),
+            user: this.toPublicUser(user),
+        };
+    }
     async attachFcmToken(userId, fcmToken) {
         const user = await this.userRepo.findOne({
             where: { id: userId },
@@ -199,6 +268,7 @@ exports.AuthService = AuthService = __decorate([
         typeorm_2.Repository,
         filter_service_1.FilterService,
         firebase_service_1.FirebaseService,
-        google_auth_service_1.GoogleAuthService])
+        google_auth_service_1.GoogleAuthService,
+        facebook_auth_service_1.FacebookAuthService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

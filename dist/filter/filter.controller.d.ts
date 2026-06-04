@@ -15,10 +15,5 @@ export declare class FilterController {
         totalPages: number;
         currentPage: number;
     }>;
-    getFilterById(params: any): Promise<Filter>;
-    seedFilters(req: any): Promise<{
-        message: string;
-        count: number;
-        filters: any[];
-    }>;
+    getFilterById(id: string): Promise<Filter>;
 }

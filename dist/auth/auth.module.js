@@ -24,6 +24,7 @@ const language_entity_1 = require("../language/entities/language.entity");
 const filter_module_1 = require("../filter/filter.module");
 const firebase_module_1 = require("../firebase/firebase.module");
 const google_auth_service_1 = require("./google-auth.service");
+const facebook_auth_service_1 = require("./facebook-auth.service");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -45,7 +46,7 @@ exports.AuthModule = AuthModule = __decorate([
             firebase_module_1.FirebaseModule
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, google_auth_service_1.GoogleAuthService],
+        providers: [auth_service_1.AuthService, google_auth_service_1.GoogleAuthService, facebook_auth_service_1.FacebookAuthService],
         exports: [auth_service_1.AuthService],
     })
 ], AuthModule);

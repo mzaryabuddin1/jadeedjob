@@ -15,6 +15,7 @@ import { Language } from 'src/language/entities/language.entity';
 import { FilterModule } from 'src/filter/filter.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
 import { GoogleAuthService } from './google-auth.service';
+import { FacebookAuthService } from './facebook-auth.service';
 
 @Module({
   imports: [
@@ -33,7 +34,7 @@ import { GoogleAuthService } from './google-auth.service';
     FirebaseModule
   ],
   controllers: [AuthController],
-  providers: [AuthService, GoogleAuthService],
+  providers: [AuthService, GoogleAuthService, FacebookAuthService],
   exports: [AuthService],
 })
 export class AuthModule {}

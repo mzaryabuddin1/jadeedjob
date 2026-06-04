@@ -6,12 +6,24 @@ export declare class FilterService {
     private userRepo;
     constructor(filterRepo: Repository<Filter>, userRepo: Repository<User>);
     createFilter(data: any): Promise<Filter>;
-    getFilters(query: any, userId?: number): Promise<{
+    getFilters(query: any, options?: {
+        approvedOnly?: boolean;
+        userId?: number;
+    }): Promise<{
         data: Filter[];
         total: number;
         totalPages: number;
         currentPage: number;
     }>;
-    filterById(id: number): Promise<Filter>;
+    filterById(id: number, options?: {
+        approvedOnly?: boolean;
+    }): Promise<Filter>;
     getTopFiltersByJobs(limit?: number): Promise<number[]>;
+    seedFakeFilters(options?: {
+        createdBy?: number;
+        approve?: boolean;
+    }): Promise<{
+        created: Filter[];
+        skipped: string[];
+    }>;
 }
