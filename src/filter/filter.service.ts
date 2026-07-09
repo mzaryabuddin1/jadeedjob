@@ -1,8 +1,47 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
-import { Filter } from './entities/filter.entity';
+import {
+  Filter,
+  FilterIconLibrary,
+  FilterIconSource,
+} from './entities/filter.entity';
 import { User } from 'src/users/entities/user.entity';
+
+const DEFAULT_ICON_COLOR = '#2563EB';
+const FALLBACK_ICON_COLOR = '#6B7280';
+const FALLBACK_ICON_LIBRARY = 'Feather';
+const FALLBACK_ICON_NAME = 'briefcase';
+const ICON_LIBRARIES = ['Feather', 'FontAwesome', 'FontAwesome5'] as const;
+const ICON_SOURCES = ['library', 'svg'] as const;
+const SAFE_SVG_TAGS = [
+  'svg',
+  'g',
+  'path',
+  'circle',
+  'rect',
+  'line',
+  'polyline',
+  'polygon',
+  'ellipse',
+  'defs',
+  'clipPath',
+  'title',
+  'desc',
+];
+
+type NormalizedFilterIconData = {
+  icon: string;
+  iconSource: FilterIconSource;
+  iconLibrary: FilterIconLibrary | null;
+  iconName: string | null;
+  iconColor: string;
+  iconSvg: string | null;
+};
 
 @Injectable()
 export class FilterService {
@@ -13,6 +52,94 @@ export class FilterService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
   ) {}
+
+  private sanitizeInlineSvg(svg: string): string {
+    if (!svg || svg.length > 8000) {
+      throw new BadRequestException('Invalid SVG icon');
+    }
+
+    const blockedPattern =
+      /<\s*(script|foreignObject|iframe|object|embed|image|use|style|link|meta|base)\b|on[a-z]+\s*=|javascript:|data:|href\s*=|xlink:href\s*=/i;
+
+    if (blockedPattern.test(svg)) {
+      throw new BadRequestException('Unsafe SVG icon');
+    }
+
+    const tagPattern = /<\/?\s*([a-zA-Z][\w:-]*)\b/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = tagPattern.exec(svg)) !== null) {
+      if (!(SAFE_SVG_TAGS as readonly string[]).includes(match[1])) {
+        throw new BadRequestException('Unsupported SVG icon tag');
+      }
+    }
+
+    return svg.trim();
+  }
+
+  private normalizeIconData(data: any): NormalizedFilterIconData {
+    const requestedIconSource = data.iconSource as FilterIconSource;
+    const iconSource: FilterIconSource = ICON_SOURCES.includes(
+      requestedIconSource,
+    )
+      ? requestedIconSource
+      : 'library';
+    const iconColor = data.iconColor || DEFAULT_ICON_COLOR;
+
+    if (iconSource === 'svg') {
+      return {
+        icon: data.icon || data.iconName || 'custom-svg',
+        iconSource,
+        iconLibrary: null,
+        iconName: null,
+        iconColor,
+        iconSvg: this.sanitizeInlineSvg(data.iconSvg),
+      };
+    }
+
+    const requestedIconLibrary = data.iconLibrary as FilterIconLibrary;
+    const iconLibrary: FilterIconLibrary = ICON_LIBRARIES.includes(
+      requestedIconLibrary,
+    )
+      ? requestedIconLibrary
+      : FALLBACK_ICON_LIBRARY;
+    const iconName = data.iconName || data.icon || FALLBACK_ICON_NAME;
+
+    return {
+      icon: data.icon || iconName,
+      iconSource: 'library',
+      iconLibrary,
+      iconName,
+      iconColor,
+      iconSvg: null,
+    };
+  }
+
+  private buildIconMeta(filter: Filter) {
+    if (filter.iconSource === 'svg' && filter.iconSvg) {
+      return {
+        source: 'svg',
+        svg: filter.iconSvg,
+        color: filter.iconColor || DEFAULT_ICON_COLOR,
+      };
+    }
+
+    return {
+      source: 'library',
+      library: ICON_LIBRARIES.includes(filter.iconLibrary as any)
+        ? filter.iconLibrary
+        : FALLBACK_ICON_LIBRARY,
+      name: filter.iconName || filter.icon || FALLBACK_ICON_NAME,
+      color: filter.iconColor || FALLBACK_ICON_COLOR,
+    };
+  }
+
+  private withIconMeta(filter: Filter) {
+    return {
+      ...filter,
+      iconMeta: this.buildIconMeta(filter),
+    };
+  }
 
   async createFilter(data: any) {
     const exists = await this.filterRepo.findOne({
@@ -25,13 +152,13 @@ export class FilterService {
 
     const filter = this.filterRepo.create({
       name: data.name,
-      icon: data.icon ?? "{icon: 'infinity'}",
+      ...this.normalizeIconData(data),
       status: data.status ?? 'active',
       approvalStatus: 'pending',
       createdBy: data.createdBy,
     });
 
-    return this.filterRepo.save(filter);
+    return this.withIconMeta(await this.filterRepo.save(filter));
   }
 
   async getFilters(query: any, userId?: number) {
@@ -103,7 +230,7 @@ export class FilterService {
     );
 
     return {
-      data: paginatedData,
+      data: paginatedData.map((filter) => this.withIconMeta(filter)),
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
@@ -120,7 +247,7 @@ export class FilterService {
       throw new NotFoundException('Filter not found');
     }
 
-    return filter;
+    return this.withIconMeta(filter);
   }
 
   async getTopFiltersByJobs(limit = 9): Promise<number[]> {

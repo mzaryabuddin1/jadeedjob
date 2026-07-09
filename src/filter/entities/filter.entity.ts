@@ -10,6 +10,9 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+export type FilterIconSource = 'library' | 'svg';
+export type FilterIconLibrary = 'Feather' | 'FontAwesome' | 'FontAwesome5';
+
 @Entity('filters')
 export class Filter {
   @PrimaryGeneratedColumn()
@@ -20,6 +23,21 @@ export class Filter {
 
   @Column({ default: 'fas fa-user-tie' })
   icon: string;
+
+  @Column({ default: 'library' })
+  iconSource: FilterIconSource;
+
+  @Column({ nullable: true })
+  iconLibrary: FilterIconLibrary | null;
+
+  @Column({ nullable: true })
+  iconName: string | null;
+
+  @Column({ default: '#2563EB' })
+  iconColor: string;
+
+  @Column({ type: 'text', nullable: true })
+  iconSvg: string | null;
 
   @Column({ default: 'active' })
   status: 'active' | 'inactive';

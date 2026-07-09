@@ -18,10 +18,101 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const filter_entity_1 = require("./entities/filter.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const DEFAULT_ICON_COLOR = '#2563EB';
+const FALLBACK_ICON_COLOR = '#6B7280';
+const FALLBACK_ICON_LIBRARY = 'Feather';
+const FALLBACK_ICON_NAME = 'briefcase';
+const ICON_LIBRARIES = ['Feather', 'FontAwesome', 'FontAwesome5'];
+const ICON_SOURCES = ['library', 'svg'];
+const SAFE_SVG_TAGS = [
+    'svg',
+    'g',
+    'path',
+    'circle',
+    'rect',
+    'line',
+    'polyline',
+    'polygon',
+    'ellipse',
+    'defs',
+    'clipPath',
+    'title',
+    'desc',
+];
 let FilterService = class FilterService {
     constructor(filterRepo, userRepo) {
         this.filterRepo = filterRepo;
         this.userRepo = userRepo;
+    }
+    sanitizeInlineSvg(svg) {
+        if (!svg || svg.length > 8000) {
+            throw new common_1.BadRequestException('Invalid SVG icon');
+        }
+        const blockedPattern = /<\s*(script|foreignObject|iframe|object|embed|image|use|style|link|meta|base)\b|on[a-z]+\s*=|javascript:|data:|href\s*=|xlink:href\s*=/i;
+        if (blockedPattern.test(svg)) {
+            throw new common_1.BadRequestException('Unsafe SVG icon');
+        }
+        const tagPattern = /<\/?\s*([a-zA-Z][\w:-]*)\b/g;
+        let match;
+        while ((match = tagPattern.exec(svg)) !== null) {
+            if (!SAFE_SVG_TAGS.includes(match[1])) {
+                throw new common_1.BadRequestException('Unsupported SVG icon tag');
+            }
+        }
+        return svg.trim();
+    }
+    normalizeIconData(data) {
+        const requestedIconSource = data.iconSource;
+        const iconSource = ICON_SOURCES.includes(requestedIconSource)
+            ? requestedIconSource
+            : 'library';
+        const iconColor = data.iconColor || DEFAULT_ICON_COLOR;
+        if (iconSource === 'svg') {
+            return {
+                icon: data.icon || data.iconName || 'custom-svg',
+                iconSource,
+                iconLibrary: null,
+                iconName: null,
+                iconColor,
+                iconSvg: this.sanitizeInlineSvg(data.iconSvg),
+            };
+        }
+        const requestedIconLibrary = data.iconLibrary;
+        const iconLibrary = ICON_LIBRARIES.includes(requestedIconLibrary)
+            ? requestedIconLibrary
+            : FALLBACK_ICON_LIBRARY;
+        const iconName = data.iconName || data.icon || FALLBACK_ICON_NAME;
+        return {
+            icon: data.icon || iconName,
+            iconSource: 'library',
+            iconLibrary,
+            iconName,
+            iconColor,
+            iconSvg: null,
+        };
+    }
+    buildIconMeta(filter) {
+        if (filter.iconSource === 'svg' && filter.iconSvg) {
+            return {
+                source: 'svg',
+                svg: filter.iconSvg,
+                color: filter.iconColor || DEFAULT_ICON_COLOR,
+            };
+        }
+        return {
+            source: 'library',
+            library: ICON_LIBRARIES.includes(filter.iconLibrary)
+                ? filter.iconLibrary
+                : FALLBACK_ICON_LIBRARY,
+            name: filter.iconName || filter.icon || FALLBACK_ICON_NAME,
+            color: filter.iconColor || FALLBACK_ICON_COLOR,
+        };
+    }
+    withIconMeta(filter) {
+        return {
+            ...filter,
+            iconMeta: this.buildIconMeta(filter),
+        };
     }
     async createFilter(data) {
         const exists = await this.filterRepo.findOne({
@@ -32,12 +123,12 @@ let FilterService = class FilterService {
         }
         const filter = this.filterRepo.create({
             name: data.name,
-            icon: data.icon ?? "{icon: 'infinity'}",
+            ...this.normalizeIconData(data),
             status: data.status ?? 'active',
             approvalStatus: 'pending',
             createdBy: data.createdBy,
         });
-        return this.filterRepo.save(filter);
+        return this.withIconMeta(await this.filterRepo.save(filter));
     }
     async getFilters(query, userId) {
         const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, createdBy, preference = true, } = query;
@@ -81,7 +172,7 @@ let FilterService = class FilterService {
         const total = orderedFilters.length;
         const paginatedData = orderedFilters.slice((page - 1) * limit, page * limit);
         return {
-            data: paginatedData,
+            data: paginatedData.map((filter) => this.withIconMeta(filter)),
             total,
             totalPages: Math.ceil(total / limit),
             currentPage: Number(page),
@@ -94,7 +185,7 @@ let FilterService = class FilterService {
         if (!filter) {
             throw new common_1.NotFoundException('Filter not found');
         }
-        return filter;
+        return this.withIconMeta(filter);
     }
     async getTopFiltersByJobs(limit = 9) {
         const result = await this.filterRepo

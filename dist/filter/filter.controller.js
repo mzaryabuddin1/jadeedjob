@@ -55,22 +55,22 @@ let FilterController = class FilterController {
     }
     async seedFilters(req) {
         const FAKE_FILTERS = [
-            { icon: 'wrench', name: 'Labor' },
-            { icon: 'broom', name: 'Housekeeping' },
-            { icon: 'motorcycle', name: 'Delivery' },
-            { icon: 'utensils', name: 'Kitchen' },
-            { icon: 'file-alt', name: 'Admin' },
-            { icon: 'ellipsis-h', name: 'Other' },
-            { icon: 'bolt', name: 'Electrician' },
-            { icon: 'tint', name: 'Plumber' },
-            { icon: 'car', name: 'Driver' },
-            { icon: 'paint-brush', name: 'Painter' },
-            { icon: 'user-shield', name: 'Security' },
-            { icon: 'truck', name: 'Loader' },
-            { icon: 'utensils', name: 'Cook' },
-            { icon: 'wrench', name: 'Mechanic' },
-            { icon: 'broom', name: 'Cleaner' },
-            { icon: 'briefcase', name: 'Office Helper' },
+            { iconLibrary: 'Feather', iconName: 'tool', name: 'Labor' },
+            { iconLibrary: 'FontAwesome5', iconName: 'broom', name: 'Housekeeping' },
+            { iconLibrary: 'FontAwesome5', iconName: 'motorcycle', name: 'Delivery' },
+            { iconLibrary: 'FontAwesome5', iconName: 'utensils', name: 'Kitchen' },
+            { iconLibrary: 'Feather', iconName: 'file-text', name: 'Admin' },
+            { iconLibrary: 'Feather', iconName: 'more-horizontal', name: 'Other' },
+            { iconLibrary: 'Feather', iconName: 'zap', name: 'Electrician' },
+            { iconLibrary: 'FontAwesome5', iconName: 'faucet', name: 'Plumber' },
+            { iconLibrary: 'FontAwesome5', iconName: 'car', name: 'Driver' },
+            { iconLibrary: 'FontAwesome5', iconName: 'paint-roller', name: 'Painter' },
+            { iconLibrary: 'Feather', iconName: 'shield', name: 'Security' },
+            { iconLibrary: 'FontAwesome5', iconName: 'truck', name: 'Loader' },
+            { iconLibrary: 'FontAwesome5', iconName: 'utensils', name: 'Cook' },
+            { iconLibrary: 'Feather', iconName: 'settings', name: 'Mechanic' },
+            { iconLibrary: 'FontAwesome5', iconName: 'spray-can', name: 'Cleaner' },
+            { iconLibrary: 'Feather', iconName: 'briefcase', name: 'Office Helper' },
         ];
         const created = [];
         for (const item of FAKE_FILTERS) {
@@ -82,7 +82,11 @@ let FilterController = class FilterController {
                 continue;
             const filter = await this.filterService.createFilter({
                 name,
-                icon: item.icon,
+                iconSource: 'library',
+                iconLibrary: item.iconLibrary,
+                iconName: item.iconName,
+                icon: item.iconName,
+                iconColor: '#2563EB',
                 status: 'active',
                 createdBy: Number(req.user.id),
             });
@@ -100,7 +104,32 @@ __decorate([
     (0, common_1.Post)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().trim().required(),
-        icon: joi_1.default.string().trim().pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/).required(),
+        icon: joi_1.default.string().trim().optional(),
+        iconSource: joi_1.default.string()
+            .valid('library', 'svg')
+            .default('library'),
+        iconLibrary: joi_1.default.when('iconSource', {
+            is: 'library',
+            then: joi_1.default.string()
+                .valid('Feather', 'FontAwesome', 'FontAwesome5')
+                .required(),
+            otherwise: joi_1.default.forbidden(),
+        }),
+        iconName: joi_1.default.when('iconSource', {
+            is: 'library',
+            then: joi_1.default.string().trim().required(),
+            otherwise: joi_1.default.forbidden(),
+        }),
+        iconColor: joi_1.default.string()
+            .trim()
+            .pattern(/^#(?:[0-9a-fA-F]{3}){1,2}$/)
+            .default('#2563EB'),
+        iconSvgUrl: joi_1.default.forbidden(),
+        iconSvg: joi_1.default.when('iconSource', {
+            is: 'svg',
+            then: joi_1.default.string().max(8000).required(),
+            otherwise: joi_1.default.forbidden(),
+        }),
         status: joi_1.default.string().valid('active', 'inactive').default('active'),
     }))),
     __param(0, (0, common_1.Body)()),

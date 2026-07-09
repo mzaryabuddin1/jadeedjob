@@ -27,19 +27,35 @@ const languages = [
 ];
 
 const filters = [
-  { name: 'Labor', icon: 'wrench' },
-  { name: 'Housekeeping', icon: 'broom' },
-  { name: 'Delivery', icon: 'motorcycle' },
-  { name: 'Kitchen', icon: 'utensils' },
-  { name: 'Admin', icon: 'file-alt' },
-  { name: 'Electrician', icon: 'bolt' },
-  { name: 'Plumber', icon: 'tint' },
-  { name: 'Driver', icon: 'car' },
-  { name: 'Security', icon: 'user-shield' },
-  { name: 'Cleaner', icon: 'sparkles' },
-  { name: 'Mechanic', icon: 'settings' },
-  { name: 'Painter', icon: 'paint-brush' },
-];
+  { name: 'Labor', iconLibrary: 'Feather', iconName: 'tool' },
+  { name: 'Housekeeping', iconLibrary: 'FontAwesome5', iconName: 'broom' },
+  { name: 'Delivery', iconLibrary: 'FontAwesome5', iconName: 'motorcycle' },
+  { name: 'Kitchen', iconLibrary: 'FontAwesome5', iconName: 'utensils' },
+  { name: 'Admin', iconLibrary: 'Feather', iconName: 'file-text' },
+  { name: 'Electrician', iconLibrary: 'Feather', iconName: 'zap' },
+  { name: 'Plumber', iconLibrary: 'FontAwesome5', iconName: 'faucet' },
+  { name: 'Driver', iconLibrary: 'FontAwesome5', iconName: 'car' },
+  { name: 'Security', iconLibrary: 'Feather', iconName: 'shield' },
+  { name: 'Cleaner', iconLibrary: 'FontAwesome5', iconName: 'spray-can' },
+  { name: 'Mechanic', iconLibrary: 'Feather', iconName: 'settings' },
+  { name: 'Painter', iconLibrary: 'FontAwesome5', iconName: 'paint-roller' },
+].map((filter) => ({
+  ...filter,
+  icon: filter.iconName,
+  iconSource: 'library',
+  iconColor: '#2563EB',
+}));
+
+filters.push({
+  name: 'Custom Craft',
+  icon: 'custom-craft',
+  iconSource: 'svg',
+  iconLibrary: null,
+  iconName: null,
+  iconColor: '#2563EB',
+  iconSvg:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M7 20V9l5-5 5 5v11"/><path d="M10 20v-6h4v6"/></svg>',
+});
 
 const demoUsers = [
   {
@@ -672,6 +688,39 @@ async function upsertLanguages(conn) {
   return ids;
 }
 
+async function ensureFilterIconColumns(conn) {
+  const [rows] = await conn.execute(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'filters'`,
+  );
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+  const alterations = [];
+
+  if (!columns.has('iconSource')) {
+    alterations.push("ADD COLUMN iconSource varchar(255) NOT NULL DEFAULT 'library'");
+  }
+  if (!columns.has('iconLibrary')) {
+    alterations.push('ADD COLUMN iconLibrary varchar(255) NULL');
+  }
+  if (!columns.has('iconName')) {
+    alterations.push('ADD COLUMN iconName varchar(255) NULL');
+  }
+  if (!columns.has('iconColor')) {
+    alterations.push("ADD COLUMN iconColor varchar(255) NOT NULL DEFAULT '#2563EB'");
+  }
+  if (!columns.has('iconSvg')) {
+    alterations.push('ADD COLUMN iconSvg text NULL');
+  }
+  if (columns.has('iconSvgUrl')) {
+    alterations.push('DROP COLUMN iconSvgUrl');
+  }
+
+  if (alterations.length) {
+    await conn.execute(`ALTER TABLE filters ${alterations.join(', ')}`);
+  }
+}
+
 async function insertUsers(conn, countryIds, languageIds) {
   const usersByKey = {};
 
@@ -753,17 +802,42 @@ async function upsertFilters(conn, creatorId) {
       const id = Number(existing[0].id);
       await conn.execute(
         `UPDATE filters
-         SET icon = ?, status = 'active', approvalStatus = 'approved', rejectionReason = NULL,
+         SET icon = ?, iconSource = ?, iconLibrary = ?, iconName = ?, iconColor = ?,
+             iconSvg = ?,
+             status = 'active', approvalStatus = 'approved', rejectionReason = NULL,
              createdBy = ?, creatorId = ?
          WHERE id = ?`,
-        [filter.icon, creatorId, creatorId, id],
+        [
+          filter.icon,
+          filter.iconSource,
+          filter.iconLibrary,
+          filter.iconName,
+          filter.iconColor,
+          filter.iconSvg || null,
+          creatorId,
+          creatorId,
+          id,
+        ],
       );
       ids[filter.name] = id;
     } else {
       const [result] = await conn.execute(
-        `INSERT INTO filters (name, icon, status, approvalStatus, rejectionReason, createdBy, creatorId)
-         VALUES (?, ?, 'active', 'approved', NULL, ?, ?)`,
-        [filter.name, filter.icon, creatorId, creatorId],
+        `INSERT INTO filters (
+           name, icon, iconSource, iconLibrary, iconName, iconColor, iconSvg,
+           status, approvalStatus, rejectionReason, createdBy, creatorId
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'approved', NULL, ?, ?)`,
+        [
+          filter.name,
+          filter.icon,
+          filter.iconSource,
+          filter.iconLibrary,
+          filter.iconName,
+          filter.iconColor,
+          filter.iconSvg || null,
+          creatorId,
+          creatorId,
+        ],
       );
       ids[filter.name] = Number(result.insertId);
     }
@@ -1184,6 +1258,7 @@ async function run() {
     await conn.beginTransaction();
 
     await cleanupOldDemoData(conn);
+    await ensureFilterIconColumns(conn);
 
     const countryIds = await upsertCountries(conn);
     const languageIds = await upsertLanguages(conn);

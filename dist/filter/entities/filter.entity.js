@@ -29,6 +29,26 @@ __decorate([
     __metadata("design:type", String)
 ], Filter.prototype, "icon", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ default: 'library' }),
+    __metadata("design:type", String)
+], Filter.prototype, "iconSource", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Filter.prototype, "iconLibrary", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Filter.prototype, "iconName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: '#2563EB' }),
+    __metadata("design:type", String)
+], Filter.prototype, "iconColor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], Filter.prototype, "iconSvg", void 0);
+__decorate([
     (0, typeorm_1.Column)({ default: 'active' }),
     __metadata("design:type", String)
 ], Filter.prototype, "status", void 0);
