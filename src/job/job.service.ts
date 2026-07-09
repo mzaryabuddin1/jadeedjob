@@ -137,16 +137,44 @@ export class JobService {
 
     const currentPage = Number(page);
     const take = Number(limit);
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    const radius = Number(radiusKm);
     const offset = (currentPage - 1) * take;
-    const radiusMeters = Number(radiusKm) * 1000;
+    const radiusMeters = radius * 1000;
 
-    // 🔥 SRID-safe point
-    const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(currentPage) ||
+      !Number.isFinite(take) ||
+      !Number.isFinite(radius) ||
+      currentPage < 1 ||
+      take < 1 ||
+      radius <= 0
+    ) {
+      throw new BadRequestException('Invalid nearby job query parameters');
+    }
+
+    const allowedSortColumns: Record<string, string> = {
+      createdAt: 'j.createdAt',
+      updatedAt: 'j.updatedAt',
+      salaryAmount: 'j.salaryAmount',
+      title: 'j.title',
+      distance: 'distance',
+    };
+    const orderBy = allowedSortColumns[sortBy] ?? allowedSortColumns.createdAt;
+    const orderDirection =
+      String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const pointText = `POINT(${longitude} ${latitude})`;
+    const searchClause = search ? 'AND j.description LIKE ?' : '';
+    const searchParams = search ? [`%${search}%`] : [];
 
     // ────────────────────────────────────────────────
     // 1️⃣ DATA QUERY
     // ────────────────────────────────────────────────
-    const jobs = await this.jobRepo.query(`
+    const jobs = await this.jobRepo.query(
+      `
     SELECT
       j.*,
       ST_X(j.location) AS lng,
@@ -156,35 +184,42 @@ export class JobService {
       p.username AS page_username,
       p.company_logo,
       ST_Distance_Sphere(
-        ST_SRID(j.location, 4326),
-        ${point}
+        j.location,
+        ST_GeomFromText(?, 4326)
       ) AS distance
     FROM jobs j
     LEFT JOIN pages p ON p.id = j.pageId
     WHERE j.isActive = 1
+      AND j.location IS NOT NULL
       AND ST_Distance_Sphere(
-        ST_SRID(j.location, 4326),
-        ${point}
-      ) <= ${radiusMeters}
-      ${search ? `AND j.description LIKE '%${search}%'` : ''}
-    ORDER BY ${sortBy} ${sortOrder}
-    LIMIT ${take}
-    OFFSET ${offset}
-  `);
+        j.location,
+        ST_GeomFromText(?, 4326)
+      ) <= ?
+      ${searchClause}
+    ORDER BY ${orderBy} ${orderDirection}
+    LIMIT ?
+    OFFSET ?
+  `,
+      [pointText, pointText, radiusMeters, ...searchParams, take, offset],
+    );
 
     // ────────────────────────────────────────────────
     // 2️⃣ COUNT QUERY
     // ────────────────────────────────────────────────
-    const countResult = await this.jobRepo.query(`
+    const countResult = await this.jobRepo.query(
+      `
     SELECT COUNT(*) AS total
     FROM jobs j
     WHERE j.isActive = 1
+      AND j.location IS NOT NULL
       AND ST_Distance_Sphere(
-        ST_SRID(j.location, 4326),
-        ${point}
-      ) <= ${radiusMeters}
-      ${search ? `AND j.description LIKE '%${search}%'` : ''}
-  `);
+        j.location,
+        ST_GeomFromText(?, 4326)
+      ) <= ?
+      ${searchClause}
+  `,
+      [pointText, radiusMeters, ...searchParams],
+    );
 
     const total = Number(countResult[0]?.total || 0);
 
@@ -231,7 +266,13 @@ export class JobService {
     } = query;
 
     // 🔹 GEO SEARCH (public jobs only)
-    if (lat && lng && myjobs !== 'true') {
+    if (
+      lat !== undefined &&
+      lng !== undefined &&
+      lat !== '' &&
+      lng !== '' &&
+      myjobs !== 'true'
+    ) {
       return this.findNearbyJobs(query);
     }
 
