@@ -7,22 +7,8 @@ export declare class FilterService {
     constructor(filterRepo: Repository<Filter>, userRepo: Repository<User>);
     private sanitizeInlineSvg;
     private normalizeIconData;
-    private buildIconMeta;
-    private withIconMeta;
     createFilter(data: any): Promise<{
-        iconMeta: {
-            source: string;
-            svg: string;
-            color: string;
-            library?: undefined;
-            name?: undefined;
-        } | {
-            source: string;
-            library: FilterIconLibrary;
-            name: string;
-            color: string;
-            svg?: undefined;
-        };
+        iconMeta: import("./filter-icon.util").FilterIconMeta;
         id: number;
         name: string;
         icon: string;
@@ -42,19 +28,7 @@ export declare class FilterService {
     }>;
     getFilters(query: any, userId?: number): Promise<{
         data: {
-            iconMeta: {
-                source: string;
-                svg: string;
-                color: string;
-                library?: undefined;
-                name?: undefined;
-            } | {
-                source: string;
-                library: FilterIconLibrary;
-                name: string;
-                color: string;
-                svg?: undefined;
-            };
+            iconMeta: import("./filter-icon.util").FilterIconMeta;
             id: number;
             name: string;
             icon: string;
@@ -77,19 +51,7 @@ export declare class FilterService {
         currentPage: number;
     }>;
     filterById(id: number): Promise<{
-        iconMeta: {
-            source: string;
-            svg: string;
-            color: string;
-            library?: undefined;
-            name?: undefined;
-        } | {
-            source: string;
-            library: FilterIconLibrary;
-            name: string;
-            color: string;
-            svg?: undefined;
-        };
+        iconMeta: import("./filter-icon.util").FilterIconMeta;
         id: number;
         name: string;
         icon: string;

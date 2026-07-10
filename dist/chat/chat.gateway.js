@@ -14,15 +14,15 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
-const jwt_1 = require("@nestjs/jwt");
 const chat_service_1 = require("./chat.service");
 const send_message_dto_1 = require("./dto/send-message.dto");
 const socket_io_1 = require("socket.io");
 const websockets_2 = require("@nestjs/websockets");
+const auth_session_service_1 = require("../auth/auth-session.service");
 let ChatGateway = class ChatGateway {
-    constructor(chatService, jwtService) {
+    constructor(chatService, authSessionService) {
         this.chatService = chatService;
-        this.jwtService = jwtService;
+        this.authSessionService = authSessionService;
     }
     async handleConnection(client) {
         try {
@@ -32,9 +32,7 @@ let ChatGateway = class ChatGateway {
             const token = rawToken.replace(/^Bearer\s+/i, '');
             if (!token)
                 throw new Error('No token');
-            const payload = this.jwtService.verify(token, {
-                secret: process.env.JWT_SECRET,
-            });
+            const payload = await this.authSessionService.validateToken(token);
             client.userId = payload.id;
         }
         catch (e) {
@@ -92,6 +90,6 @@ exports.ChatGateway = ChatGateway = __decorate([
         cors: { origin: '*' },
     }),
     __metadata("design:paramtypes", [chat_service_1.ChatService,
-        jwt_1.JwtService])
+        auth_session_service_1.AuthSessionService])
 ], ChatGateway);
 //# sourceMappingURL=chat.gateway.js.map

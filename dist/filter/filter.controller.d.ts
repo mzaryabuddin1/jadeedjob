@@ -8,19 +8,7 @@ export declare class FilterController {
     createFilter(body: any, req: any): Promise<{
         message: string;
         filter: {
-            iconMeta: {
-                source: string;
-                svg: string;
-                color: string;
-                library?: undefined;
-                name?: undefined;
-            } | {
-                source: string;
-                library: import("./entities/filter.entity").FilterIconLibrary;
-                name: string;
-                color: string;
-                svg?: undefined;
-            };
+            iconMeta: import("./filter-icon.util").FilterIconMeta;
             id: number;
             name: string;
             icon: string;
@@ -41,19 +29,7 @@ export declare class FilterController {
     }>;
     getFilter(query: any): Promise<{
         data: {
-            iconMeta: {
-                source: string;
-                svg: string;
-                color: string;
-                library?: undefined;
-                name?: undefined;
-            } | {
-                source: string;
-                library: import("./entities/filter.entity").FilterIconLibrary;
-                name: string;
-                color: string;
-                svg?: undefined;
-            };
+            iconMeta: import("./filter-icon.util").FilterIconMeta;
             id: number;
             name: string;
             icon: string;
@@ -76,19 +52,7 @@ export declare class FilterController {
         currentPage: number;
     }>;
     getFilterById(params: any): Promise<{
-        iconMeta: {
-            source: string;
-            svg: string;
-            color: string;
-            library?: undefined;
-            name?: undefined;
-        } | {
-            source: string;
-            library: import("./entities/filter.entity").FilterIconLibrary;
-            name: string;
-            color: string;
-            svg?: undefined;
-        };
+        iconMeta: import("./filter-icon.util").FilterIconMeta;
         id: number;
         name: string;
         icon: string;

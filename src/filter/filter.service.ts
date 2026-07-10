@@ -11,12 +11,14 @@ import {
   FilterIconSource,
 } from './entities/filter.entity';
 import { User } from 'src/users/entities/user.entity';
+import {
+  DEFAULT_ICON_COLOR,
+  FALLBACK_ICON_LIBRARY,
+  FALLBACK_ICON_NAME,
+  ICON_LIBRARIES,
+  withFilterIconMeta,
+} from './filter-icon.util';
 
-const DEFAULT_ICON_COLOR = '#2563EB';
-const FALLBACK_ICON_COLOR = '#6B7280';
-const FALLBACK_ICON_LIBRARY = 'Feather';
-const FALLBACK_ICON_NAME = 'briefcase';
-const ICON_LIBRARIES = ['Feather', 'FontAwesome', 'FontAwesome5'] as const;
 const ICON_SOURCES = ['library', 'svg'] as const;
 const SAFE_SVG_TAGS = [
   'svg',
@@ -115,32 +117,6 @@ export class FilterService {
     };
   }
 
-  private buildIconMeta(filter: Filter) {
-    if (filter.iconSource === 'svg' && filter.iconSvg) {
-      return {
-        source: 'svg',
-        svg: filter.iconSvg,
-        color: filter.iconColor || DEFAULT_ICON_COLOR,
-      };
-    }
-
-    return {
-      source: 'library',
-      library: ICON_LIBRARIES.includes(filter.iconLibrary as any)
-        ? filter.iconLibrary
-        : FALLBACK_ICON_LIBRARY,
-      name: filter.iconName || filter.icon || FALLBACK_ICON_NAME,
-      color: filter.iconColor || FALLBACK_ICON_COLOR,
-    };
-  }
-
-  private withIconMeta(filter: Filter) {
-    return {
-      ...filter,
-      iconMeta: this.buildIconMeta(filter),
-    };
-  }
-
   async createFilter(data: any) {
     const exists = await this.filterRepo.findOne({
       where: { name: data.name },
@@ -158,7 +134,7 @@ export class FilterService {
       createdBy: data.createdBy,
     });
 
-    return this.withIconMeta(await this.filterRepo.save(filter));
+    return withFilterIconMeta(await this.filterRepo.save(filter));
   }
 
   async getFilters(query: any, userId?: number) {
@@ -230,7 +206,7 @@ export class FilterService {
     );
 
     return {
-      data: paginatedData.map((filter) => this.withIconMeta(filter)),
+      data: paginatedData.map((filter) => withFilterIconMeta(filter)),
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
@@ -247,7 +223,7 @@ export class FilterService {
       throw new NotFoundException('Filter not found');
     }
 
-    return this.withIconMeta(filter);
+    return withFilterIconMeta(filter);
   }
 
   async getTopFiltersByJobs(limit = 9): Promise<number[]> {

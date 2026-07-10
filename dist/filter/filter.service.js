@@ -18,11 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const filter_entity_1 = require("./entities/filter.entity");
 const user_entity_1 = require("../users/entities/user.entity");
-const DEFAULT_ICON_COLOR = '#2563EB';
-const FALLBACK_ICON_COLOR = '#6B7280';
-const FALLBACK_ICON_LIBRARY = 'Feather';
-const FALLBACK_ICON_NAME = 'briefcase';
-const ICON_LIBRARIES = ['Feather', 'FontAwesome', 'FontAwesome5'];
+const filter_icon_util_1 = require("./filter-icon.util");
 const ICON_SOURCES = ['library', 'svg'];
 const SAFE_SVG_TAGS = [
     'svg',
@@ -66,7 +62,7 @@ let FilterService = class FilterService {
         const iconSource = ICON_SOURCES.includes(requestedIconSource)
             ? requestedIconSource
             : 'library';
-        const iconColor = data.iconColor || DEFAULT_ICON_COLOR;
+        const iconColor = data.iconColor || filter_icon_util_1.DEFAULT_ICON_COLOR;
         if (iconSource === 'svg') {
             return {
                 icon: data.icon || data.iconName || 'custom-svg',
@@ -78,10 +74,10 @@ let FilterService = class FilterService {
             };
         }
         const requestedIconLibrary = data.iconLibrary;
-        const iconLibrary = ICON_LIBRARIES.includes(requestedIconLibrary)
+        const iconLibrary = filter_icon_util_1.ICON_LIBRARIES.includes(requestedIconLibrary)
             ? requestedIconLibrary
-            : FALLBACK_ICON_LIBRARY;
-        const iconName = data.iconName || data.icon || FALLBACK_ICON_NAME;
+            : filter_icon_util_1.FALLBACK_ICON_LIBRARY;
+        const iconName = data.iconName || data.icon || filter_icon_util_1.FALLBACK_ICON_NAME;
         return {
             icon: data.icon || iconName,
             iconSource: 'library',
@@ -89,29 +85,6 @@ let FilterService = class FilterService {
             iconName,
             iconColor,
             iconSvg: null,
-        };
-    }
-    buildIconMeta(filter) {
-        if (filter.iconSource === 'svg' && filter.iconSvg) {
-            return {
-                source: 'svg',
-                svg: filter.iconSvg,
-                color: filter.iconColor || DEFAULT_ICON_COLOR,
-            };
-        }
-        return {
-            source: 'library',
-            library: ICON_LIBRARIES.includes(filter.iconLibrary)
-                ? filter.iconLibrary
-                : FALLBACK_ICON_LIBRARY,
-            name: filter.iconName || filter.icon || FALLBACK_ICON_NAME,
-            color: filter.iconColor || FALLBACK_ICON_COLOR,
-        };
-    }
-    withIconMeta(filter) {
-        return {
-            ...filter,
-            iconMeta: this.buildIconMeta(filter),
         };
     }
     async createFilter(data) {
@@ -128,7 +101,7 @@ let FilterService = class FilterService {
             approvalStatus: 'pending',
             createdBy: data.createdBy,
         });
-        return this.withIconMeta(await this.filterRepo.save(filter));
+        return (0, filter_icon_util_1.withFilterIconMeta)(await this.filterRepo.save(filter));
     }
     async getFilters(query, userId) {
         const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, createdBy, preference = true, } = query;
@@ -172,7 +145,7 @@ let FilterService = class FilterService {
         const total = orderedFilters.length;
         const paginatedData = orderedFilters.slice((page - 1) * limit, page * limit);
         return {
-            data: paginatedData.map((filter) => this.withIconMeta(filter)),
+            data: paginatedData.map((filter) => (0, filter_icon_util_1.withFilterIconMeta)(filter)),
             total,
             totalPages: Math.ceil(total / limit),
             currentPage: Number(page),
@@ -185,7 +158,7 @@ let FilterService = class FilterService {
         if (!filter) {
             throw new common_1.NotFoundException('Filter not found');
         }
-        return this.withIconMeta(filter);
+        return (0, filter_icon_util_1.withFilterIconMeta)(filter);
     }
     async getTopFiltersByJobs(limit = 9) {
         const result = await this.filterRepo

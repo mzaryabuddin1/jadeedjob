@@ -27,6 +27,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
+import { AuthSessionModule } from './auth/auth-session.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { RatingModule } from './rating/rating.module';
       synchronize: true,
       legacySpatialSupport: false, 
     }),
+    AuthSessionModule,
     // Application Modules
     AuthModule,
     UsersModule,

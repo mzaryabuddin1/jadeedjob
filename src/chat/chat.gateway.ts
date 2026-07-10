@@ -8,11 +8,11 @@ import {
   ConnectedSocket,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { Server, Socket } from 'socket.io';
 import { WsException } from '@nestjs/websockets';
+import { AuthSessionService } from 'src/auth/auth-session.service';
 
 @WebSocketGateway({
   namespace: 'chat',
@@ -24,7 +24,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private readonly chatService: ChatService,
-    private readonly jwtService: JwtService,
+    private readonly authSessionService: AuthSessionService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -37,9 +37,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const token = rawToken.replace(/^Bearer\s+/i, '');
       if (!token) throw new Error('No token');
 
-      const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET,
-      });
+      const payload = await this.authSessionService.validateToken(token);
 
       (client as any).userId = payload.id;
     } catch (e) {

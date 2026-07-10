@@ -86,8 +86,8 @@ let UsersController = class UsersController {
         }
         const updatedUser = await this.usersService.updateUser(userId, body);
         if (newFilterPreferences) {
-            await this.usersService.updateUserFilterPreferences(userId, newFilterPreferences);
-            updatedUser.filter_preferences = newFilterPreferences;
+            const normalizedFilterPreferences = await this.usersService.updateUserFilterPreferences(userId, newFilterPreferences);
+            updatedUser.filter_preferences = normalizedFilterPreferences;
         }
         return {
             message: 'Profile updated successfully',
@@ -111,7 +111,9 @@ __decorate([
             .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
             .message('Password must include uppercase, lowercase, number, and special character')
             .optional(),
-        filter_preferences: Joi.array().items(Joi.number()).optional(),
+        filter_preferences: Joi.array()
+            .items(Joi.number().integer().positive())
+            .optional(),
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
         gender: Joi.string().valid('Male', 'Female', 'Other').optional(),

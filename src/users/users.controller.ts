@@ -43,7 +43,9 @@ export class UsersController {
           .optional(),
 
         // 🔥 filter_preferences allowed here
-        filter_preferences: Joi.array().items(Joi.number()).optional(),
+        filter_preferences: Joi.array()
+          .items(Joi.number().integer().positive())
+          .optional(),
 
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
@@ -120,12 +122,13 @@ export class UsersController {
 
     // 🔥 If filter_preferences changed, update DB + Firebase topics
     if (newFilterPreferences) {
-      await this.usersService.updateUserFilterPreferences(
-        userId,
-        newFilterPreferences,
-      );
+      const normalizedFilterPreferences =
+        await this.usersService.updateUserFilterPreferences(
+          userId,
+          newFilterPreferences,
+        );
       // reflect in response
-      (updatedUser as any).filter_preferences = newFilterPreferences;
+      (updatedUser as any).filter_preferences = normalizedFilterPreferences;
     }
 
     return {

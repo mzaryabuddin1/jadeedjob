@@ -30,6 +30,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
+const auth_session_module_1 = require("./auth/auth-session.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -48,6 +49,7 @@ exports.AppModule = AppModule = __decorate([
                 synchronize: true,
                 legacySpatialSupport: false,
             }),
+            auth_session_module_1.AuthSessionModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             otp_module_1.OtpModule,

@@ -17,6 +17,7 @@ const users_service_1 = require("./users.service");
 const users_controller_1 = require("./users.controller");
 const auth_module_1 = require("../auth/auth.module");
 const firebase_module_1 = require("../firebase/firebase.module");
+const filter_entity_1 = require("../filter/entities/filter.entity");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -28,6 +29,7 @@ exports.UsersModule = UsersModule = __decorate([
                 work_experience_entity_1.WorkExperience,
                 education_entity_1.Education,
                 certification_entity_1.Certification,
+                filter_entity_1.Filter,
             ]),
             (0, common_1.forwardRef)(() => auth_module_1.AuthModule),
             firebase_module_1.FirebaseModule

@@ -80,7 +80,7 @@ const demoUsers = [
     skills: ['Loading', 'Packing', 'Warehouse support', 'Basic delivery'],
     technical_skills: ['Inventory handling', 'Route following'],
     soft_skills: ['Punctual', 'Team player', 'Reliable'],
-    preferences: ['Labor', 'Delivery', 'Driver'],
+    preferences: ['Labor', 'Delivery', 'Driver', 'Custom Craft'],
     country: 'PK',
     language: 'ur',
   },

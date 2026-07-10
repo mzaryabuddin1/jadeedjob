@@ -8,6 +8,7 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
+import { Filter } from 'src/filter/entities/filter.entity';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
       WorkExperience,
       Education,
       Certification,
+      Filter,
     ]),
     forwardRef(() => AuthModule),
       FirebaseModule
