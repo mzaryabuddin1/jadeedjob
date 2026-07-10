@@ -31,6 +31,7 @@ const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
 const auth_session_module_1 = require("./auth/auth-session.module");
+const reels_module_1 = require("./reels/reels.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -73,6 +74,7 @@ exports.AppModule = AppModule = __decorate([
             firebase_module_1.FirebaseModule,
             chat_module_1.ChatModule,
             rating_module_1.RatingModule,
+            reels_module_1.ReelsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

@@ -1,10 +1,14 @@
 import { Filter } from './entities/filter.entity';
 
-export const DEFAULT_ICON_COLOR = '#2563EB';
+export const DEFAULT_ICON_COLOR = '#2F6F73';
 export const FALLBACK_ICON_COLOR = '#6B7280';
 export const FALLBACK_ICON_LIBRARY = 'Feather';
 export const FALLBACK_ICON_NAME = 'briefcase';
-export const ICON_LIBRARIES = ['Feather', 'FontAwesome', 'FontAwesome5'] as const;
+export const ICON_LIBRARIES = [
+  'Feather',
+  'FontAwesome',
+  'FontAwesome5',
+] as const;
 
 export type FilterIconMeta =
   | {

@@ -145,6 +145,7 @@ export class FilterService {
       sortBy = 'createdAt',
       sortOrder = 'DESC',
       approvalStatus,
+      status,
       createdBy,
       preference = true,
     } = query;
@@ -157,6 +158,10 @@ export class FilterService {
 
     if (approvalStatus) {
       where.approvalStatus = approvalStatus;
+    }
+
+    if (status) {
+      where.status = status;
     }
 
     if (createdBy) {
@@ -213,7 +218,6 @@ export class FilterService {
     };
   }
 
-
   async filterById(id: number) {
     const filter = await this.filterRepo.findOne({
       where: { id },
@@ -238,7 +242,6 @@ export class FilterService {
       .limit(limit)
       .getRawMany();
 
-    return result.map(r => Number(r.filterId));
+    return result.map((r) => Number(r.filterId));
   }
-
 }

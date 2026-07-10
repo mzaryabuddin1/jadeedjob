@@ -64,7 +64,11 @@ let FilterController = class FilterController {
             { iconLibrary: 'Feather', iconName: 'zap', name: 'Electrician' },
             { iconLibrary: 'FontAwesome5', iconName: 'faucet', name: 'Plumber' },
             { iconLibrary: 'FontAwesome5', iconName: 'car', name: 'Driver' },
-            { iconLibrary: 'FontAwesome5', iconName: 'paint-roller', name: 'Painter' },
+            {
+                iconLibrary: 'FontAwesome5',
+                iconName: 'paint-roller',
+                name: 'Painter',
+            },
             { iconLibrary: 'Feather', iconName: 'shield', name: 'Security' },
             { iconLibrary: 'FontAwesome5', iconName: 'truck', name: 'Loader' },
             { iconLibrary: 'FontAwesome5', iconName: 'utensils', name: 'Cook' },
@@ -86,7 +90,7 @@ let FilterController = class FilterController {
                 iconLibrary: item.iconLibrary,
                 iconName: item.iconName,
                 icon: item.iconName,
-                iconColor: '#2563EB',
+                iconColor: '#2F6F73',
                 status: 'active',
                 createdBy: Number(req.user.id),
             });
@@ -105,9 +109,7 @@ __decorate([
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().trim().required(),
         icon: joi_1.default.string().trim().optional(),
-        iconSource: joi_1.default.string()
-            .valid('library', 'svg')
-            .default('library'),
+        iconSource: joi_1.default.string().valid('library', 'svg').default('library'),
         iconLibrary: joi_1.default.when('iconSource', {
             is: 'library',
             then: joi_1.default.string()
@@ -123,7 +125,7 @@ __decorate([
         iconColor: joi_1.default.string()
             .trim()
             .pattern(/^#(?:[0-9a-fA-F]{3}){1,2}$/)
-            .default('#2563EB'),
+            .default('#2F6F73'),
         iconSvgUrl: joi_1.default.forbidden(),
         iconSvg: joi_1.default.when('iconSource', {
             is: 'svg',
@@ -140,6 +142,21 @@ __decorate([
 ], FilterController.prototype, "createFilter", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        page: joi_1.default.number().integer().min(1).default(1),
+        limit: joi_1.default.number().integer().min(1).max(100).default(20),
+        search: joi_1.default.string().allow('').optional(),
+        sortBy: joi_1.default.string()
+            .valid('id', 'name', 'status', 'approvalStatus', 'createdAt', 'updatedAt')
+            .default('createdAt'),
+        sortOrder: joi_1.default.string().valid('asc', 'desc').default('desc'),
+        approvalStatus: joi_1.default.string()
+            .valid('pending', 'approved', 'rejected')
+            .optional(),
+        status: joi_1.default.string().valid('active', 'inactive').optional(),
+        createdBy: joi_1.default.number().integer().optional(),
+        preference: joi_1.default.boolean().default(true),
+    }))),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),

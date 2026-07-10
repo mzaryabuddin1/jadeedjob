@@ -1,5 +1,5 @@
 import { Filter } from './entities/filter.entity';
-export declare const DEFAULT_ICON_COLOR = "#2563EB";
+export declare const DEFAULT_ICON_COLOR = "#2F6F73";
 export declare const FALLBACK_ICON_COLOR = "#6B7280";
 export declare const FALLBACK_ICON_LIBRARY = "Feather";
 export declare const FALLBACK_ICON_NAME = "briefcase";

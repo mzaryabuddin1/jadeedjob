@@ -1,0 +1,367 @@
+import { ReelsService } from './reels.service';
+export declare class ReelsController {
+    private readonly reelsService;
+    constructor(reelsService: ReelsService);
+    create(body: any, req: any): Promise<{
+        reel: {
+            id: string;
+            videoUrl: string;
+            category: import("./entities/reel.entity").ReelCategory;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            caption: string;
+            audioTitle: string;
+            linkedJobId: number;
+            stats: {
+                likes: number;
+                comments: number;
+                saves: number;
+                shares: number;
+            };
+            viewerState: {
+                liked: boolean;
+                saved: boolean;
+                followingCreator: boolean;
+                isOwner: boolean;
+            };
+            visibility: import("./entities/reel.entity").ReelVisibility;
+            status: import("./entities/reel.entity").ReelStatus;
+            allowComments: boolean;
+            allowSharing: boolean;
+            createdAt: Date;
+            publishedAt: Date;
+        };
+        upload: {
+            uploadId: string;
+            method: string;
+            url: string;
+            fields: {
+                uploadId: string;
+            };
+            headers: {};
+            fileField: string;
+            expiresAt: Date;
+        };
+    }>;
+    upload(id: number, uploadId: string, file: Express.Multer.File, req: any): Promise<{
+        uploadId: string;
+        reelId: string;
+        status: string;
+        fileName: string;
+        fileSizeBytes: number;
+        contentType: string;
+    }>;
+    completeUpload(id: number, uploadId: string, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    getFeed(query: any, req: any): Promise<{
+        data: {
+            id: string;
+            videoUrl: string;
+            category: import("./entities/reel.entity").ReelCategory;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            caption: string;
+            audioTitle: string;
+            linkedJobId: number;
+            stats: {
+                likes: number;
+                comments: number;
+                saves: number;
+                shares: number;
+            };
+            viewerState: {
+                liked: boolean;
+                saved: boolean;
+                followingCreator: boolean;
+                isOwner: boolean;
+            };
+            visibility: import("./entities/reel.entity").ReelVisibility;
+            status: import("./entities/reel.entity").ReelStatus;
+            allowComments: boolean;
+            allowSharing: boolean;
+            createdAt: Date;
+            publishedAt: Date;
+        }[];
+        nextCursor: string;
+    }>;
+    like(id: number, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    unlike(id: number, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    save(id: number, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    unsave(id: number, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    getComments(id: number, cursor: string, limit: number, req: any): Promise<{
+        data: {
+            id: string;
+            reelId: string;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            text: string;
+            createdAt: Date;
+        }[];
+        nextCursor: string;
+    }>;
+    addComment(id: number, text: string, req: any): Promise<{
+        id: string;
+        reelId: string;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        text: string;
+        createdAt: Date;
+    }>;
+    share(id: number, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    followCreator(creatorId: number, req: any): Promise<{
+        creatorId: string;
+        following: boolean;
+    }>;
+    unfollowCreator(creatorId: number, req: any): Promise<{
+        creatorId: string;
+        following: boolean;
+    }>;
+    publish(id: number, req: any): Promise<{
+        id: string;
+        videoUrl: string;
+        category: import("./entities/reel.entity").ReelCategory;
+        author: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        caption: string;
+        audioTitle: string;
+        linkedJobId: number;
+        stats: {
+            likes: number;
+            comments: number;
+            saves: number;
+            shares: number;
+        };
+        viewerState: {
+            liked: boolean;
+            saved: boolean;
+            followingCreator: boolean;
+            isOwner: boolean;
+        };
+        visibility: import("./entities/reel.entity").ReelVisibility;
+        status: import("./entities/reel.entity").ReelStatus;
+        allowComments: boolean;
+        allowSharing: boolean;
+        createdAt: Date;
+        publishedAt: Date;
+    }>;
+    delete(id: number, req: any): Promise<{
+        id: string;
+        deleted: boolean;
+    }>;
+}

@@ -1,0 +1,34 @@
+import { Job } from 'src/job/entities/job.entity';
+import { User } from 'src/users/entities/user.entity';
+export type ReelCategory = 'community' | 'jobs' | 'social';
+export type ReelVisibility = 'public' | 'followers' | 'draft';
+export type ReelStatus = 'upload_pending' | 'processing' | 'published' | 'draft' | 'failed' | 'deleted';
+export declare class Reel {
+    id: number;
+    creatorId: number;
+    creator: User;
+    caption: string;
+    category: ReelCategory;
+    audioTitle: string;
+    linkedJobId: number;
+    linkedJob: Job;
+    visibility: ReelVisibility;
+    status: ReelStatus;
+    allowComments: boolean;
+    allowSharing: boolean;
+    videoUrl: string;
+    storageKey: string;
+    originalFileName: string;
+    contentType: string;
+    fileSizeBytes: number;
+    durationSeconds: number;
+    likesCount: number;
+    commentsCount: number;
+    savesCount: number;
+    sharesCount: number;
+    publishedAt: Date;
+    processedAt: Date;
+    deletedAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}

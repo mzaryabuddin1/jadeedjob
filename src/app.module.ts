@@ -28,6 +28,7 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
 import { AuthSessionModule } from './auth/auth-session.module';
+import { ReelsModule } from './reels/reels.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { AuthSessionModule } from './auth/auth-session.module';
     FirebaseModule,
     ChatModule,
     RatingModule,
+    ReelsModule,
   ],
   controllers: [AppController],
   providers: [

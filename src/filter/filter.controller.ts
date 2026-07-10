@@ -35,9 +35,7 @@ export class FilterController {
       Joi.object({
         name: Joi.string().trim().required(),
         icon: Joi.string().trim().optional(),
-        iconSource: Joi.string()
-          .valid('library', 'svg')
-          .default('library'),
+        iconSource: Joi.string().valid('library', 'svg').default('library'),
         iconLibrary: Joi.when('iconSource', {
           is: 'library',
           then: Joi.string()
@@ -53,7 +51,7 @@ export class FilterController {
         iconColor: Joi.string()
           .trim()
           .pattern(/^#(?:[0-9a-fA-F]{3}){1,2}$/)
-          .default('#2563EB'),
+          .default('#2F6F73'),
         iconSvgUrl: Joi.forbidden(),
         iconSvg: Joi.when('iconSource', {
           is: 'svg',
@@ -87,6 +85,32 @@ export class FilterController {
   }
 
   @Get()
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        page: Joi.number().integer().min(1).default(1),
+        limit: Joi.number().integer().min(1).max(100).default(20),
+        search: Joi.string().allow('').optional(),
+        sortBy: Joi.string()
+          .valid(
+            'id',
+            'name',
+            'status',
+            'approvalStatus',
+            'createdAt',
+            'updatedAt',
+          )
+          .default('createdAt'),
+        sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+        approvalStatus: Joi.string()
+          .valid('pending', 'approved', 'rejected')
+          .optional(),
+        status: Joi.string().valid('active', 'inactive').optional(),
+        createdBy: Joi.number().integer().optional(),
+        preference: Joi.boolean().default(true),
+      }),
+    ),
+  )
   async getFilter(@Query() query: any) {
     return this.filterService.getFilters(query);
   }
@@ -108,7 +132,11 @@ export class FilterController {
       { iconLibrary: 'Feather', iconName: 'zap', name: 'Electrician' },
       { iconLibrary: 'FontAwesome5', iconName: 'faucet', name: 'Plumber' },
       { iconLibrary: 'FontAwesome5', iconName: 'car', name: 'Driver' },
-      { iconLibrary: 'FontAwesome5', iconName: 'paint-roller', name: 'Painter' },
+      {
+        iconLibrary: 'FontAwesome5',
+        iconName: 'paint-roller',
+        name: 'Painter',
+      },
       { iconLibrary: 'Feather', iconName: 'shield', name: 'Security' },
       { iconLibrary: 'FontAwesome5', iconName: 'truck', name: 'Loader' },
       { iconLibrary: 'FontAwesome5', iconName: 'utensils', name: 'Cook' },
@@ -135,7 +163,7 @@ export class FilterController {
         iconLibrary: item.iconLibrary,
         iconName: item.iconName,
         icon: item.iconName,
-        iconColor: '#2563EB',
+        iconColor: '#2F6F73',
         status: 'active',
         createdBy: Number(req.user.id),
       });
@@ -149,5 +177,4 @@ export class FilterController {
       filters: created,
     };
   }
-  
 }

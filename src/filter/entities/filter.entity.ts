@@ -33,7 +33,7 @@ export class Filter {
   @Column({ nullable: true })
   iconName: string | null;
 
-  @Column({ default: '#2563EB' })
+  @Column({ default: '#2F6F73' })
   iconColor: string;
 
   @Column({ type: 'text', nullable: true })

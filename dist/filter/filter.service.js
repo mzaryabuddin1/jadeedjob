@@ -104,13 +104,16 @@ let FilterService = class FilterService {
         return (0, filter_icon_util_1.withFilterIconMeta)(await this.filterRepo.save(filter));
     }
     async getFilters(query, userId) {
-        const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, createdBy, preference = true, } = query;
+        const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', approvalStatus, status, createdBy, preference = true, } = query;
         const where = {};
         if (search) {
             where.name = (0, typeorm_2.Like)(`%${search}%`);
         }
         if (approvalStatus) {
             where.approvalStatus = approvalStatus;
+        }
+        if (status) {
+            where.status = status;
         }
         if (createdBy) {
             where.createdBy = createdBy;
@@ -171,7 +174,7 @@ let FilterService = class FilterService {
             .orderBy('jobCount', 'DESC')
             .limit(limit)
             .getRawMany();
-        return result.map(r => Number(r.filterId));
+        return result.map((r) => Number(r.filterId));
     }
 };
 exports.FilterService = FilterService;

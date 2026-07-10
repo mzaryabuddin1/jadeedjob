@@ -1,0 +1,29 @@
+import { Reel } from './reel.entity';
+import { User } from 'src/users/entities/user.entity';
+export type ReelUploadSessionStatus = 'pending' | 'uploaded' | 'completed' | 'expired' | 'failed';
+export type ReelStorageProvider = 'local' | 'object';
+export declare class ReelUploadSession {
+    id: number;
+    uploadId: string;
+    reelId: number;
+    reel: Reel;
+    userId: number;
+    user: User;
+    uploadKey: string;
+    storageProvider: ReelStorageProvider;
+    status: ReelUploadSessionStatus;
+    originalFileName: string;
+    contentType: string;
+    expectedFileSizeBytes: number;
+    durationSeconds: number;
+    uploadedFileName: string;
+    localFilePath: string;
+    publicUrl: string;
+    uploadedFileSizeBytes: number;
+    uploadedContentType: string;
+    expiresAt: Date;
+    completedAt: Date;
+    errorMessage: string;
+    createdAt: Date;
+    updatedAt: Date;
+}

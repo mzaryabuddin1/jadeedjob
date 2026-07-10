@@ -41,7 +41,7 @@ __decorate([
     __metadata("design:type", String)
 ], Filter.prototype, "iconName", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: '#2563EB' }),
+    (0, typeorm_1.Column)({ default: '#2F6F73' }),
     __metadata("design:type", String)
 ], Filter.prototype, "iconColor", void 0);
 __decorate([

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
+const { cleanupDemoReelData, seedDemoReels } = require('./seed-demo-reels');
 
 const DEMO_PASSWORD = 'Demo@1234!';
 const DEMO_PHONES = Array.from({ length: 10 }, (_, i) => `03000010${String(i + 1).padStart(2, '0')}`);
@@ -553,6 +554,8 @@ async function updateNullWhereIn(conn, table, column, values) {
 }
 
 async function cleanupOldDemoData(conn) {
+  await cleanupDemoReelData(conn);
+
   const oldUserIds = await selectIds(
     conn,
     `SELECT id FROM users WHERE phone IN (${placeholders(DEMO_PHONES)})`,
@@ -1232,6 +1235,12 @@ async function tableCounts(conn) {
     'job_applications',
     'chat_messages',
     'ratings',
+    'reels',
+    'reel_comments',
+    'reel_likes',
+    'reel_saves',
+    'reel_creator_follows',
+    'reel_upload_sessions',
     'pages',
     'page_members',
     'organizations',
@@ -1269,6 +1278,7 @@ async function run() {
     const pagesByKey = await insertPages(conn, usersByKey);
     await insertOrganizations(conn, usersByKey);
     const jobsByKey = await insertJobs(conn, usersByKey, pagesByKey, filterIds);
+    await seedDemoReels(conn, { cleanup: false, jobsByKey });
     const applications = await insertApplications(conn, usersByKey, jobsByKey);
     await insertChatMessages(conn, applications, usersByKey, jobCreatorsByKey);
     await insertRatings(conn, applications, usersByKey, jobCreatorsByKey);
