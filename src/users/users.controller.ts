@@ -7,7 +7,6 @@ import {
   NotFoundException,
   UsePipes,
   Get,
-  Post,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -15,7 +14,56 @@ import { Request } from 'express';
 import * as Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { AuthService } from 'src/auth/auth.service';
-import { FirebaseService } from 'src/firebase/firebase.service';
+
+const optionalString = () => Joi.string().allow('', null).optional();
+const optionalUri = () => Joi.string().uri().allow('', null).optional();
+const optionalDate = () =>
+  Joi.alternatives()
+    .try(Joi.date(), Joi.string().allow('', null))
+    .optional();
+const optionalRelationId = () =>
+  Joi.alternatives()
+    .try(
+      Joi.number().integer().positive(),
+      Joi.string().pattern(/^\d+$/),
+      Joi.string().allow('', null),
+    )
+    .optional();
+
+const workExperienceSchema = Joi.object({
+  id: Joi.number().integer().positive().optional(),
+  company_name: optionalString(),
+  designation: optionalString(),
+  department: optionalString(),
+  employment_type: optionalString(),
+  from_date: optionalDate(),
+  to_date: optionalDate(),
+  key_responsibilities: optionalString(),
+  experience_certificate: optionalString(),
+  currently_working: Joi.boolean().optional(),
+});
+
+const educationSchema = Joi.object({
+  id: Joi.number().integer().positive().optional(),
+  highest_qualification: optionalString(),
+  institution_name: optionalString(),
+  graduation_year: optionalString(),
+  gpa_or_grade: optionalString(),
+  degree_document: optionalString(),
+});
+
+const certificationSchema = Joi.object({
+  id: Joi.number().integer().positive().optional(),
+  certification_name: optionalString(),
+  issuing_institution: optionalString(),
+  certification_date: optionalDate(),
+  certificate_file: optionalString(),
+});
+
+const spokenLanguageSchema = Joi.object({
+  language: optionalString(),
+  level: optionalString(),
+});
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -23,17 +71,28 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
-    private firebaseService: FirebaseService, // 👈 add this
   ) {}
+
+  @Get('me')
+  async getMe(@Req() req: Request) {
+    const userId = (req.user as any)?.id;
+    if (!userId) throw new NotFoundException('User not found or unauthorized');
+
+    const user = await this.usersService.getPublicUserById(userId);
+
+    return { user };
+  }
 
   @Patch('me')
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        email: Joi.string().email().optional(),
-        firstName: Joi.string().optional(),
-        lastName: Joi.string().optional(),
-        phone: Joi.string().optional(),
+        email: Joi.string().email().allow('', null).optional(),
+        firstName: optionalString(),
+        lastName: optionalString(),
+        phone: optionalString(),
+        country: optionalRelationId(),
+        language: optionalRelationId(),
         password: Joi.string()
           .min(6)
           .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
@@ -47,42 +106,58 @@ export class UsersController {
           .items(Joi.number().integer().positive())
           .optional(),
 
-        full_name: Joi.string().optional(),
-        father_name: Joi.string().optional(),
-        gender: Joi.string().valid('Male', 'Female', 'Other').optional(),
-        date_of_birth: Joi.date().optional(),
-        nationality: Joi.string().optional(),
-        marital_status: Joi.string()
-          .valid('Single', 'Married', 'Other')
+        full_name: optionalString(),
+        father_name: optionalString(),
+        gender: Joi.string()
+          .valid('Male', 'Female', 'Other', '')
+          .allow(null)
           .optional(),
-        profile_photo: Joi.string().uri().optional(),
+        date_of_birth: optionalDate(),
+        nationality: optionalString(),
+        marital_status: Joi.string()
+          .valid('Single', 'Married', 'Other', '')
+          .allow(null)
+          .optional(),
+        profile_photo: optionalUri(),
 
-        alternate_phone: Joi.string().optional(),
-        address_line1: Joi.string().optional(),
-        address_line2: Joi.string().optional(),
-        city: Joi.string().optional(),
-        state: Joi.string().optional(),
-        postal_code: Joi.string().optional(),
-        contact_country: Joi.string().optional(),
+        alternate_phone: optionalString(),
+        address_line1: optionalString(),
+        address_line2: optionalString(),
+        city: optionalString(),
+        state: optionalString(),
+        postal_code: optionalString(),
+        contact_country: optionalString(),
 
-        professional_summary: Joi.string().optional(),
+        national_id_number: optionalString(),
+        passport_number: optionalString(),
+        id_expiry_date: optionalDate(),
+        id_document_front: optionalUri(),
+        id_document_back: optionalUri(),
+        address_proof_document: optionalUri(),
+
+        professional_summary: optionalString(),
 
         skills: Joi.array().items(Joi.string()).optional(),
         technical_skills: Joi.array().items(Joi.string()).optional(),
         soft_skills: Joi.array().items(Joi.string()).optional(),
+        languages_spoken: Joi.array().items(spokenLanguageSchema).optional(),
 
-        linkedin_url: Joi.string().uri().optional(),
-        github_url: Joi.string().uri().optional(),
-        portfolio_url: Joi.string().uri().optional(),
-        behance_url: Joi.string().uri().optional(),
+        work_experience: Joi.array().items(workExperienceSchema).optional(),
+        education: Joi.array().items(educationSchema).optional(),
+        certifications: Joi.array().items(certificationSchema).optional(),
 
-        bank_name: Joi.string().optional(),
-        account_number: Joi.string().optional(),
-        iban: Joi.string().optional(),
-        branch_name: Joi.string().optional(),
-        swift_code: Joi.string().optional(),
+        linkedin_url: optionalUri(),
+        github_url: optionalUri(),
+        portfolio_url: optionalUri(),
+        behance_url: optionalUri(),
 
-        notes: Joi.string().optional(),
+        bank_name: optionalString(),
+        account_number: optionalString(),
+        iban: optionalString(),
+        branch_name: optionalString(),
+        swift_code: optionalString(),
+
+        notes: optionalString(),
       }),
     ),
   )
@@ -105,7 +180,8 @@ export class UsersController {
       'isVerified',
       'verified_by_admin_id',
       'kyc_status',
-      'country',
+      'verification_date',
+      'rejection_reason',
     ];
     forbidden.forEach((field) => delete body[field]);
 
@@ -118,10 +194,10 @@ export class UsersController {
     }
 
     // Update normal profile fields
-    const updatedUser = await this.usersService.updateUser(userId, body);
+    let updatedUser = await this.usersService.updateMyProfile(userId, body);
 
     // 🔥 If filter_preferences changed, update DB + Firebase topics
-    if (newFilterPreferences) {
+    if (newFilterPreferences !== undefined) {
       const normalizedFilterPreferences =
         await this.usersService.updateUserFilterPreferences(
           userId,
@@ -129,6 +205,7 @@ export class UsersController {
         );
       // reflect in response
       (updatedUser as any).filter_preferences = normalizedFilterPreferences;
+      updatedUser = await this.usersService.getPublicUserById(userId);
     }
 
     return {
@@ -141,8 +218,4 @@ export class UsersController {
   async getMyPreferences(@Req() req: any) {
     return await this.usersService.getUserPreference(req.user.id);
   }
-
-
-
-  
 }

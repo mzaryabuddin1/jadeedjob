@@ -18,6 +18,11 @@ import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
 
+export type SpokenLanguage = {
+  language: string;
+  level: string;
+};
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -70,6 +75,25 @@ export class User {
   @Column({ nullable: true })
   profile_photo: string;
 
+  // Identity documents
+  @Column({ nullable: true })
+  national_id_number: string;
+
+  @Column({ nullable: true })
+  passport_number: string;
+
+  @Column({ type: 'date', nullable: true })
+  id_expiry_date: Date;
+
+  @Column({ nullable: true })
+  id_document_front: string;
+
+  @Column({ nullable: true })
+  id_document_back: string;
+
+  @Column({ nullable: true })
+  address_proof_document: string;
+
   // Contact Information
   @Column({ nullable: true })
   alternate_phone: string;
@@ -91,6 +115,12 @@ export class User {
 
   @Column({ nullable: true })
   contact_country: string;
+
+  @Column({ type: 'float', nullable: true })
+  latitude: number;
+
+  @Column({ type: 'float', nullable: true })
+  longitude: number;
 
   // Professional summary
   @Column({ nullable: true, type: 'text' })
@@ -173,6 +203,9 @@ export class User {
   // Many-to-one with Language
   @ManyToOne(() => Language, (language) => language.users, { eager: true })
   language: Language;
+
+  @Column({ type: 'json', nullable: true })
+  languages_spoken: SpokenLanguage[];
 
   // Nested Arrays → OneToMany relations
   @OneToMany(() => WorkExperience, (workExp) => workExp.user, {

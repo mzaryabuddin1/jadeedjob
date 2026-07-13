@@ -2,6 +2,7 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { Filter } from 'src/filter/entities/filter.entity';
+type ProfileUpdateData = Record<string, any>;
 export declare class UsersService {
     private readonly userRepo;
     private readonly filterRepo;
@@ -10,8 +11,13 @@ export declare class UsersService {
     private normalizeFilterPreferenceIds;
     private hasInvalidFilterPreferenceIds;
     private findFiltersInPreferenceOrder;
+    private toPublicUser;
+    private normalizeNullableDates;
+    private relationIdFromValue;
     getUserById(id: number): Promise<User>;
+    getPublicUserById(id: number): Promise<any>;
     updateUser(id: number, data: any): Promise<User>;
+    updateMyProfile(id: number, data: ProfileUpdateData): Promise<any>;
     findUsersByIds(ids: number[]): Promise<User[]>;
     getUserPreference(userId: number): Promise<{
         data: number[];
@@ -37,3 +43,4 @@ export declare class UsersService {
     }>;
     updateUserFilterPreferences(userId: number, newFilters: number[]): Promise<number[]>;
 }
+export {};

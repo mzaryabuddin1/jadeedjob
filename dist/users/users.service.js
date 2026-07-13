@@ -17,9 +17,14 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("./entities/user.entity");
+const work_experience_entity_1 = require("./entities/work-experience.entity");
+const education_entity_1 = require("./entities/education.entity");
+const certification_entity_1 = require("./entities/certification.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
 const filter_entity_1 = require("../filter/entities/filter.entity");
 const filter_icon_util_1 = require("../filter/filter-icon.util");
+const country_entity_1 = require("../country/entities/country.entity");
+const language_entity_1 = require("../language/entities/language.entity");
 let UsersService = class UsersService {
     constructor(userRepo, filterRepo, firebaseService) {
         this.userRepo = userRepo;
@@ -52,6 +57,27 @@ let UsersService = class UsersService {
             .filter((filter) => Boolean(filter))
             .map((filter) => (0, filter_icon_util_1.withFilterIconMeta)(filter));
     }
+    toPublicUser(user) {
+        const { passwordHash, passwordSalt, fcmTokens, password, ...publicUser } = user;
+        return publicUser;
+    }
+    normalizeNullableDates(data, fields) {
+        for (const field of fields) {
+            if (data[field] === '') {
+                data[field] = null;
+            }
+        }
+    }
+    relationIdFromValue(field, value) {
+        if (value === undefined || value === null || value === '') {
+            return undefined;
+        }
+        const id = Number(value);
+        if (!Number.isInteger(id) || id <= 0) {
+            throw new common_1.BadRequestException(`${field} must be a valid ID`);
+        }
+        return id;
+    }
     async getUserById(id) {
         const user = await this.userRepo.findOne({
             where: { id },
@@ -61,12 +87,137 @@ let UsersService = class UsersService {
             throw new common_1.NotFoundException('User not found');
         return user;
     }
+    async getPublicUserById(id) {
+        const user = await this.userRepo.findOne({
+            where: { id },
+            relations: ['country', 'language'],
+        });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        return this.toPublicUser(user);
+    }
     async updateUser(id, data) {
         const user = await this.userRepo.findOne({ where: { id } });
         if (!user)
             throw new common_1.NotFoundException('User not found');
         Object.assign(user, data);
         return this.userRepo.save(user);
+    }
+    async updateMyProfile(id, data) {
+        const updatedUser = await this.userRepo.manager.transaction(async (manager) => {
+            const userRepo = manager.getRepository(user_entity_1.User);
+            const countryRepo = manager.getRepository(country_entity_1.Country);
+            const languageRepo = manager.getRepository(language_entity_1.Language);
+            const workExperienceRepo = manager.getRepository(work_experience_entity_1.WorkExperience);
+            const educationRepo = manager.getRepository(education_entity_1.Education);
+            const certificationRepo = manager.getRepository(certification_entity_1.Certification);
+            const user = await userRepo.findOne({
+                where: { id },
+                relations: ['country', 'language'],
+            });
+            if (!user)
+                throw new common_1.NotFoundException('User not found');
+            const updateData = { ...data };
+            const workExperience = updateData.work_experience;
+            const education = updateData.education;
+            const certifications = updateData.certifications;
+            delete updateData.work_experience;
+            delete updateData.education;
+            delete updateData.certifications;
+            const countryId = this.relationIdFromValue('country', updateData.country);
+            if (countryId !== undefined) {
+                const country = await countryRepo.findOne({
+                    where: { id: countryId },
+                });
+                if (!country)
+                    throw new common_1.BadRequestException('Country not found');
+                user.country = country;
+            }
+            delete updateData.country;
+            const languageId = this.relationIdFromValue('language', updateData.language);
+            if (languageId !== undefined) {
+                const language = await languageRepo.findOne({
+                    where: { id: languageId },
+                });
+                if (!language)
+                    throw new common_1.BadRequestException('Language not found');
+                user.language = language;
+            }
+            delete updateData.language;
+            this.normalizeNullableDates(updateData, [
+                'date_of_birth',
+                'id_expiry_date',
+                'verification_date',
+            ]);
+            Object.assign(user, updateData);
+            const savedUser = await userRepo.save(user);
+            if (Array.isArray(workExperience)) {
+                await workExperienceRepo
+                    .createQueryBuilder()
+                    .delete()
+                    .from(work_experience_entity_1.WorkExperience)
+                    .where('userId = :userId', { userId: id })
+                    .execute();
+                const workExperienceRows = workExperience.map((item) => {
+                    const row = { ...item };
+                    delete row.id;
+                    this.normalizeNullableDates(row, ['from_date', 'to_date']);
+                    return {
+                        ...row,
+                        user: savedUser,
+                    };
+                });
+                if (workExperienceRows.length) {
+                    await workExperienceRepo.save(workExperienceRows);
+                }
+            }
+            if (Array.isArray(education)) {
+                await educationRepo
+                    .createQueryBuilder()
+                    .delete()
+                    .from(education_entity_1.Education)
+                    .where('userId = :userId', { userId: id })
+                    .execute();
+                const educationRows = education.map((item) => {
+                    const row = { ...item };
+                    delete row.id;
+                    return {
+                        ...row,
+                        user: savedUser,
+                    };
+                });
+                if (educationRows.length) {
+                    await educationRepo.save(educationRows);
+                }
+            }
+            if (Array.isArray(certifications)) {
+                await certificationRepo
+                    .createQueryBuilder()
+                    .delete()
+                    .from(certification_entity_1.Certification)
+                    .where('userId = :userId', { userId: id })
+                    .execute();
+                const certificationRows = certifications.map((item) => {
+                    const row = { ...item };
+                    delete row.id;
+                    this.normalizeNullableDates(row, ['certification_date']);
+                    return {
+                        ...row,
+                        user: savedUser,
+                    };
+                });
+                if (certificationRows.length) {
+                    await certificationRepo.save(certificationRows);
+                }
+            }
+            return userRepo.findOne({
+                where: { id },
+                relations: ['country', 'language'],
+            });
+        });
+        if (!updatedUser)
+            throw new common_1.NotFoundException('User not found');
+        return this.toPublicUser(updatedUser);
     }
     async findUsersByIds(ids) {
         return this.userRepo.find({

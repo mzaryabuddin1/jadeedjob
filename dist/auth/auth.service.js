@@ -20,7 +20,7 @@ const typeorm_2 = require("typeorm");
 const crypto_1 = require("crypto");
 const user_entity_1 = require("../users/entities/user.entity");
 const country_entity_1 = require("../country/entities/country.entity");
-const VoiceResponse_1 = require("twilio/lib/twiml/VoiceResponse");
+const language_entity_1 = require("../language/entities/language.entity");
 const filter_service_1 = require("../filter/filter.service");
 const firebase_service_1 = require("../firebase/firebase.service");
 let AuthService = class AuthService {
@@ -35,6 +35,10 @@ let AuthService = class AuthService {
     generateToken(user) {
         return this.jwtService.sign({ id: user.id });
     }
+    toPublicUser(user) {
+        const { passwordHash, passwordSalt, fcmTokens, password, ...publicUser } = user;
+        return publicUser;
+    }
     async findUserByPhone(phone) {
         return this.userRepo.findOne({
             where: { phone },
@@ -45,21 +49,44 @@ let AuthService = class AuthService {
         const existing = await this.findUserByPhone(data.phone);
         if (existing)
             return existing;
+        const countryId = Number(data.country);
+        const languageId = Number(data.language);
+        if (!Number.isInteger(countryId) || countryId <= 0) {
+            throw new common_1.BadRequestException('countryId must be a valid ID');
+        }
+        if (!Number.isInteger(languageId) || languageId <= 0) {
+            throw new common_1.BadRequestException('languageId must be a valid ID');
+        }
         const country = await this.countryRepo.findOne({
-            where: { id: Number(data.country) },
+            where: { id: countryId },
         });
         const language = await this.languageRepo.findOne({
-            where: { id: Number(data.language) },
+            where: { id: languageId },
         });
+        if (!country)
+            throw new common_1.BadRequestException('Country not found');
+        if (!language)
+            throw new common_1.BadRequestException('Language not found');
         const defaultFilterPreferences = await this.filterService.getTopFiltersByJobs(9);
+        const { country: _country, language: _language, countryId: _countryId, languageId: _languageId, photoUri: _photoUri, ...userData } = data;
         const user = this.userRepo.create({
-            ...data,
+            ...userData,
             country,
             language,
             isBanned: false,
             filter_preferences: defaultFilterPreferences,
         });
         return this.userRepo.save(user);
+    }
+    async validateRegistrationRelations(countryId, languageId) {
+        const [country, language] = await Promise.all([
+            this.countryRepo.findOne({ where: { id: countryId } }),
+            this.languageRepo.findOne({ where: { id: languageId } }),
+        ]);
+        if (!country)
+            throw new common_1.BadRequestException('Country not found');
+        if (!language)
+            throw new common_1.BadRequestException('Language not found');
     }
     hashPassword(password) {
         const salt = (0, crypto_1.randomBytes)(16).toString('hex');
@@ -106,7 +133,7 @@ exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(2, (0, typeorm_1.InjectRepository)(country_entity_1.Country)),
-    __param(3, (0, typeorm_1.InjectRepository)(VoiceResponse_1.Language)),
+    __param(3, (0, typeorm_1.InjectRepository)(language_entity_1.Language)),
     __metadata("design:paramtypes", [jwt_1.JwtService,
         typeorm_2.Repository,
         typeorm_2.Repository,

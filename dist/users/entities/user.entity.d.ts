@@ -8,6 +8,10 @@ import { WorkExperience } from './work-experience.entity';
 import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
+export type SpokenLanguage = {
+    language: string;
+    level: string;
+};
 export declare class User {
     id: number;
     email: string;
@@ -25,6 +29,12 @@ export declare class User {
     nationality: string;
     marital_status: string;
     profile_photo: string;
+    national_id_number: string;
+    passport_number: string;
+    id_expiry_date: Date;
+    id_document_front: string;
+    id_document_back: string;
+    address_proof_document: string;
     alternate_phone: string;
     address_line1: string;
     address_line2: string;
@@ -32,6 +42,8 @@ export declare class User {
     state: string;
     postal_code: string;
     contact_country: string;
+    latitude: number;
+    longitude: number;
     professional_summary: string;
     linkedin_url: string;
     github_url: string;
@@ -57,6 +69,7 @@ export declare class User {
     ratingCount: number;
     country: Country;
     language: Language;
+    languages_spoken: SpokenLanguage[];
     work_experience: WorkExperience[];
     education: Education[];
     certifications: Certification[];

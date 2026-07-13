@@ -9,6 +9,8 @@ import { UsersController } from './users.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
 import { Filter } from 'src/filter/entities/filter.entity';
+import { Country } from 'src/country/entities/country.entity';
+import { Language } from 'src/language/entities/language.entity';
 
 @Module({
   imports: [
@@ -18,10 +20,11 @@ import { Filter } from 'src/filter/entities/filter.entity';
       Education,
       Certification,
       Filter,
+      Country,
+      Language,
     ]),
     forwardRef(() => AuthModule),
-      FirebaseModule
-
+    FirebaseModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

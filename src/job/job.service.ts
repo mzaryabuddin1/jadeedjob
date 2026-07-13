@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Raw, Not, IsNull } from 'typeorm';
+import { Repository, Raw } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
 import { FirebaseService } from '../firebase/firebase.service';
@@ -79,7 +79,9 @@ export class JobService {
     // ────────────────────────────────────────────────
     // 3️⃣ REMOVE RAW LOCATION OBJECT (VERY IMPORTANT)
     // ────────────────────────────────────────────────
-    const { location: _location, pageId: _pageId, ...jobData } = data;
+    const jobData = { ...data };
+    delete jobData.location;
+    delete jobData.pageId;
 
     // ────────────────────────────────────────────────
     // 4️⃣ CREATE JOB
@@ -129,9 +131,8 @@ export class JobService {
       lng,
       page = 1,
       limit = 10,
-      radiusKm = 1,
       search = '',
-      sortBy = 'createdAt',
+      sortBy,
       sortOrder = 'DESC',
     } = query;
 
@@ -139,19 +140,15 @@ export class JobService {
     const take = Number(limit);
     const latitude = Number(lat);
     const longitude = Number(lng);
-    const radius = Number(radiusKm);
     const offset = (currentPage - 1) * take;
-    const radiusMeters = radius * 1000;
 
     if (
       !Number.isFinite(latitude) ||
       !Number.isFinite(longitude) ||
       !Number.isFinite(currentPage) ||
       !Number.isFinite(take) ||
-      !Number.isFinite(radius) ||
       currentPage < 1 ||
-      take < 1 ||
-      radius <= 0
+      take < 1
     ) {
       throw new BadRequestException('Invalid nearby job query parameters');
     }
@@ -163,9 +160,15 @@ export class JobService {
       title: 'j.title',
       distance: 'distance',
     };
-    const orderBy = allowedSortColumns[sortBy] ?? allowedSortColumns.createdAt;
-    const orderDirection =
-      String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const hasExplicitSortBy = sortBy !== undefined && sortBy !== '';
+    const requestedSortBy = hasExplicitSortBy ? String(sortBy) : 'distance';
+    const orderBy =
+      allowedSortColumns[requestedSortBy] ?? allowedSortColumns.createdAt;
+    const orderDirection = hasExplicitSortBy
+      ? String(sortOrder).toUpperCase() === 'ASC'
+        ? 'ASC'
+        : 'DESC'
+      : 'ASC';
     const pointText = `POINT(${longitude} ${latitude})`;
     const searchClause = search ? 'AND j.description LIKE ?' : '';
     const searchParams = search ? [`%${search}%`] : [];
@@ -177,30 +180,28 @@ export class JobService {
       `
     SELECT
       j.*,
-      ST_X(j.location) AS lng,
-      ST_Y(j.location) AS lat,
+      CASE WHEN j.location IS NULL THEN NULL ELSE ST_X(j.location) END AS lng,
+      CASE WHEN j.location IS NULL THEN NULL ELSE ST_Y(j.location) END AS lat,
       p.id AS page_id,
       p.company_name,
       p.username AS page_username,
       p.company_logo,
-      ST_Distance_Sphere(
-        j.location,
-        ST_GeomFromText(?, 4326)
-      ) AS distance
+      CASE
+        WHEN j.location IS NULL THEN NULL
+        ELSE ST_Distance_Sphere(
+          j.location,
+          ST_GeomFromText(?, 4326)
+        )
+      END AS distance
     FROM jobs j
     LEFT JOIN pages p ON p.id = j.pageId
     WHERE j.isActive = 1
-      AND j.location IS NOT NULL
-      AND ST_Distance_Sphere(
-        j.location,
-        ST_GeomFromText(?, 4326)
-      ) <= ?
       ${searchClause}
-    ORDER BY ${orderBy} ${orderDirection}
+    ORDER BY j.location IS NULL ASC, ${orderBy} ${orderDirection}
     LIMIT ?
     OFFSET ?
   `,
-      [pointText, pointText, radiusMeters, ...searchParams, take, offset],
+      [pointText, ...searchParams, take, offset],
     );
 
     // ────────────────────────────────────────────────
@@ -211,14 +212,9 @@ export class JobService {
     SELECT COUNT(*) AS total
     FROM jobs j
     WHERE j.isActive = 1
-      AND j.location IS NOT NULL
-      AND ST_Distance_Sphere(
-        j.location,
-        ST_GeomFromText(?, 4326)
-      ) <= ?
       ${searchClause}
   `,
-      [pointText, radiusMeters, ...searchParams],
+      searchParams,
     );
 
     const total = Number(countResult[0]?.total || 0);
@@ -229,10 +225,14 @@ export class JobService {
     return {
       data: jobs.map((j) => ({
         ...j,
-        location: {
-          lat: j.lat,
-          lng: j.lng,
-        },
+        distance: j.distance === null ? null : Number(j.distance),
+        location:
+          j.lat === null || j.lng === null
+            ? null
+            : {
+                lat: Number(j.lat),
+                lng: Number(j.lng),
+              },
         jobType: j.page_id ? 'page' : 'open',
         page: j.page_id
           ? {
@@ -397,7 +397,9 @@ export class JobService {
     // - prevent changing createdBy
     // - remove raw location object
     // ────────────────────────────────────────────────
-    const { createdBy, location, ...patch } = data;
+    const patch = { ...data };
+    delete patch.createdBy;
+    delete patch.location;
 
     // If pageId passed explicitly, keep it (can set to null too if you allow)
     // NOTE: effectivePageId logic already handled permissions above

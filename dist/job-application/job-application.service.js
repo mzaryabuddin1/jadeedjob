@@ -19,11 +19,43 @@ const typeorm_2 = require("typeorm");
 const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const rating_entity_1 = require("../rating/entities/rating.entity");
 let JobApplicationService = class JobApplicationService {
-    constructor(jobAppRepo, jobRepo, userRepo) {
+    constructor(jobAppRepo, jobRepo, userRepo, ratingRepo) {
         this.jobAppRepo = jobAppRepo;
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
+        this.ratingRepo = ratingRepo;
+    }
+    formatDemand(job) {
+        const currency = job.currency || '₨';
+        const amount = typeof job.salaryAmount === 'number'
+            ? job.salaryAmount.toLocaleString()
+            : '0';
+        if (job.salaryType === 'daily-wage')
+            return `${currency} ${amount} / day`;
+        if (job.salaryType === 'monthly')
+            return `${currency} ${amount} / month`;
+        return `${currency} ${amount}`;
+    }
+    getApplicantName(applicant) {
+        if (!applicant)
+            return '';
+        const fullName = (applicant.full_name || '').trim();
+        if (fullName)
+            return fullName;
+        return [applicant.firstName, applicant.lastName].filter(Boolean).join(' ');
+    }
+    getJobSummary(job) {
+        return {
+            id: job.id,
+            title: job.title,
+            description: job.description,
+            salaryType: job.salaryType,
+            salaryAmount: job.salaryAmount,
+            currency: job.currency,
+            filter: job.filter ?? null,
+        };
     }
     async apply(data) {
         const job = await this.jobRepo.findOne({
@@ -69,10 +101,108 @@ let JobApplicationService = class JobApplicationService {
             relations: ['applicant'],
         });
     }
-    async updateStatus(id, status) {
-        const app = await this.jobAppRepo.findOne({ where: { id } });
+    async getReceivedApplicationsForJob(jobId, employerId, query = {}) {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+        const status = query.status || 'all';
+        const job = await this.jobRepo.findOne({
+            where: { id: jobId },
+        });
+        if (!job) {
+            throw new common_1.NotFoundException('Job not found');
+        }
+        if (job.createdBy !== employerId) {
+            throw new common_1.ForbiddenException('You cannot view applications for this job');
+        }
+        const baseWhere = { jobId };
+        const where = status === 'all'
+            ? baseWhere
+            : {
+                ...baseWhere,
+                status,
+            };
+        const [applications, total] = await this.jobAppRepo.findAndCount({
+            where,
+            relations: ['applicant'],
+            skip: (page - 1) * limit,
+            take: limit,
+            order: { createdAt: 'DESC' },
+        });
+        const [pending, accepted, rejected] = await Promise.all([
+            this.jobAppRepo.count({ where: { jobId, status: 'pending' } }),
+            this.jobAppRepo.count({ where: { jobId, status: 'accepted' } }),
+            this.jobAppRepo.count({ where: { jobId, status: 'rejected' } }),
+        ]);
+        const applicationIds = applications.map((application) => application.id);
+        const reviews = applicationIds.length
+            ? await this.ratingRepo.find({
+                where: {
+                    jobApplicationId: (0, typeorm_2.In)(applicationIds),
+                    givenBy: employerId,
+                },
+            })
+            : [];
+        const reviewsByApplicationId = new Map(reviews.map((review) => [review.jobApplicationId, review]));
+        const demand = this.formatDemand(job);
+        return {
+            data: applications.map((application) => {
+                const applicant = application.applicant;
+                const review = reviewsByApplicationId.get(application.id);
+                const ratingAverage = Number(applicant?.ratingAverage || 0);
+                const ratingCount = Number(applicant?.ratingCount || 0);
+                return {
+                    id: application.id,
+                    jobApplicationId: application.id,
+                    jobId: application.jobId,
+                    applicantId: application.applicantId,
+                    name: this.getApplicantName(applicant),
+                    avatarUrl: applicant?.profile_photo ?? null,
+                    demand,
+                    rating: ratingAverage,
+                    ratingCount,
+                    status: application.status,
+                    lastReview: review
+                        ? {
+                            stars: review.stars,
+                            comment: review.comment || '',
+                        }
+                        : null,
+                    applicant: {
+                        id: applicant?.id,
+                        firstName: applicant?.firstName ?? '',
+                        lastName: applicant?.lastName ?? '',
+                        full_name: applicant?.full_name ?? null,
+                        profile_photo: applicant?.profile_photo ?? null,
+                        city: applicant?.city ?? null,
+                        ratingAverage,
+                        ratingCount,
+                    },
+                    createdAt: application.createdAt,
+                    updatedAt: application.updatedAt,
+                };
+            }),
+            counts: {
+                pending,
+                accepted,
+                rejected,
+                all: pending + accepted + rejected,
+            },
+            job: this.getJobSummary(job),
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: page,
+        };
+    }
+    async updateStatus(id, status, employerId) {
+        const app = await this.jobAppRepo.findOne({
+            where: { id },
+            relations: ['job'],
+        });
         if (!app) {
             throw new common_1.BadRequestException('Application not found');
+        }
+        if (app.job.createdBy !== employerId) {
+            throw new common_1.ForbiddenException('You cannot update this application');
         }
         app.status = status;
         return this.jobAppRepo.save(app);
@@ -84,7 +214,9 @@ exports.JobApplicationService = JobApplicationService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
     __param(1, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(3, (0, typeorm_1.InjectRepository)(rating_entity_1.Rating)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository])
 ], JobApplicationService);

@@ -34,11 +34,18 @@ let JobApplicationController = class JobApplicationController {
     async getMyApplications(req, page = 1, limit = 10) {
         return this.jobAppService.getApplicationsByUser(req.user.id, +page, +limit);
     }
+    async getReceivedByJob(params, query, req) {
+        return this.jobAppService.getReceivedApplicationsForJob(Number(params.jobId), req.user.id, {
+            status: query.status,
+            page: Number(query.page),
+            limit: Number(query.limit),
+        });
+    }
     async getByJob(jobId) {
         return this.jobAppService.getApplicationsByJob(Number(jobId));
     }
-    async updateStatus(id, status) {
-        return this.jobAppService.updateStatus(Number(id), status);
+    async updateStatus(params, body, req) {
+        return this.jobAppService.updateStatus(Number(params.id), body.status, req.user.id);
     }
 };
 exports.JobApplicationController = JobApplicationController;
@@ -63,6 +70,23 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "getMyApplications", null);
 __decorate([
+    (0, common_1.Get)('job/:jobId/received'),
+    __param(0, (0, common_1.Param)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        jobId: joi_1.default.number().required(),
+    })))),
+    __param(1, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        status: joi_1.default.string()
+            .valid('pending', 'accepted', 'rejected', 'all')
+            .default('all'),
+        page: joi_1.default.number().integer().min(1).default(1),
+        limit: joi_1.default.number().integer().min(1).max(100).default(20),
+    })))),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], JobApplicationController.prototype, "getReceivedByJob", null);
+__decorate([
     (0, common_1.Get)('job/:jobId'),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         jobId: joi_1.default.number().required(),
@@ -74,16 +98,17 @@ __decorate([
 ], JobApplicationController.prototype, "getByJob", null);
 __decorate([
     (0, common_1.Patch)(':id/status'),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+    __param(0, (0, common_1.Param)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         id: joi_1.default.number().required(),
+    })))),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         status: joi_1.default.string()
             .valid('pending', 'accepted', 'rejected')
             .required(),
-    }))),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Body)('status')),
+    })))),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:paramtypes", [Object, Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "updateStatus", null);
 exports.JobApplicationController = JobApplicationController = __decorate([

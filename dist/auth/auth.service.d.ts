@@ -2,7 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
-import { Language } from 'twilio/lib/twiml/VoiceResponse';
+import { Language } from 'src/language/entities/language.entity';
 import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 export declare class AuthService {
@@ -14,8 +14,10 @@ export declare class AuthService {
     private firebaseService;
     constructor(jwtService: JwtService, userRepo: Repository<User>, countryRepo: Repository<Country>, languageRepo: Repository<Language>, filterService: FilterService, firebaseService: FirebaseService);
     generateToken(user: any): string;
+    toPublicUser(user: any): any;
     findUserByPhone(phone: string): Promise<User>;
     createOrGetUser(data: any): Promise<User | User[]>;
+    validateRegistrationRelations(countryId: number, languageId: number): Promise<void>;
     hashPassword(password: string): {
         salt: string;
         hash: string;

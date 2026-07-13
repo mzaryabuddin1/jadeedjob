@@ -23,6 +23,17 @@ const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const joi_1 = __importDefault(require("joi"));
 const twilio_service_1 = require("../twilio/twilio.service");
 const users_service_1 = require("../users/users.service");
+const relationIdSchema = joi_1.default.alternatives().try(joi_1.default.number().integer().positive(), joi_1.default.string().pattern(/^\d+$/));
+const optionalString = () => joi_1.default.string().allow('', null).optional();
+const getRelationId = (value) => {
+    if (value === undefined || value === null || value === '')
+        return undefined;
+    const id = Number(value);
+    if (!Number.isInteger(id) || id <= 0)
+        return undefined;
+    return id;
+};
+const isRelationIdLike = (value) => getRelationId(value) !== undefined;
 let AuthController = class AuthController {
     constructor(authService, otpService, twilioService, usersService) {
         this.authService = authService;
@@ -34,21 +45,45 @@ let AuthController = class AuthController {
         const existing = await this.authService.findUserByPhone(body.phone);
         if (existing)
             throw new common_1.BadRequestException('Phone already registered');
+        const countryId = getRelationId(body.countryId ?? body.country);
+        const languageId = getRelationId(body.languageId ?? body.language);
+        if (!countryId) {
+            throw new common_1.BadRequestException('countryId must be a valid ID');
+        }
+        if (!languageId) {
+            throw new common_1.BadRequestException('languageId must be a valid ID');
+        }
+        await this.authService.validateRegistrationRelations(countryId, languageId);
+        const countryDisplay = typeof body.country === 'string' && !isRelationIdLike(body.country)
+            ? body.country
+            : undefined;
         const { salt, hash } = this.authService.hashPassword(body.password);
-        body.passwordHash = hash;
-        body.passwordSalt = salt;
-        delete body.password;
-        const otp = this.otpService.generateOTP(body.phone, body);
+        const registrationData = {
+            ...body,
+            lastName: body.lastName || '',
+            country: countryId,
+            language: languageId,
+            profile_photo: body.photoUri || undefined,
+            contact_country: countryDisplay,
+            passwordHash: hash,
+            passwordSalt: salt,
+        };
+        delete registrationData.countryId;
+        delete registrationData.languageId;
+        delete registrationData.photoUri;
+        delete registrationData.password;
+        const otp = this.otpService.generateOTP(body.phone, registrationData);
         return { message: `OTP sent to ${body.phone}`, otp };
     }
     async verifyOtp(body) {
-        const { phone, code, fcmToken = null } = body;
+        const { phone, otp, code, fcmToken = null } = body;
+        const submittedOtp = otp ?? code;
         const entry = this.otpService.getOtpEntry(phone);
         if (!entry)
             throw new common_1.UnauthorizedException('OTP not found');
         if (entry.used)
             throw new common_1.UnauthorizedException('OTP already used');
-        if (entry.code !== code)
+        if (entry.code !== submittedOtp)
             throw new common_1.UnauthorizedException('Invalid OTP');
         if (new Date() > entry.expiresAt) {
             this.otpService.deleteOtp(phone);
@@ -60,17 +95,18 @@ let AuthController = class AuthController {
             isVerified: true,
         }));
         if (fcmToken) {
-            await this.usersService.updateUser(user.id, {
-                fcmToken,
-            });
+            await this.authService.attachFcmToken(user.id, fcmToken);
         }
         const token = this.authService.generateToken(user);
         this.otpService.deleteOtp(phone);
-        return { access_token: token, user };
+        return {
+            access_token: token,
+            user: this.authService.toPublicUser(user),
+        };
     }
     async login(dto) {
         const user = await this.authService.validateUser(dto.phone, dto.password);
-        const { passwordHash, passwordSalt, ...publicUser } = user;
+        const publicUser = this.authService.toPublicUser(user);
         if (dto.fcmToken) {
             await this.authService.attachFcmToken(user.id, dto.fcmToken);
         }
@@ -116,16 +152,24 @@ __decorate([
     (0, common_1.Post)('register/send-otp'),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         firstName: joi_1.default.string().required(),
-        lastName: joi_1.default.string().required(),
+        lastName: optionalString(),
         phone: joi_1.default.string().required(),
-        country: joi_1.default.number().required(),
-        language: joi_1.default.number().required(),
+        countryId: relationIdSchema.optional(),
+        languageId: relationIdSchema.optional(),
+        country: joi_1.default.alternatives()
+            .try(relationIdSchema, joi_1.default.string().allow('', null))
+            .optional(),
+        language: relationIdSchema.optional(),
         password: joi_1.default.string()
             .min(6)
             .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
             .required(),
         email: joi_1.default.string().email().optional(),
         full_name: joi_1.default.string().optional(),
+        photoUri: optionalString(),
+        city: optionalString(),
+        latitude: joi_1.default.number().min(-90).max(90).optional(),
+        longitude: joi_1.default.number().min(-180).max(180).optional(),
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),

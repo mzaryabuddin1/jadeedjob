@@ -54,7 +54,9 @@ let JobService = class JobService {
         const location = data.isRemote === true
             ? null
             : () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
-        const { location: _location, pageId: _pageId, ...jobData } = data;
+        const jobData = { ...data };
+        delete jobData.location;
+        delete jobData.pageId;
         const insertResult = await this.jobRepo.insert({
             ...jobData,
             createdBy: userId,
@@ -79,22 +81,18 @@ let JobService = class JobService {
         return savedJob;
     }
     async findNearbyJobs(query) {
-        const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', sortBy = 'createdAt', sortOrder = 'DESC', } = query;
+        const { lat, lng, page = 1, limit = 10, search = '', sortBy, sortOrder = 'DESC', } = query;
         const currentPage = Number(page);
         const take = Number(limit);
         const latitude = Number(lat);
         const longitude = Number(lng);
-        const radius = Number(radiusKm);
         const offset = (currentPage - 1) * take;
-        const radiusMeters = radius * 1000;
         if (!Number.isFinite(latitude) ||
             !Number.isFinite(longitude) ||
             !Number.isFinite(currentPage) ||
             !Number.isFinite(take) ||
-            !Number.isFinite(radius) ||
             currentPage < 1 ||
-            take < 1 ||
-            radius <= 0) {
+            take < 1) {
             throw new common_1.BadRequestException('Invalid nearby job query parameters');
         }
         const allowedSortColumns = {
@@ -104,56 +102,58 @@ let JobService = class JobService {
             title: 'j.title',
             distance: 'distance',
         };
-        const orderBy = allowedSortColumns[sortBy] ?? allowedSortColumns.createdAt;
-        const orderDirection = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        const hasExplicitSortBy = sortBy !== undefined && sortBy !== '';
+        const requestedSortBy = hasExplicitSortBy ? String(sortBy) : 'distance';
+        const orderBy = allowedSortColumns[requestedSortBy] ?? allowedSortColumns.createdAt;
+        const orderDirection = hasExplicitSortBy
+            ? String(sortOrder).toUpperCase() === 'ASC'
+                ? 'ASC'
+                : 'DESC'
+            : 'ASC';
         const pointText = `POINT(${longitude} ${latitude})`;
         const searchClause = search ? 'AND j.description LIKE ?' : '';
         const searchParams = search ? [`%${search}%`] : [];
         const jobs = await this.jobRepo.query(`
     SELECT
       j.*,
-      ST_X(j.location) AS lng,
-      ST_Y(j.location) AS lat,
+      CASE WHEN j.location IS NULL THEN NULL ELSE ST_X(j.location) END AS lng,
+      CASE WHEN j.location IS NULL THEN NULL ELSE ST_Y(j.location) END AS lat,
       p.id AS page_id,
       p.company_name,
       p.username AS page_username,
       p.company_logo,
-      ST_Distance_Sphere(
-        j.location,
-        ST_GeomFromText(?, 4326)
-      ) AS distance
+      CASE
+        WHEN j.location IS NULL THEN NULL
+        ELSE ST_Distance_Sphere(
+          j.location,
+          ST_GeomFromText(?, 4326)
+        )
+      END AS distance
     FROM jobs j
     LEFT JOIN pages p ON p.id = j.pageId
     WHERE j.isActive = 1
-      AND j.location IS NOT NULL
-      AND ST_Distance_Sphere(
-        j.location,
-        ST_GeomFromText(?, 4326)
-      ) <= ?
       ${searchClause}
-    ORDER BY ${orderBy} ${orderDirection}
+    ORDER BY j.location IS NULL ASC, ${orderBy} ${orderDirection}
     LIMIT ?
     OFFSET ?
-  `, [pointText, pointText, radiusMeters, ...searchParams, take, offset]);
+  `, [pointText, ...searchParams, take, offset]);
         const countResult = await this.jobRepo.query(`
     SELECT COUNT(*) AS total
     FROM jobs j
     WHERE j.isActive = 1
-      AND j.location IS NOT NULL
-      AND ST_Distance_Sphere(
-        j.location,
-        ST_GeomFromText(?, 4326)
-      ) <= ?
       ${searchClause}
-  `, [pointText, radiusMeters, ...searchParams]);
+  `, searchParams);
         const total = Number(countResult[0]?.total || 0);
         return {
             data: jobs.map((j) => ({
                 ...j,
-                location: {
-                    lat: j.lat,
-                    lng: j.lng,
-                },
+                distance: j.distance === null ? null : Number(j.distance),
+                location: j.lat === null || j.lng === null
+                    ? null
+                    : {
+                        lat: Number(j.lat),
+                        lng: Number(j.lng),
+                    },
                 jobType: j.page_id ? 'page' : 'open',
                 page: j.page_id
                     ? {
@@ -265,7 +265,9 @@ let JobService = class JobService {
             }
             locationUpdate = () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
         }
-        const { createdBy, location, ...patch } = data;
+        const patch = { ...data };
+        delete patch.createdBy;
+        delete patch.location;
         const updatePayload = {
             ...patch,
         };

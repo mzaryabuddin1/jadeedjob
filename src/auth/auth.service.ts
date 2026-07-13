@@ -1,11 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
-import { Language } from 'twilio/lib/twiml/VoiceResponse';
+import { Language } from 'src/language/entities/language.entity';
 import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 
@@ -31,6 +35,18 @@ export class AuthService {
     return this.jwtService.sign({ id: user.id });
   }
 
+  toPublicUser(user: any) {
+    const {
+      passwordHash,
+      passwordSalt,
+      fcmTokens,
+      password,
+      ...publicUser
+    } = user as any;
+
+    return publicUser;
+  }
+
   // ────────────────────────────────────────────────
   // CHECK USER BY PHONE
   // ────────────────────────────────────────────────
@@ -48,20 +64,43 @@ export class AuthService {
     const existing = await this.findUserByPhone(data.phone);
     if (existing) return existing;
 
+    const countryId = Number(data.country);
+    const languageId = Number(data.language);
+
+    if (!Number.isInteger(countryId) || countryId <= 0) {
+      throw new BadRequestException('countryId must be a valid ID');
+    }
+
+    if (!Number.isInteger(languageId) || languageId <= 0) {
+      throw new BadRequestException('languageId must be a valid ID');
+    }
+
     const country = await this.countryRepo.findOne({
-      where: { id: Number(data.country) },
+      where: { id: countryId },
     });
 
     const language = await this.languageRepo.findOne({
-      where: { id: Number(data.language) },
+      where: { id: languageId },
     });
+
+    if (!country) throw new BadRequestException('Country not found');
+    if (!language) throw new BadRequestException('Language not found');
 
     // 🔥 Get top 9 filters by job availability
     const defaultFilterPreferences =
       await this.filterService.getTopFiltersByJobs(9);
 
+    const {
+      country: _country,
+      language: _language,
+      countryId: _countryId,
+      languageId: _languageId,
+      photoUri: _photoUri,
+      ...userData
+    } = data;
+
     const user = this.userRepo.create({
-      ...data,
+      ...userData,
       country,
       language,
       isBanned: false,
@@ -69,6 +108,16 @@ export class AuthService {
     });
 
     return this.userRepo.save(user);
+  }
+
+  async validateRegistrationRelations(countryId: number, languageId: number) {
+    const [country, language] = await Promise.all([
+      this.countryRepo.findOne({ where: { id: countryId } }),
+      this.languageRepo.findOne({ where: { id: languageId } }),
+    ]);
+
+    if (!country) throw new BadRequestException('Country not found');
+    if (!language) throw new BadRequestException('Language not found');
   }
 
   // ────────────────────────────────────────────────
