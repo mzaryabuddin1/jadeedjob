@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.JobApplicationModule = void 0;
 const common_1 = require("@nestjs/common");
 const job_application_controller_1 = require("./job-application.controller");
+const employer_job_application_controller_1 = require("./employer-job-application.controller");
 const job_application_service_1 = require("./job-application.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const job_application_entity_1 = require("./entities/job-application.entity");
@@ -21,7 +22,7 @@ exports.JobApplicationModule = JobApplicationModule;
 exports.JobApplicationModule = JobApplicationModule = __decorate([
     (0, common_1.Module)({
         imports: [typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User, rating_entity_1.Rating])],
-        controllers: [job_application_controller_1.JobApplicationController],
+        controllers: [job_application_controller_1.JobApplicationController, employer_job_application_controller_1.EmployerJobApplicationController],
         providers: [job_application_service_1.JobApplicationService],
     })
 ], JobApplicationModule);
