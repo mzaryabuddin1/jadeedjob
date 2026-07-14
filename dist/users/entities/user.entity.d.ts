@@ -21,6 +21,9 @@ export declare class User {
     passwordHash: string;
     passwordSalt: string;
     isVerified: boolean;
+    phoneVerifiedAt: Date;
+    referralCode: string;
+    tokenVersion: number;
     isBanned: boolean;
     full_name: string;
     father_name: string;
@@ -62,6 +65,7 @@ export declare class User {
     verification_date: Date;
     rejection_reason: string;
     notes: string;
+    admin_notes: string;
     fcmTokens: string[];
     ratingsReceived: Rating[];
     ratingsGiven: Rating[];

@@ -13,6 +13,7 @@ exports.CompanyPage = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../users/entities/user.entity");
 const page_member_entity_1 = require("./page-member.entity");
+const company_branch_entity_1 = require("./company-branch.entity");
 let CompanyPage = class CompanyPage {
 };
 exports.CompanyPage = CompanyPage;
@@ -187,6 +188,12 @@ __decorate([
     }),
     __metadata("design:type", Array)
 ], CompanyPage.prototype, "members", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => company_branch_entity_1.CompanyBranch, (branch) => branch.company, {
+        cascade: true,
+    }),
+    __metadata("design:type", Array)
+], CompanyPage.prototype, "branches", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

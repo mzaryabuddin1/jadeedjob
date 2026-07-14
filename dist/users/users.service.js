@@ -25,6 +25,8 @@ const filter_entity_1 = require("../filter/entities/filter.entity");
 const filter_icon_util_1 = require("../filter/filter-icon.util");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
+const profile_verification_util_1 = require("./profile-verification.util");
+const referral_code_util_1 = require("./referral-code.util");
 let UsersService = class UsersService {
     constructor(userRepo, filterRepo, firebaseService) {
         this.userRepo = userRepo;
@@ -58,8 +60,46 @@ let UsersService = class UsersService {
             .map((filter) => (0, filter_icon_util_1.withFilterIconMeta)(filter));
     }
     toPublicUser(user) {
-        const { passwordHash, passwordSalt, fcmTokens, password, ...publicUser } = user;
+        const { passwordHash, passwordSalt, fcmTokens, password, admin_notes, verified_by_admin_id, ...publicUser } = user;
         return publicUser;
+    }
+    async generateUniqueReferralCode(repo = this.userRepo) {
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            const referralCode = (0, referral_code_util_1.generateReferralCode)();
+            const existing = await repo.findOne({
+                where: { referralCode },
+                select: ['id'],
+            });
+            if (!existing)
+                return referralCode;
+        }
+        throw new common_1.BadRequestException('Unable to generate referral code');
+    }
+    async normalizeProfileSystemFields(user, repo = this.userRepo) {
+        let changed = false;
+        if (!user.referralCode) {
+            user.referralCode = await this.generateUniqueReferralCode(repo);
+            changed = true;
+        }
+        if (user.isVerified && !user.phoneVerifiedAt) {
+            user.phoneVerifiedAt = new Date();
+            changed = true;
+        }
+        const nextVerified = (0, profile_verification_util_1.computeUserIsVerified)(user);
+        if (user.isVerified !== nextVerified) {
+            user.isVerified = nextVerified;
+            changed = true;
+        }
+        if (changed) {
+            return repo.save(user);
+        }
+        return user;
+    }
+    buildProfileResponse(user) {
+        return {
+            user: this.toPublicUser(user),
+            verificationRequirements: (0, profile_verification_util_1.buildVerificationRequirements)(user),
+        };
     }
     normalizeNullableDates(data, fields) {
         for (const field of fields) {
@@ -88,13 +128,24 @@ let UsersService = class UsersService {
         return user;
     }
     async getPublicUserById(id) {
-        const user = await this.userRepo.findOne({
+        let user = await this.userRepo.findOne({
             where: { id },
             relations: ['country', 'language'],
         });
         if (!user)
             throw new common_1.NotFoundException('User not found');
+        user = await this.normalizeProfileSystemFields(user);
         return this.toPublicUser(user);
+    }
+    async getMyProfileResponse(id) {
+        let user = await this.userRepo.findOne({
+            where: { id },
+            relations: ['country', 'language'],
+        });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        user = await this.normalizeProfileSystemFields(user);
+        return this.buildProfileResponse(user);
     }
     async updateUser(id, data) {
         const user = await this.userRepo.findOne({ where: { id } });
@@ -124,7 +175,7 @@ let UsersService = class UsersService {
             delete updateData.work_experience;
             delete updateData.education;
             delete updateData.certifications;
-            const countryId = this.relationIdFromValue('country', updateData.country);
+            const countryId = this.relationIdFromValue('country', updateData.countryId ?? updateData.country);
             if (countryId !== undefined) {
                 const country = await countryRepo.findOne({
                     where: { id: countryId },
@@ -134,7 +185,8 @@ let UsersService = class UsersService {
                 user.country = country;
             }
             delete updateData.country;
-            const languageId = this.relationIdFromValue('language', updateData.language);
+            delete updateData.countryId;
+            const languageId = this.relationIdFromValue('language', updateData.languageId ?? updateData.language);
             if (languageId !== undefined) {
                 const language = await languageRepo.findOne({
                     where: { id: languageId },
@@ -144,12 +196,27 @@ let UsersService = class UsersService {
                 user.language = language;
             }
             delete updateData.language;
+            delete updateData.languageId;
             this.normalizeNullableDates(updateData, [
                 'date_of_birth',
                 'id_expiry_date',
                 'verification_date',
             ]);
+            const documentFields = [
+                'id_document_front',
+                'id_document_back',
+                'address_proof_document',
+            ];
+            const documentsChanged = documentFields.some((field) => Object.prototype.hasOwnProperty.call(updateData, field) &&
+                updateData[field] !== user[field]);
             Object.assign(user, updateData);
+            if (documentsChanged) {
+                user.kyc_status = 'pending';
+                user.verification_date = null;
+                user.verified_by_admin_id = null;
+                user.rejection_reason = null;
+            }
+            user.isVerified = (0, profile_verification_util_1.computeUserIsVerified)(user);
             const savedUser = await userRepo.save(user);
             if (Array.isArray(workExperience)) {
                 await workExperienceRepo
@@ -217,7 +284,22 @@ let UsersService = class UsersService {
         });
         if (!updatedUser)
             throw new common_1.NotFoundException('User not found');
-        return this.toPublicUser(updatedUser);
+        return this.toPublicUser(await this.normalizeProfileSystemFields(updatedUser));
+    }
+    async updateProfileDocument(userId, type, fileUrl) {
+        const fieldByType = {
+            id_front: 'id_document_front',
+            id_back: 'id_document_back',
+            address_proof: 'address_proof_document',
+            profile_photo: 'profile_photo',
+        };
+        const field = fieldByType[type];
+        if (!field)
+            throw new common_1.BadRequestException('Invalid document type');
+        await this.updateMyProfile(userId, {
+            [field]: fileUrl,
+        });
+        return this.getMyProfileResponse(userId);
     }
     async findUsersByIds(ids) {
         return this.userRepo.find({

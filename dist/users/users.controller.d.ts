@@ -1,16 +1,25 @@
 import { UsersService } from './users.service';
 import { Request } from 'express';
-import { AuthService } from 'src/auth/auth.service';
+import { FilesService } from 'src/files/files.service';
 export declare class UsersController {
     private readonly usersService;
-    private readonly authService;
-    constructor(usersService: UsersService, authService: AuthService);
+    private readonly filesService;
+    constructor(usersService: UsersService, filesService: FilesService);
     getMe(req: Request): Promise<{
         user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
     }>;
     updateMe(req: Request, body: any): Promise<{
-        message: string;
         user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+        message: string;
+    }>;
+    uploadMyDocument(req: Request, file: Express.Multer.File, body: any): Promise<{
+        user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+        message: string;
+        fileName: string;
+        fileUrl: string;
     }>;
     getMyPreferences(req: any): Promise<{
         data: number[];

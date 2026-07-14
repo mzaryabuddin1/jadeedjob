@@ -12,12 +12,23 @@ export declare class UsersService {
     private hasInvalidFilterPreferenceIds;
     private findFiltersInPreferenceOrder;
     private toPublicUser;
+    private generateUniqueReferralCode;
+    private normalizeProfileSystemFields;
+    private buildProfileResponse;
     private normalizeNullableDates;
     private relationIdFromValue;
     getUserById(id: number): Promise<User>;
     getPublicUserById(id: number): Promise<any>;
+    getMyProfileResponse(id: number): Promise<{
+        user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+    }>;
     updateUser(id: number, data: any): Promise<User>;
     updateMyProfile(id: number, data: ProfileUpdateData): Promise<any>;
+    updateProfileDocument(userId: number, type: 'id_front' | 'id_back' | 'address_proof' | 'profile_photo', fileUrl: string): Promise<{
+        user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+    }>;
     findUsersByIds(ids: number[]): Promise<User[]>;
     getUserPreference(userId: number): Promise<{
         data: number[];

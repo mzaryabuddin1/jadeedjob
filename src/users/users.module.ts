@@ -11,6 +11,7 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
 import { Filter } from 'src/filter/entities/filter.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import { FilesModule } from 'src/files/files.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { Language } from 'src/language/entities/language.entity';
     ]),
     forwardRef(() => AuthModule),
     FirebaseModule,
+    FilesModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

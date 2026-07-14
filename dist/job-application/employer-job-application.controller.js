@@ -44,7 +44,7 @@ __decorate([
     })))),
     __param(1, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         status: joi_1.default.string()
-            .valid('pending', 'accepted', 'rejected', 'all')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed', 'all')
             .default('all'),
         page: joi_1.default.number().integer().min(1).default(1),
         limit: joi_1.default.number().integer().min(1).max(100).default(20),
@@ -61,7 +61,7 @@ __decorate([
     })))),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         status: joi_1.default.string()
-            .valid('pending', 'accepted', 'rejected')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed')
             .required(),
     })))),
     __param(2, (0, common_1.Req)()),

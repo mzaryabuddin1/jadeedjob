@@ -1,19 +1,28 @@
 import {
   Controller,
   Patch,
+  Post,
   Body,
   UseGuards,
   Req,
   NotFoundException,
   UsePipes,
   Get,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Request } from 'express';
 import * as Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
-import { AuthService } from 'src/auth/auth.service';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { mkdirSync } from 'fs';
+import { extname } from 'path';
+import { randomBytes } from 'crypto';
+import { FilesService } from 'src/files/files.service';
 
 const optionalString = () => Joi.string().allow('', null).optional();
 const optionalUri = () => Joi.string().uri().allow('', null).optional();
@@ -65,12 +74,38 @@ const spokenLanguageSchema = Joi.object({
   level: optionalString(),
 });
 
+const documentUploadOptions = {
+  storage: diskStorage({
+    destination: (req, file, callback) => {
+      const uploadPath = './uploads/profile-documents';
+      mkdirSync(uploadPath, { recursive: true });
+      callback(null, uploadPath);
+    },
+    filename: (req, file, callback) => {
+      const uniqueName = `${Date.now()}-${randomBytes(6).toString('hex')}${extname(file.originalname)}`;
+      callback(null, uniqueName);
+    },
+  }),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (req, file, callback) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowed.includes(file.mimetype)) {
+      callback(new BadRequestException('Unsupported document file type') as any, false);
+      return;
+    }
+
+    callback(null, true);
+  },
+};
+
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly authService: AuthService,
+    private readonly filesService: FilesService,
   ) {}
 
   @Get('me')
@@ -78,9 +113,7 @@ export class UsersController {
     const userId = (req.user as any)?.id;
     if (!userId) throw new NotFoundException('User not found or unauthorized');
 
-    const user = await this.usersService.getPublicUserById(userId);
-
-    return { user };
+    return this.usersService.getMyProfileResponse(userId);
   }
 
   @Patch('me')
@@ -90,16 +123,10 @@ export class UsersController {
         email: Joi.string().email().allow('', null).optional(),
         firstName: optionalString(),
         lastName: optionalString(),
-        phone: optionalString(),
         country: optionalRelationId(),
+        countryId: optionalRelationId(),
         language: optionalRelationId(),
-        password: Joi.string()
-          .min(6)
-          .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
-          .message(
-            'Password must include uppercase, lowercase, number, and special character',
-          )
-          .optional(),
+        languageId: optionalRelationId(),
 
         // 🔥 filter_preferences allowed here
         filter_preferences: Joi.array()
@@ -137,14 +164,14 @@ export class UsersController {
 
         professional_summary: optionalString(),
 
-        skills: Joi.array().items(Joi.string()).optional(),
-        technical_skills: Joi.array().items(Joi.string()).optional(),
-        soft_skills: Joi.array().items(Joi.string()).optional(),
-        languages_spoken: Joi.array().items(spokenLanguageSchema).optional(),
+        skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
+        technical_skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
+        soft_skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
+        languages_spoken: Joi.array().max(20).items(spokenLanguageSchema).optional(),
 
-        work_experience: Joi.array().items(workExperienceSchema).optional(),
-        education: Joi.array().items(educationSchema).optional(),
-        certifications: Joi.array().items(certificationSchema).optional(),
+        work_experience: Joi.array().max(25).items(workExperienceSchema).optional(),
+        education: Joi.array().max(25).items(educationSchema).optional(),
+        certifications: Joi.array().max(25).items(certificationSchema).optional(),
 
         linkedin_url: optionalUri(),
         github_url: optionalUri(),
@@ -176,41 +203,75 @@ export class UsersController {
     const forbidden = [
       'passwordHash',
       'passwordSalt',
+      'password',
+      'phone',
       'isBanned',
       'isVerified',
       'verified_by_admin_id',
       'kyc_status',
       'verification_date',
       'rejection_reason',
+      'referralCode',
+      'tokenVersion',
+      'phoneVerifiedAt',
+      'admin_notes',
     ];
     forbidden.forEach((field) => delete body[field]);
 
-    // Password update
-    if (body?.password) {
-      const { salt, hash } = this.authService.hashPassword(body.password);
-      body.passwordHash = hash;
-      body.passwordSalt = salt;
-      delete body.password;
-    }
-
     // Update normal profile fields
-    let updatedUser = await this.usersService.updateMyProfile(userId, body);
+    await this.usersService.updateMyProfile(userId, body);
 
     // 🔥 If filter_preferences changed, update DB + Firebase topics
     if (newFilterPreferences !== undefined) {
-      const normalizedFilterPreferences =
-        await this.usersService.updateUserFilterPreferences(
-          userId,
-          newFilterPreferences,
-        );
-      // reflect in response
-      (updatedUser as any).filter_preferences = normalizedFilterPreferences;
-      updatedUser = await this.usersService.getPublicUserById(userId);
+      await this.usersService.updateUserFilterPreferences(
+        userId,
+        newFilterPreferences,
+      );
     }
+
+    const profile = await this.usersService.getMyProfileResponse(userId);
 
     return {
       message: 'Profile updated successfully',
-      user: updatedUser,
+      ...profile,
+    };
+  }
+
+  @Post('me/documents')
+  @UseInterceptors(FileInterceptor('file', documentUploadOptions))
+  async uploadMyDocument(
+    @Req() req: Request,
+    @UploadedFile() file: Express.Multer.File,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          type: Joi.string()
+            .valid('id_front', 'id_back', 'address_proof', 'profile_photo')
+            .required(),
+        }),
+      ),
+    )
+    body: any,
+  ) {
+    const userId = (req.user as any)?.id;
+    if (!userId) throw new NotFoundException('User not found or unauthorized');
+    if (!file) throw new BadRequestException('No file provided');
+
+    const fileUrl = this.filesService.getFileUrl(
+      file.filename,
+      'profile-documents',
+    );
+    const profile = await this.usersService.updateProfileDocument(
+      userId,
+      body.type,
+      fileUrl,
+    );
+
+    return {
+      message: 'Document uploaded successfully',
+      fileName: file.filename,
+      fileUrl,
+      ...profile,
     };
   }
 

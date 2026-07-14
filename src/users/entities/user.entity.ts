@@ -50,6 +50,15 @@ export class User {
   @Column({ default: false })
   isVerified: boolean;
 
+  @Column({ type: 'datetime', nullable: true })
+  phoneVerifiedAt: Date;
+
+  @Column({ unique: true, nullable: true })
+  referralCode: string;
+
+  @Column({ type: 'int', default: 0 })
+  tokenVersion: number;
+
   @Column({ default: false })
   isBanned: boolean;
 
@@ -180,6 +189,9 @@ export class User {
 
   @Column({ nullable: true })
   notes: string;
+
+  @Column({ nullable: true, type: 'text' })
+  admin_notes: string;
 
   @Column({ type: 'simple-array', nullable: true })
   fcmTokens: string[];

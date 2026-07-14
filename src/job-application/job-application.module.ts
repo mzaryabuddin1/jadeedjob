@@ -7,9 +7,14 @@ import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
+import { PageMember } from 'src/pages/entities/page-member.entity';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([JobApplication, Job, User, Rating])],
+  imports: [
+    TypeOrmModule.forFeature([JobApplication, Job, User, Rating, PageMember]),
+    NotificationsModule,
+  ],
   controllers: [JobApplicationController, EmployerJobApplicationController],
   providers: [JobApplicationService],
 })

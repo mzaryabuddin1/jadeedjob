@@ -125,6 +125,92 @@ export declare class ReelsController {
         }[];
         nextCursor: string;
     }>;
+    getReelsByAudio(audioId: string, query: any, req: any): Promise<{
+        audioId: string;
+        audioTitle: string;
+        usageCount: number;
+        relatedReels: {
+            id: string;
+            videoUrl: string;
+            category: import("./entities/reel.entity").ReelCategory;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            caption: string;
+            audioTitle: string;
+            linkedJobId: number;
+            stats: {
+                likes: number;
+                comments: number;
+                saves: number;
+                shares: number;
+            };
+            viewerState: {
+                liked: boolean;
+                saved: boolean;
+                followingCreator: boolean;
+                isOwner: boolean;
+            };
+            visibility: import("./entities/reel.entity").ReelVisibility;
+            status: import("./entities/reel.entity").ReelStatus;
+            allowComments: boolean;
+            allowSharing: boolean;
+            createdAt: Date;
+            publishedAt: Date;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    getAudio(id: number, req: any): Promise<{
+        audioId: string;
+        audioTitle: string;
+        creator: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        originalReel: {
+            id: string;
+            videoUrl: string;
+            category: import("./entities/reel.entity").ReelCategory;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            caption: string;
+            audioTitle: string;
+            linkedJobId: number;
+            stats: {
+                likes: number;
+                comments: number;
+                saves: number;
+                shares: number;
+            };
+            viewerState: {
+                liked: boolean;
+                saved: boolean;
+                followingCreator: boolean;
+                isOwner: boolean;
+            };
+            visibility: import("./entities/reel.entity").ReelVisibility;
+            status: import("./entities/reel.entity").ReelStatus;
+            allowComments: boolean;
+            allowSharing: boolean;
+            createdAt: Date;
+            publishedAt: Date;
+        };
+        usageCount: number;
+    }>;
     like(id: number, req: any): Promise<{
         id: string;
         videoUrl: string;

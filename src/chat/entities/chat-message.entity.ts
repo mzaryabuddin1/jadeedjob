@@ -35,12 +35,22 @@ export class ChatMessage {
   @Column({ nullable: true })
   mediaUrl: string; 
 
+  @Column({ type: 'json', nullable: true })
+  attachments: Array<{
+    fileUrl: string;
+    fileName?: string;
+    contentType?: string;
+  }>;
+
   @Column({
     type: 'enum',
     enum: ['text', 'image', 'video', 'audio', 'file'],
     default: 'text',
   })
   messageType: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  readAt: Date;
 
   @CreateDateColumn()
   createdAt: Date;

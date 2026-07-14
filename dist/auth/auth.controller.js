@@ -23,8 +23,13 @@ const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const joi_1 = __importDefault(require("joi"));
 const twilio_service_1 = require("../twilio/twilio.service");
 const users_service_1 = require("../users/users.service");
+const jwt_auth_guard_1 = require("./jwt-auth.guard");
 const relationIdSchema = joi_1.default.alternatives().try(joi_1.default.number().integer().positive(), joi_1.default.string().pattern(/^\d+$/));
 const optionalString = () => joi_1.default.string().allow('', null).optional();
+const passwordSchema = joi_1.default.string()
+    .min(6)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
+    .message('Password must include uppercase, lowercase, number, and special character');
 const getRelationId = (value) => {
     if (value === undefined || value === null || value === '')
         return undefined;
@@ -40,6 +45,22 @@ let AuthController = class AuthController {
         this.otpService = otpService;
         this.twilioService = twilioService;
         this.usersService = usersService;
+    }
+    async deliverOtp(phone, code, purpose) {
+        if (!process.env.TWILIO_ACCOUNT_SID ||
+            !process.env.TWILIO_AUTH_TOKEN ||
+            !process.env.TWILIO_PHONE_NUMBER) {
+            return;
+        }
+        try {
+            await this.twilioService.sendSms(phone, `Your JobsLoot ${purpose} OTP is ${code}. It expires in 5 minutes.`);
+        }
+        catch (error) {
+            if (process.env.NODE_ENV === 'production') {
+                throw error;
+            }
+            console.warn(`Skipping OTP SMS delivery in dev: ${error.message}`);
+        }
     }
     async sendOtp(body) {
         const existing = await this.authService.findUserByPhone(body.phone);
@@ -72,79 +93,147 @@ let AuthController = class AuthController {
         delete registrationData.languageId;
         delete registrationData.photoUri;
         delete registrationData.password;
-        const otp = this.otpService.generateOTP(body.phone, registrationData);
-        return { message: `OTP sent to ${body.phone}`, otp };
+        const { otp } = await this.otpService.createOtp({
+            purpose: 'register',
+            target: body.phone,
+            metadata: {
+                registrationData,
+            },
+        });
+        await this.deliverOtp(body.phone, otp, 'registration');
+        return this.otpService.otpResponse(`OTP sent to ${body.phone}`, otp);
     }
     async verifyOtp(body) {
         const { phone, otp, code, fcmToken = null } = body;
         const submittedOtp = otp ?? code;
-        const entry = this.otpService.getOtpEntry(phone);
-        if (!entry)
-            throw new common_1.UnauthorizedException('OTP not found');
-        if (entry.used)
-            throw new common_1.UnauthorizedException('OTP already used');
-        if (entry.code !== submittedOtp)
-            throw new common_1.UnauthorizedException('Invalid OTP');
-        if (new Date() > entry.expiresAt) {
-            this.otpService.deleteOtp(phone);
-            throw new common_1.UnauthorizedException('OTP expired');
-        }
-        this.otpService.markUsed(phone);
+        const entry = await this.otpService.verifyOtp({
+            purpose: 'register',
+            target: phone,
+            otp: submittedOtp,
+        });
         const user = (await this.authService.createOrGetUser({
-            ...entry.registrationData,
-            isVerified: true,
+            ...entry.metadata?.registrationData,
+            phoneVerifiedAt: new Date(),
+            isVerified: false,
         }));
         if (fcmToken) {
             await this.authService.attachFcmToken(user.id, fcmToken);
         }
         const token = this.authService.generateToken(user);
-        this.otpService.deleteOtp(phone);
+        const profile = await this.usersService.getMyProfileResponse(user.id);
         return {
             access_token: token,
-            user: this.authService.toPublicUser(user),
+            ...profile,
         };
     }
     async login(dto) {
         const user = await this.authService.validateUser(dto.phone, dto.password);
-        const publicUser = this.authService.toPublicUser(user);
         if (dto.fcmToken) {
             await this.authService.attachFcmToken(user.id, dto.fcmToken);
         }
         const token = this.authService.generateToken(user);
+        const profile = await this.usersService.getMyProfileResponse(user.id);
         return {
             access_token: token,
-            user: publicUser,
+            ...profile,
         };
     }
     async sendForgotPasswordOtp(body) {
         const user = await this.authService.findUserByPhone(body.phone);
         if (!user)
             throw new common_1.BadRequestException('Phone not registered');
-        const otp = this.otpService.generateOTP(body.phone, {
-            phone: body.phone,
+        const { otp } = await this.otpService.createOtp({
             purpose: 'forgot-password',
+            target: body.phone,
+            metadata: {
+                phone: body.phone,
+            },
         });
-        return { message: `OTP sent to ${body.phone}`, otp };
+        await this.deliverOtp(body.phone, otp, 'forgot password');
+        return this.otpService.otpResponse(`OTP sent to ${body.phone}`, otp);
     }
     async verifyForgotPasswordOtp(body) {
-        const { phone, code, newPassword } = body;
-        const entry = this.otpService.getOtpEntry(phone);
-        if (!entry)
-            throw new common_1.UnauthorizedException('OTP not found');
-        if (entry.code !== code)
-            throw new common_1.UnauthorizedException('Invalid OTP');
-        if (entry.registrationData?.purpose !== 'forgot-password')
-            throw new common_1.UnauthorizedException('Invalid OTP purpose');
-        if (new Date() > entry.expiresAt)
-            throw new common_1.UnauthorizedException('OTP expired');
+        const { phone, code, otp, newPassword } = body;
+        const submittedOtp = otp ?? code;
+        await this.otpService.verifyOtp({
+            purpose: 'forgot-password',
+            target: phone,
+            otp: submittedOtp,
+        });
         const user = await this.authService.findUserByPhone(phone);
         if (!user)
             throw new common_1.UnauthorizedException('User not found');
         const { salt, hash } = this.authService.hashPassword(newPassword);
         await this.authService.resetPassword(phone, salt, hash);
-        this.otpService.markUsed(phone);
-        this.otpService.deleteOtp(phone);
         return { message: 'Password reset successfully' };
+    }
+    async sendPhoneChangeOtp(req, body) {
+        const userId = req.user?.id;
+        const user = await this.authService.validateUserByIdAndPassword(userId, body.currentPassword);
+        if (user.phone === body.newPhone) {
+            throw new common_1.BadRequestException('New phone must be different');
+        }
+        const existing = await this.authService.findUserByPhone(body.newPhone);
+        if (existing)
+            throw new common_1.BadRequestException('Phone already registered');
+        const { otp } = await this.otpService.createOtp({
+            purpose: 'phone-change',
+            target: body.newPhone,
+            userId,
+            metadata: {
+                newPhone: body.newPhone,
+            },
+        });
+        await this.deliverOtp(body.newPhone, otp, 'phone change');
+        return this.otpService.otpResponse(`OTP sent to ${body.newPhone}`, otp);
+    }
+    async verifyPhoneChangeOtp(req, body) {
+        const userId = req.user?.id;
+        await this.authService.validateUserByIdAndPassword(userId, body.currentPassword);
+        await this.otpService.verifyOtp({
+            purpose: 'phone-change',
+            target: body.newPhone,
+            userId,
+            otp: body.otp,
+        });
+        const user = await this.authService.changePhone(userId, body.newPhone);
+        const profile = await this.usersService.getMyProfileResponse(user.id);
+        return {
+            message: 'Phone updated successfully',
+            ...profile,
+        };
+    }
+    async sendPasswordChangeOtp(req, body) {
+        const userId = req.user?.id;
+        const user = await this.authService.validateUserByIdAndPassword(userId, body.currentPassword);
+        if (!user.phoneVerifiedAt) {
+            throw new common_1.BadRequestException('Phone must be verified first');
+        }
+        const { otp } = await this.otpService.createOtp({
+            purpose: 'password-change',
+            target: user.phone,
+            userId,
+        });
+        await this.deliverOtp(user.phone, otp, 'password change');
+        return this.otpService.otpResponse(`OTP sent to ${user.phone}`, otp);
+    }
+    async verifyPasswordChangeOtp(req, body) {
+        const userId = req.user?.id;
+        const user = await this.authService.validateUserByIdAndPassword(userId, body.currentPassword);
+        await this.otpService.verifyOtp({
+            purpose: 'password-change',
+            target: user.phone,
+            userId,
+            otp: body.otp,
+        });
+        const updatedUser = await this.authService.changePassword(userId, body.newPassword);
+        const token = this.authService.generateToken(updatedUser);
+        const profile = await this.usersService.getMyProfileResponse(updatedUser.id);
+        return {
+            message: 'Password changed successfully',
+            access_token: token,
+            ...profile,
+        };
     }
 };
 exports.AuthController = AuthController;
@@ -160,10 +249,7 @@ __decorate([
             .try(relationIdSchema, joi_1.default.string().allow('', null))
             .optional(),
         language: relationIdSchema.optional(),
-        password: joi_1.default.string()
-            .min(6)
-            .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
-            .required(),
+        password: passwordSchema.required(),
         email: joi_1.default.string().email().optional(),
         full_name: joi_1.default.string().optional(),
         photoUri: optionalString(),
@@ -178,6 +264,12 @@ __decorate([
 ], AuthController.prototype, "sendOtp", null);
 __decorate([
     (0, common_1.Post)('register/verify-otp'),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        phone: joi_1.default.string().required(),
+        otp: joi_1.default.string().optional(),
+        code: joi_1.default.string().optional(),
+        fcmToken: joi_1.default.string().optional(),
+    }).or('otp', 'code'))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -197,6 +289,9 @@ __decorate([
 ], AuthController.prototype, "login", null);
 __decorate([
     (0, common_1.Post)('forgot-password/send-otp'),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        phone: joi_1.default.string().required(),
+    }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -204,11 +299,70 @@ __decorate([
 ], AuthController.prototype, "sendForgotPasswordOtp", null);
 __decorate([
     (0, common_1.Post)('forgot-password/verify-otp'),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        phone: joi_1.default.string().required(),
+        code: joi_1.default.string().optional(),
+        otp: joi_1.default.string().optional(),
+        newPassword: passwordSchema.required(),
+    }).or('code', 'otp'))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "verifyForgotPasswordOtp", null);
+__decorate([
+    (0, common_1.Post)('phone-change/send-otp'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        currentPassword: joi_1.default.string().required(),
+        newPhone: joi_1.default.string().required(),
+    }))),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "sendPhoneChangeOtp", null);
+__decorate([
+    (0, common_1.Post)('phone-change/verify-otp'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        currentPassword: joi_1.default.string().required(),
+        newPhone: joi_1.default.string().required(),
+        otp: joi_1.default.string().required(),
+    }))),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyPhoneChangeOtp", null);
+__decorate([
+    (0, common_1.Post)('password-change/send-otp'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        currentPassword: joi_1.default.string().required(),
+    }))),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "sendPasswordChangeOtp", null);
+__decorate([
+    (0, common_1.Post)('password-change/verify-otp'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        currentPassword: joi_1.default.string().required(),
+        newPassword: passwordSchema.required(),
+        otp: joi_1.default.string().required(),
+    }))),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyPasswordChangeOtp", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,

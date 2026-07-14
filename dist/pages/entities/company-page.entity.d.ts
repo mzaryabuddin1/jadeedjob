@@ -1,5 +1,6 @@
 import { User } from 'src/users/entities/user.entity';
 import { PageMember } from './page-member.entity';
+import { CompanyBranch } from './company-branch.entity';
 export declare class CompanyPage {
     id: number;
     company_name: string;
@@ -43,6 +44,7 @@ export declare class CompanyPage {
     ownerId: number;
     owner: User;
     members: PageMember[];
+    branches: CompanyBranch[];
     createdAt: Date;
     updatedAt: Date;
 }

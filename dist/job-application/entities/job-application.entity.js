@@ -43,11 +43,19 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['pending', 'accepted', 'rejected'],
+        enum: ['pending', 'accepted', 'rejected', 'withdrawn', 'completed'],
         default: 'pending',
     }),
     __metadata("design:type", String)
 ], JobApplication.prototype, "status", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], JobApplication.prototype, "withdrawnAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], JobApplication.prototype, "completedAt", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => chat_message_entity_1.ChatMessage, (msg) => msg.jobApplication),
     __metadata("design:type", Array)

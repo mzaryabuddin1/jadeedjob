@@ -9,6 +9,7 @@ import {
   Patch,
   UsePipes,
   Query,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { JobApplicationService } from './job-application.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -40,8 +41,29 @@ export class JobApplicationController {
     @Req() req: any,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
+    @Query('status') status?: any,
   ) {
-    return this.jobAppService.getApplicationsByUser(req.user.id, +page, +limit);
+    return this.jobAppService.getApplicationsByUser(
+      req.user.id,
+      +page,
+      +limit,
+      status,
+    );
+  }
+
+  @Get('history')
+  async getHistory(
+    @Req() req: any,
+    @Query('status') status = 'completed',
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.jobAppService.getApplicationHistory(
+      req.user.id,
+      status as any,
+      Number(page),
+      Number(limit),
+    );
   }
 
   @Get('job/:jobId/received')
@@ -58,7 +80,7 @@ export class JobApplicationController {
       new JoiValidationPipe(
         Joi.object({
           status: Joi.string()
-            .valid('pending', 'accepted', 'rejected', 'all')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed', 'all')
             .default('all'),
           page: Joi.number().integer().min(1).default(1),
           limit: Joi.number().integer().min(1).max(100).default(20),
@@ -105,7 +127,7 @@ export class JobApplicationController {
       new JoiValidationPipe(
         Joi.object({
           status: Joi.string()
-            .valid('pending', 'accepted', 'rejected')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed')
             .required(),
         }),
       ),
@@ -118,5 +140,10 @@ export class JobApplicationController {
       body.status,
       req.user.id,
     );
+  }
+
+  @Patch(':id/withdraw')
+  async withdraw(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.jobAppService.withdraw(id, req.user.id);
   }
 }

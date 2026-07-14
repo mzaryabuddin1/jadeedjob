@@ -47,6 +47,10 @@ __decorate([
     __metadata("design:type", String)
 ], ChatMessage.prototype, "mediaUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'json', nullable: true }),
+    __metadata("design:type", Array)
+], ChatMessage.prototype, "attachments", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
         enum: ['text', 'image', 'video', 'audio', 'file'],
@@ -54,6 +58,10 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], ChatMessage.prototype, "messageType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], ChatMessage.prototype, "readAt", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

@@ -51,6 +51,7 @@ export declare class PagesController {
             ownerId: number;
             owner: import("../users/entities/user.entity").User;
             members: import("./entities/page-member.entity").PageMember[];
+            branches: import("./entities/company-branch.entity").CompanyBranch[];
             createdAt: Date;
             updatedAt: Date;
         }[];

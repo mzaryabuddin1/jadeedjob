@@ -3,8 +3,60 @@ export declare class JobApplicationController {
     private readonly jobAppService;
     constructor(jobAppService: JobApplicationService);
     apply(body: any, req: any): Promise<import("./entities/job-application.entity").JobApplication>;
-    getMyApplications(req: any, page?: number, limit?: number): Promise<{
-        data: import("./entities/job-application.entity").JobApplication[];
+    getMyApplications(req: any, page?: number, limit?: number, status?: any): Promise<{
+        data: {
+            applicationId: number;
+            id: number;
+            status: string;
+            createdAt: Date;
+            updatedAt: Date;
+            job: {
+                id: number;
+                title: string;
+                description: string;
+                salaryType: string;
+                salaryAmount: number;
+                currency: string;
+                filter: import("../filter/entities/filter.entity").Filter;
+                companyName: string;
+                employerName: string;
+                employerType: string;
+                status: "active" | "draft" | "closed";
+                payType: string;
+            };
+            employer: {
+                id: number;
+                type: string;
+                companyId: number;
+                name: string;
+                companyName: string;
+                logoUrl: string;
+            };
+            chatId: number;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    getHistory(req: any, status?: string, page?: number, limit?: number): Promise<{
+        data: {
+            id: number;
+            applicationId: number;
+            jobTitle: string;
+            amount: number;
+            description: string;
+            completedAt: Date;
+            status: string;
+            employer: {
+                id: number;
+                type: string;
+                companyId: number;
+                name: string;
+                companyName: string;
+                logoUrl: string;
+            };
+            paymentStatus: string;
+        }[];
         total: number;
         totalPages: number;
         currentPage: number;
@@ -35,6 +87,7 @@ export declare class JobApplicationController {
                 ratingAverage: number;
                 ratingCount: number;
             };
+            chatId: number;
             createdAt: Date;
             updatedAt: Date;
         }[];
@@ -42,6 +95,8 @@ export declare class JobApplicationController {
             pending: number;
             accepted: number;
             rejected: number;
+            withdrawn: number;
+            completed: number;
             all: number;
         };
         job: {
@@ -52,6 +107,11 @@ export declare class JobApplicationController {
             salaryAmount: number;
             currency: string;
             filter: import("../filter/entities/filter.entity").Filter;
+            companyName: string;
+            employerName: string;
+            employerType: string;
+            status: "active" | "draft" | "closed";
+            payType: string;
         };
         total: number;
         totalPages: number;
@@ -59,4 +119,8 @@ export declare class JobApplicationController {
     }>;
     getByJob(jobId: number): Promise<import("./entities/job-application.entity").JobApplication[]>;
     updateStatus(params: any, body: any, req: any): Promise<import("./entities/job-application.entity").JobApplication>;
+    withdraw(id: number, req: any): Promise<{
+        message: string;
+        application: import("./entities/job-application.entity").JobApplication;
+    }>;
 }

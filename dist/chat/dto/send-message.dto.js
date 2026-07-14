@@ -33,6 +33,10 @@ __decorate([
     __metadata("design:type", String)
 ], SendMessageDto.prototype, "mediaUrl", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Array)
+], SendMessageDto.prototype, "attachments", void 0);
+__decorate([
     (0, class_validator_1.IsEnum)(['text', 'image', 'video', 'audio', 'file']),
     __metadata("design:type", String)
 ], SendMessageDto.prototype, "messageType", void 0);

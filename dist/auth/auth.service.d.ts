@@ -15,6 +15,7 @@ export declare class AuthService {
     constructor(jwtService: JwtService, userRepo: Repository<User>, countryRepo: Repository<Country>, languageRepo: Repository<Language>, filterService: FilterService, firebaseService: FirebaseService);
     generateToken(user: any): string;
     toPublicUser(user: any): any;
+    private generateUniqueReferralCode;
     findUserByPhone(phone: string): Promise<User>;
     createOrGetUser(data: any): Promise<User | User[]>;
     validateRegistrationRelations(countryId: number, languageId: number): Promise<void>;
@@ -24,6 +25,9 @@ export declare class AuthService {
     };
     validatePassword(password: string, storedHash: string, salt: string): boolean;
     validateUser(phone: string, password: string): Promise<User>;
-    resetPassword(phone: string, salt: string, hash: string): Promise<void>;
+    resetPassword(phone: string, salt: string, hash: string): Promise<User>;
+    validateUserByIdAndPassword(userId: number, password: string): Promise<User>;
+    changePassword(userId: number, newPassword: string): Promise<User>;
+    changePhone(userId: number, newPhone: string): Promise<User>;
     attachFcmToken(userId: number, fcmToken: string): Promise<void>;
 }

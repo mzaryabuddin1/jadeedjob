@@ -15,6 +15,11 @@ import { Filter } from 'src/filter/entities/filter.entity';
 import { withFilterIconMeta } from 'src/filter/filter-icon.util';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import {
+  buildVerificationRequirements,
+  computeUserIsVerified,
+} from './profile-verification.util';
+import { generateReferralCode } from './referral-code.util';
 
 type ProfileUpdateData = Record<string, any>;
 
@@ -67,10 +72,62 @@ export class UsersService {
       passwordSalt,
       fcmTokens,
       password,
+      admin_notes,
+      verified_by_admin_id,
       ...publicUser
     } = user as any;
 
     return publicUser;
+  }
+
+  private async generateUniqueReferralCode(repo: Repository<User> = this.userRepo) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const referralCode = generateReferralCode();
+      const existing = await repo.findOne({
+        where: { referralCode },
+        select: ['id'],
+      });
+
+      if (!existing) return referralCode;
+    }
+
+    throw new BadRequestException('Unable to generate referral code');
+  }
+
+  private async normalizeProfileSystemFields(
+    user: User,
+    repo: Repository<User> = this.userRepo,
+  ) {
+    let changed = false;
+
+    if (!user.referralCode) {
+      user.referralCode = await this.generateUniqueReferralCode(repo);
+      changed = true;
+    }
+
+    if (user.isVerified && !user.phoneVerifiedAt) {
+      user.phoneVerifiedAt = new Date();
+      changed = true;
+    }
+
+    const nextVerified = computeUserIsVerified(user);
+    if (user.isVerified !== nextVerified) {
+      user.isVerified = nextVerified;
+      changed = true;
+    }
+
+    if (changed) {
+      return repo.save(user);
+    }
+
+    return user;
+  }
+
+  private buildProfileResponse(user: User) {
+    return {
+      user: this.toPublicUser(user),
+      verificationRequirements: buildVerificationRequirements(user),
+    };
   }
 
   private normalizeNullableDates(data: ProfileUpdateData, fields: string[]) {
@@ -106,14 +163,29 @@ export class UsersService {
   }
 
   async getPublicUserById(id: number) {
-    const user = await this.userRepo.findOne({
+    let user = await this.userRepo.findOne({
       where: { id },
       relations: ['country', 'language'],
     });
 
     if (!user) throw new NotFoundException('User not found');
 
+    user = await this.normalizeProfileSystemFields(user);
+
     return this.toPublicUser(user);
+  }
+
+  async getMyProfileResponse(id: number) {
+    let user = await this.userRepo.findOne({
+      where: { id },
+      relations: ['country', 'language'],
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    user = await this.normalizeProfileSystemFields(user);
+
+    return this.buildProfileResponse(user);
   }
 
   async updateUser(id: number, data: any) {
@@ -153,7 +225,7 @@ export class UsersService {
 
         const countryId = this.relationIdFromValue(
           'country',
-          updateData.country,
+          updateData.countryId ?? updateData.country,
         );
         if (countryId !== undefined) {
           const country = await countryRepo.findOne({
@@ -163,10 +235,11 @@ export class UsersService {
           user.country = country;
         }
         delete updateData.country;
+        delete updateData.countryId;
 
         const languageId = this.relationIdFromValue(
           'language',
-          updateData.language,
+          updateData.languageId ?? updateData.language,
         );
         if (languageId !== undefined) {
           const language = await languageRepo.findOne({
@@ -176,6 +249,7 @@ export class UsersService {
           user.language = language;
         }
         delete updateData.language;
+        delete updateData.languageId;
 
         this.normalizeNullableDates(updateData, [
           'date_of_birth',
@@ -183,7 +257,25 @@ export class UsersService {
           'verification_date',
         ]);
 
+        const documentFields = [
+          'id_document_front',
+          'id_document_back',
+          'address_proof_document',
+        ];
+        const documentsChanged = documentFields.some(
+          (field) =>
+            Object.prototype.hasOwnProperty.call(updateData, field) &&
+            updateData[field] !== (user as any)[field],
+        );
+
         Object.assign(user, updateData);
+        if (documentsChanged) {
+          user.kyc_status = 'pending';
+          user.verification_date = null;
+          user.verified_by_admin_id = null;
+          user.rejection_reason = null;
+        }
+        user.isVerified = computeUserIsVerified(user);
         const savedUser = await userRepo.save(user);
 
         if (Array.isArray(workExperience)) {
@@ -263,7 +355,29 @@ export class UsersService {
 
     if (!updatedUser) throw new NotFoundException('User not found');
 
-    return this.toPublicUser(updatedUser);
+    return this.toPublicUser(await this.normalizeProfileSystemFields(updatedUser));
+  }
+
+  async updateProfileDocument(
+    userId: number,
+    type: 'id_front' | 'id_back' | 'address_proof' | 'profile_photo',
+    fileUrl: string,
+  ) {
+    const fieldByType = {
+      id_front: 'id_document_front',
+      id_back: 'id_document_back',
+      address_proof: 'address_proof_document',
+      profile_photo: 'profile_photo',
+    } as const;
+
+    const field = fieldByType[type];
+    if (!field) throw new BadRequestException('Invalid document type');
+
+    await this.updateMyProfile(userId, {
+      [field]: fileUrl,
+    });
+
+    return this.getMyProfileResponse(userId);
   }
 
   async findUsersByIds(ids: number[]) {

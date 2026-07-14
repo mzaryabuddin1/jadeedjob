@@ -16,12 +16,17 @@ const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const rating_entity_1 = require("../rating/entities/rating.entity");
+const page_member_entity_1 = require("../pages/entities/page-member.entity");
+const notifications_module_1 = require("../notifications/notifications.module");
 let JobApplicationModule = class JobApplicationModule {
 };
 exports.JobApplicationModule = JobApplicationModule;
 exports.JobApplicationModule = JobApplicationModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User, rating_entity_1.Rating])],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User, rating_entity_1.Rating, page_member_entity_1.PageMember]),
+            notifications_module_1.NotificationsModule,
+        ],
         controllers: [job_application_controller_1.JobApplicationController, employer_job_application_controller_1.EmployerJobApplicationController],
         providers: [job_application_service_1.JobApplicationService],
     })

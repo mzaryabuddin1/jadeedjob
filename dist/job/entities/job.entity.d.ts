@@ -2,6 +2,7 @@ import { Filter } from 'src/filter/entities/filter.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { User } from 'src/users/entities/user.entity';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { CompanyBranch } from 'src/pages/entities/company-branch.entity';
 export declare class Job {
     id: number;
     filter: Filter;
@@ -12,19 +13,29 @@ export declare class Job {
     benefits: string[];
     shifts: string[];
     jobTypes: string[];
+    jobType: string;
+    shift: string;
+    working_hours: string;
     salaryType: string;
     salaryAmount: number;
     currency: string;
+    vacancies: number;
+    isRemote: boolean;
     location: {
         lat: number;
         lng: number;
     };
     startDate: Date;
     endDate: Date;
+    deadline: Date;
     industry: string;
     educationLevel: string;
     experienceRequired: string;
     languageRequirements: string[];
+    contactEmail: string;
+    contactPhone: string;
+    postingMode: 'individual' | 'company';
+    status: 'draft' | 'active' | 'closed';
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -33,4 +44,6 @@ export declare class Job {
     applications: JobApplication[];
     pageId?: number;
     page?: CompanyPage;
+    branchId?: number;
+    branch?: CompanyBranch;
 }

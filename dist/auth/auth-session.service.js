@@ -86,13 +86,17 @@ let AuthSessionService = class AuthSessionService {
         }
         const user = await this.userRepo.findOne({
             where: { id },
-            select: ['id', 'isBanned'],
+            select: ['id', 'isBanned', 'tokenVersion'],
         });
         if (!user) {
             throw new common_1.UnauthorizedException('Invalid user session');
         }
         if (user.isBanned) {
             throw new common_1.UnauthorizedException('Your account is blocked!');
+        }
+        const tokenVersion = Number(decoded.tokenVersion ?? 0);
+        if (tokenVersion !== Number(user.tokenVersion || 0)) {
+            throw new common_1.UnauthorizedException('Invalid or expired token');
         }
         return {
             ...decoded,

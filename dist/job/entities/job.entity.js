@@ -15,6 +15,7 @@ const filter_entity_1 = require("../../filter/entities/filter.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
 const user_entity_1 = require("../../users/entities/user.entity");
 const company_page_entity_1 = require("../../pages/entities/company-page.entity");
+const company_branch_entity_1 = require("../../pages/entities/company-branch.entity");
 let Job = class Job {
 };
 exports.Job = Job;
@@ -56,6 +57,18 @@ __decorate([
     __metadata("design:type", Array)
 ], Job.prototype, "jobTypes", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Job.prototype, "jobType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Job.prototype, "shift", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Job.prototype, "working_hours", void 0);
+__decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
 ], Job.prototype, "salaryType", void 0);
@@ -67,6 +80,14 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Job.prototype, "currency", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Number)
+], Job.prototype, "vacancies", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], Job.prototype, "isRemote", void 0);
 __decorate([
     (0, typeorm_1.Column)({
         type: 'point',
@@ -101,6 +122,10 @@ __decorate([
     __metadata("design:type", Date)
 ], Job.prototype, "endDate", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'date', nullable: true }),
+    __metadata("design:type", Date)
+], Job.prototype, "deadline", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Job.prototype, "industry", void 0);
@@ -116,6 +141,30 @@ __decorate([
     (0, typeorm_1.Column)('simple-array', { nullable: true }),
     __metadata("design:type", Array)
 ], Job.prototype, "languageRequirements", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Job.prototype, "contactEmail", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Job.prototype, "contactPhone", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['individual', 'company'],
+        default: 'individual',
+    }),
+    __metadata("design:type", String)
+], Job.prototype, "postingMode", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['draft', 'active', 'closed'],
+        default: 'active',
+    }),
+    __metadata("design:type", String)
+], Job.prototype, "status", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
@@ -150,6 +199,15 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'pageId' }),
     __metadata("design:type", company_page_entity_1.CompanyPage)
 ], Job.prototype, "page", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], Job.prototype, "branchId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => company_branch_entity_1.CompanyBranch, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'branchId' }),
+    __metadata("design:type", company_branch_entity_1.CompanyBranch)
+], Job.prototype, "branch", void 0);
 exports.Job = Job = __decorate([
     (0, typeorm_1.Entity)('jobs')
 ], Job);

@@ -7,5 +7,13 @@ export declare class PageMember {
     userId: number;
     user: User;
     role: 'owner' | 'admin' | 'editor';
+    hasAccess: boolean;
+    permissions: {
+        postJobs?: boolean;
+        editJobs?: boolean;
+        viewApplicants?: boolean;
+        chatApplicants?: boolean;
+        manageTeam?: boolean;
+    };
     createdAt: Date;
 }

@@ -121,6 +121,20 @@ export class ReelsController {
     return this.reelsService.getFeed(query, req.user.id);
   }
 
+  @Get('audio/:audioId/reels')
+  getReelsByAudio(
+    @Param('audioId') audioId: string,
+    @Query() query: any,
+    @Req() req: any,
+  ) {
+    return this.reelsService.getReelsByAudio(audioId, req.user.id, query);
+  }
+
+  @Get(':id/audio')
+  getAudio(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.reelsService.getReelAudio(id, req.user.id);
+  }
+
   @Post(':id/like')
   like(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     return this.reelsService.likeReel(id, req.user.id);

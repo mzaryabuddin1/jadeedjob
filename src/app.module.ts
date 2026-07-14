@@ -8,7 +8,6 @@ import { ConfigModule } from '@nestjs/config';
 // App Modules
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { OtpService } from './otp/otp.service';
 import { OtpModule } from './otp/otp.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { CountryModule } from './country/country.module';
@@ -29,6 +28,8 @@ import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
 import { AuthSessionModule } from './auth/auth-session.module';
 import { ReelsModule } from './reels/reels.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -71,11 +72,12 @@ import { ReelsModule } from './reels/reels.module';
     ChatModule,
     RatingModule,
     ReelsModule,
+    NotificationsModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    OtpService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard, // ⬅️ Apply Throttler globally

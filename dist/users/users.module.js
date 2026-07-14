@@ -20,6 +20,7 @@ const firebase_module_1 = require("../firebase/firebase.module");
 const filter_entity_1 = require("../filter/entities/filter.entity");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
+const files_module_1 = require("../files/files.module");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -37,6 +38,7 @@ exports.UsersModule = UsersModule = __decorate([
             ]),
             (0, common_1.forwardRef)(() => auth_module_1.AuthModule),
             firebase_module_1.FirebaseModule,
+            files_module_1.FilesModule,
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],

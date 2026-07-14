@@ -1,14 +1,35 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Raw } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
 import { FirebaseService } from '../firebase/firebase.service';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { CompanyBranch } from 'src/pages/entities/company-branch.entity';
+import { PageMember } from 'src/pages/entities/page-member.entity';
+import { JobApplication } from 'src/job-application/entities/job-application.entity';
+import { NotificationsService } from 'src/notifications/notifications.service';
+
+type JobStatus = 'draft' | 'active' | 'closed';
+type EmployerPermission =
+  | 'postJobs'
+  | 'editJobs'
+  | 'viewApplicants'
+  | 'chatApplicants'
+  | 'manageTeam';
+
+const JOB_SORT_COLUMNS: Record<string, string> = {
+  createdAt: 'job.createdAt',
+  updatedAt: 'job.updatedAt',
+  salaryAmount: 'job.salaryAmount',
+  title: 'job.title',
+  status: 'job.status',
+};
 
 @Injectable()
 export class JobService {
@@ -22,92 +43,172 @@ export class JobService {
     @InjectRepository(CompanyPage)
     private pageRepo: Repository<CompanyPage>,
 
+    @InjectRepository(CompanyBranch)
+    private branchRepo: Repository<CompanyBranch>,
+
+    @InjectRepository(PageMember)
+    private memberRepo: Repository<PageMember>,
+
+    @InjectRepository(JobApplication)
+    private jobApplicationRepo: Repository<JobApplication>,
+
     private firebaseService: FirebaseService,
+
+    private notificationsService: NotificationsService,
   ) {}
 
-  // ────────────────────────────────────────────────
-  // CREATE JOB + SEND NOTIFICATION
-  // ────────────────────────────────────────────────
+  private getDefaultPermissions(role: 'owner' | 'admin' | 'editor') {
+    if (role === 'editor') {
+      return {
+        postJobs: true,
+        editJobs: true,
+        viewApplicants: true,
+        chatApplicants: true,
+        manageTeam: false,
+      };
+    }
+
+    return {
+      postJobs: true,
+      editJobs: true,
+      viewApplicants: true,
+      chatApplicants: true,
+      manageTeam: true,
+    };
+  }
+
+  private async assertCompanyPermission(
+    pageId: number | null | undefined,
+    userId: number,
+    permission: EmployerPermission,
+  ) {
+    if (!pageId) return;
+
+    const page = await this.pageRepo.findOne({
+      where: { id: pageId },
+      relations: ['members'],
+    });
+    if (!page) throw new BadRequestException('Company not found');
+
+    if (page.ownerId === userId) return;
+
+    const member = page.members?.find((item) => item.userId === userId);
+    if (!member || member.hasAccess === false) {
+      throw new ForbiddenException('You do not have access to this company');
+    }
+
+    const permissions = {
+      ...this.getDefaultPermissions(member.role),
+      ...(member.permissions || {}),
+    };
+    if (!permissions[permission]) {
+      throw new ForbiddenException('You do not have permission for this action');
+    }
+  }
+
+  private async normalizeCompanyAndBranch(data: any, userId: number) {
+    let pageId = this.optionalPositiveId(data.companyId ?? data.pageId);
+    let branchId = this.optionalPositiveId(data.branchId);
+
+    if (
+      data.postingMode === 'individual' ||
+      data.companyId === null ||
+      data.pageId === null
+    ) {
+      pageId = null;
+      branchId = null;
+    }
+
+    if (branchId) {
+      const branch = await this.branchRepo.findOne({ where: { id: branchId } });
+      if (!branch) throw new BadRequestException('Branch not found');
+      if (pageId && branch.companyId !== pageId) {
+        throw new BadRequestException('Branch does not belong to company');
+      }
+      pageId = branch.companyId;
+    }
+
+    if (data.postingMode === 'company' && !pageId) {
+      throw new BadRequestException('companyId is required for company posting');
+    }
+
+    await this.assertCompanyPermission(pageId, userId, 'postJobs');
+
+    return { pageId: pageId ?? null, branchId: branchId ?? null };
+  }
+
+  private optionalPositiveId(value: unknown) {
+    if (value === undefined || value === null || value === '') return undefined;
+    const id = Number(value);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new BadRequestException('Invalid ID value');
+    }
+    return id;
+  }
+
+  private normalizeJobPayload(data: any, pageId: number | null, branchId: number | null) {
+    const status = (data.status || 'active') as JobStatus;
+    if (!['draft', 'active', 'closed'].includes(status)) {
+      throw new BadRequestException('Invalid job status');
+    }
+
+    const payload = { ...data };
+    delete payload.companyId;
+    delete payload.location;
+
+    if (payload.jobType && !payload.jobTypes) payload.jobTypes = [payload.jobType];
+    if (payload.shift && !payload.shifts) payload.shifts = [payload.shift];
+    if (payload.deadline && !payload.endDate) payload.endDate = payload.deadline;
+
+    payload.pageId = pageId;
+    payload.branchId = branchId;
+    payload.postingMode = pageId ? 'company' : 'individual';
+    payload.status = status;
+    payload.isActive = status === 'active';
+    payload.isRemote = Boolean(payload.isRemote);
+
+    return payload;
+  }
+
+  private buildLocationUpdate(data: any, status: JobStatus) {
+    if (data.isRemote === true) return null;
+    if (!data.location && status === 'draft') return null;
+    if (!data.location) return undefined;
+
+    if (
+      typeof data.location?.lat !== 'number' ||
+      typeof data.location?.lng !== 'number'
+    ) {
+      throw new BadRequestException('Valid location is required');
+    }
+
+    return () =>
+      `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+  }
+
   async createJob(data: any, userId: number) {
-    let pageId: number | null = null;
+    const { pageId, branchId } = await this.normalizeCompanyAndBranch(data, userId);
+    const payload = this.normalizeJobPayload(data, pageId, branchId);
+    const status = payload.status as JobStatus;
+    const location = this.buildLocationUpdate(data, status);
 
-    // ────────────────────────────────────────────────
-    // 1️⃣ PAGE PERMISSION CHECK (optional)
-    // ────────────────────────────────────────────────
-    if (data.pageId) {
-      const page = await this.pageRepo.findOne({
-        where: { id: data.pageId },
-        relations: ['members'],
-      });
-
-      if (!page) {
-        throw new BadRequestException('Page not found');
-      }
-
-      const member =
-        page.ownerId === userId
-          ? { role: 'owner' }
-          : page.members.find((m) => m.userId === userId);
-
-      if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
-        throw new BadRequestException(
-          'You are not allowed to create jobs for this page',
-        );
-      }
-
-      pageId = page.id;
+    if (location === undefined && payload.isRemote !== true && status !== 'draft') {
+      throw new BadRequestException('Valid location is required');
     }
 
-    // ────────────────────────────────────────────────
-    // 2️⃣ LOCATION (lat/lng → MySQL POINT with SRID 4326)
-    // ────────────────────────────────────────────────
-    if (!data.location || data.isRemote === false) {
-      if (
-        typeof data.location?.lat !== 'number' ||
-        typeof data.location?.lng !== 'number'
-      ) {
-        throw new BadRequestException('Valid location is required');
-      }
-    }
-
-    const location =
-      data.isRemote === true
-        ? null
-        : () =>
-            `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
-
-    // ────────────────────────────────────────────────
-    // 3️⃣ REMOVE RAW LOCATION OBJECT (VERY IMPORTANT)
-    // ────────────────────────────────────────────────
-    const jobData = { ...data };
-    delete jobData.location;
-    delete jobData.pageId;
-
-    // ────────────────────────────────────────────────
-    // 4️⃣ CREATE JOB
-    // ────────────────────────────────────────────────
     const insertResult = await this.jobRepo.insert({
-      ...jobData,
+      ...payload,
       createdBy: userId,
-      pageId: pageId ?? null,
       location,
-      isActive: true,
     });
 
     const insertedId = insertResult.identifiers?.[0]?.id;
-    if (!insertedId) {
-      throw new BadRequestException('Failed to create job');
-    }
+    if (!insertedId) throw new BadRequestException('Failed to create job');
 
-    const savedJob = await this.jobRepo.findOne({ where: { id: insertedId } });
-    if (!savedJob) {
-      throw new BadRequestException('Failed to load created job');
-    }
+    const savedJob = await this.findJobEntityForResponse(insertedId);
+    if (!savedJob) throw new BadRequestException('Failed to load created job');
 
-    // ────────────────────────────────────────────────
-    // 5️⃣ SEND NOTIFICATION TO FILTER SUBSCRIBERS
-    // ────────────────────────────────────────────────
-    if (savedJob.filterId) {
+    if (savedJob.filterId && savedJob.status === 'active') {
       await this.firebaseService.sendToFilterTopic(
         savedJob.filterId,
         'New Job Posted',
@@ -117,14 +218,23 @@ export class JobService {
           filterId: savedJob.filterId.toString(),
         },
       );
+
+      await this.notificationsService.createForFilterSubscribers(
+        savedJob.filterId,
+        'New Job Posted',
+        savedJob.title ?? 'A new job matches your preferences!',
+        {
+          jobId: savedJob.id,
+          filterId: savedJob.filterId,
+          companyId: savedJob.pageId ?? null,
+        },
+        userId,
+      );
     }
 
-    return savedJob;
+    return this.formatJob(savedJob);
   }
 
-  // ────────────────────────────────────────────────
-  // GEO: FIND NEARBY JOBS
-  // ────────────────────────────────────────────────
   async findNearbyJobs(query: any) {
     const {
       lat,
@@ -137,7 +247,7 @@ export class JobService {
     } = query;
 
     const currentPage = Number(page);
-    const take = Number(limit);
+    const take = Math.min(100, Math.max(1, Number(limit) || 10));
     const latitude = Number(lat);
     const longitude = Number(lng);
     const offset = (currentPage - 1) * take;
@@ -146,9 +256,7 @@ export class JobService {
       !Number.isFinite(latitude) ||
       !Number.isFinite(longitude) ||
       !Number.isFinite(currentPage) ||
-      !Number.isFinite(take) ||
-      currentPage < 1 ||
-      take < 1
+      currentPage < 1
     ) {
       throw new BadRequestException('Invalid nearby job query parameters');
     }
@@ -162,96 +270,78 @@ export class JobService {
     };
     const hasExplicitSortBy = sortBy !== undefined && sortBy !== '';
     const requestedSortBy = hasExplicitSortBy ? String(sortBy) : 'distance';
-    const orderBy =
-      allowedSortColumns[requestedSortBy] ?? allowedSortColumns.createdAt;
+    const orderBy = allowedSortColumns[requestedSortBy] ?? 'distance';
     const orderDirection = hasExplicitSortBy
       ? String(sortOrder).toUpperCase() === 'ASC'
         ? 'ASC'
         : 'DESC'
       : 'ASC';
     const pointText = `POINT(${longitude} ${latitude})`;
-    const searchClause = search ? 'AND j.description LIKE ?' : '';
-    const searchParams = search ? [`%${search}%`] : [];
+    const searchClause = search
+      ? 'AND (j.title LIKE ? OR j.description LIKE ? OR p.company_name LIKE ?)'
+      : '';
+    const searchParams = search
+      ? [`%${search}%`, `%${search}%`, `%${search}%`]
+      : [];
 
-    // ────────────────────────────────────────────────
-    // 1️⃣ DATA QUERY
-    // ────────────────────────────────────────────────
     const jobs = await this.jobRepo.query(
       `
-    SELECT
-      j.*,
-      CASE WHEN j.location IS NULL THEN NULL ELSE ST_X(j.location) END AS lng,
-      CASE WHEN j.location IS NULL THEN NULL ELSE ST_Y(j.location) END AS lat,
-      p.id AS page_id,
-      p.company_name,
-      p.username AS page_username,
-      p.company_logo,
-      CASE
-        WHEN j.location IS NULL THEN NULL
-        ELSE ST_Distance_Sphere(
-          j.location,
-          ST_GeomFromText(?, 4326)
-        )
-      END AS distance
-    FROM jobs j
-    LEFT JOIN pages p ON p.id = j.pageId
-    WHERE j.isActive = 1
-      ${searchClause}
-    ORDER BY j.location IS NULL ASC, ${orderBy} ${orderDirection}
-    LIMIT ?
-    OFFSET ?
-  `,
+        SELECT
+          j.*,
+          CASE WHEN j.location IS NULL THEN NULL ELSE ST_X(j.location) END AS lng,
+          CASE WHEN j.location IS NULL THEN NULL ELSE ST_Y(j.location) END AS lat,
+          p.id AS page_id,
+          p.company_name,
+          p.username AS page_username,
+          p.company_logo,
+          b.id AS branch_id,
+          b.label AS branch_label,
+          b.address AS branch_address,
+          b.lat AS branch_lat,
+          b.lng AS branch_lng,
+          u.firstName AS creator_firstName,
+          u.lastName AS creator_lastName,
+          u.full_name AS creator_full_name,
+          u.profile_photo AS creator_profile_photo,
+          (SELECT COUNT(*) FROM job_applications ja WHERE ja.jobId = j.id) AS applicationsCount,
+          CASE
+            WHEN j.location IS NULL THEN NULL
+            ELSE ST_Distance_Sphere(j.location, ST_GeomFromText(?, 4326))
+          END AS distance
+        FROM jobs j
+        LEFT JOIN pages p ON p.id = j.pageId
+        LEFT JOIN company_branches b ON b.id = j.branchId
+        LEFT JOIN users u ON u.id = j.createdBy
+        WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          ${searchClause}
+        ORDER BY j.location IS NULL ASC, ${orderBy} ${orderDirection}
+        LIMIT ?
+        OFFSET ?
+      `,
       [pointText, ...searchParams, take, offset],
     );
 
-    // ────────────────────────────────────────────────
-    // 2️⃣ COUNT QUERY
-    // ────────────────────────────────────────────────
     const countResult = await this.jobRepo.query(
       `
-    SELECT COUNT(*) AS total
-    FROM jobs j
-    WHERE j.isActive = 1
-      ${searchClause}
-  `,
+        SELECT COUNT(*) AS total
+        FROM jobs j
+        LEFT JOIN pages p ON p.id = j.pageId
+        WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          ${searchClause}
+      `,
       searchParams,
     );
 
     const total = Number(countResult[0]?.total || 0);
 
-    // ────────────────────────────────────────────────
-    // 3️⃣ RESPONSE NORMALIZATION
-    // ────────────────────────────────────────────────
     return {
-      data: jobs.map((j) => ({
-        ...j,
-        distance: j.distance === null ? null : Number(j.distance),
-        location:
-          j.lat === null || j.lng === null
-            ? null
-            : {
-                lat: Number(j.lat),
-                lng: Number(j.lng),
-              },
-        jobType: j.page_id ? 'page' : 'open',
-        page: j.page_id
-          ? {
-              id: j.page_id,
-              company_name: j.company_name,
-              username: j.page_username,
-              company_logo: j.company_logo,
-            }
-          : null,
-      })),
+      data: jobs.map((job) => this.formatRawJob(job)),
       total,
       totalPages: Math.ceil(total / take),
       currentPage,
     };
   }
 
-  // ────────────────────────────────────────────────
-  // NORMAL SEARCH (NO GEO)
-  // ────────────────────────────────────────────────
   async findJobs(query: any, userId?: number) {
     const {
       filter,
@@ -263,9 +353,9 @@ export class JobService {
       lat,
       lng,
       myjobs = false,
+      status,
     } = query;
 
-    // 🔹 GEO SEARCH (public jobs only)
     if (
       lat !== undefined &&
       lng !== undefined &&
@@ -276,155 +366,295 @@ export class JobService {
       return this.findNearbyJobs(query);
     }
 
-    const where: any = {};
+    const currentPage = Math.max(1, Number(page) || 1);
+    const take = Math.min(100, Math.max(1, Number(limit) || 10));
+    const orderColumn = JOB_SORT_COLUMNS[sortBy] || JOB_SORT_COLUMNS.createdAt;
+    const orderDirection = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    // 🔥 MY JOBS MODE
+    const qb = this.jobRepo
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.page', 'page')
+      .leftJoinAndSelect('job.branch', 'branch')
+      .leftJoinAndSelect('job.creator', 'creator')
+      .leftJoin('page.members', 'member')
+      .loadRelationCountAndMap('job.applicationsCount', 'job.applications');
+
     if (myjobs === 'true') {
-      if (!userId) {
-        throw new BadRequestException('User not authenticated');
-      }
-
-      where.createdBy = userId; // 👈 ONLY MY JOBS
-      // ❗ no isActive filter (active + inactive)
+      if (!userId) throw new BadRequestException('User not authenticated');
+      qb.andWhere(
+        new Brackets((inner) => {
+          inner
+            .where('job.createdBy = :userId', { userId })
+            .orWhere('page.ownerId = :userId', { userId })
+            .orWhere('member.userId = :userId', { userId });
+        }),
+      );
     } else {
-      where.isActive = true; // 👈 public jobs only
+      qb.andWhere('job.isActive = :active', { active: true });
+      qb.andWhere("COALESCE(job.status, 'active') = 'active'");
     }
 
-    if (filter) where.filterId = Number(filter);
-
+    if (filter) qb.andWhere('job.filterId = :filterId', { filterId: Number(filter) });
+    if (status) qb.andWhere('job.status = :status', { status });
     if (search) {
-      where.description = Raw((alias) => `${alias} LIKE '%${search}%'`);
+      qb.andWhere(
+        new Brackets((inner) => {
+          inner
+            .where('job.title LIKE :search', { search: `%${search}%` })
+            .orWhere('job.description LIKE :search', { search: `%${search}%` })
+            .orWhere('page.company_name LIKE :search', { search: `%${search}%` });
+        }),
+      );
     }
 
-    const [jobs, total] = await this.jobRepo.findAndCount({
-      where,
-      relations: ['page'], // 👈 IMPORTANT
-      order: { [sortBy]: sortOrder.toUpperCase() },
-      take: limit,
-      skip: (page - 1) * limit,
-    });
+    qb.orderBy(orderColumn, orderDirection)
+      .skip((currentPage - 1) * take)
+      .take(take);
+
+    const [jobs, total] = await qb.getManyAndCount();
 
     return {
-      data: jobs.map((job) => ({
-        ...job,
-        pageTaggedJob: job.pageId ? true : false,
-        page: job.pageId
-          ? {
-              id: job.page.id,
-              company_name: job.page.company_name,
-              username: job.page.username,
-              company_logo: job.page.company_logo,
-            }
-          : null,
-      })),
+      data: jobs.map((job) => this.formatJob(job)),
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: Number(page),
+      totalPages: Math.ceil(total / take),
+      currentPage,
     };
   }
 
-  async findJobById(id: number) {
-    const job = await this.jobRepo.findOne({
-      where: {
-        id,
-        isActive: true,
-      },
-    });
+  async findJobById(id: number, userId?: number) {
+    const job = await this.findJobEntityForResponse(id);
+    if (!job) throw new NotFoundException(`Job with ID ${id} not found`);
 
-    if (!job) {
+    const status = job.status || (job.isActive ? 'active' : 'closed');
+    if (status !== 'active' && job.createdBy !== userId && job.pageId) {
+      await this.assertCompanyPermission(job.pageId, Number(userId), 'viewApplicants');
+    } else if (status !== 'active' && job.createdBy !== userId) {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    return job;
+    return this.formatJob(job);
   }
 
   async updateJob(id: number, data: any, userId: number) {
-    const job = await this.jobRepo.findOne({ where: { id } });
+    const job = await this.jobRepo.findOne({
+      where: { id },
+      relations: ['page', 'branch'],
+    });
 
     if (!job) throw new NotFoundException(`Job with ID ${id} not found`);
 
-    const effectivePageId =
-      data.pageId !== undefined ? data.pageId : (job.pageId ?? null);
+    let pageId =
+      data.companyId !== undefined || data.pageId !== undefined
+        ? this.optionalPositiveId(data.companyId ?? data.pageId) ?? null
+        : job.pageId ?? null;
+    let branchId =
+      data.branchId !== undefined
+        ? this.optionalPositiveId(data.branchId) ?? null
+        : job.branchId ?? null;
 
-    if (effectivePageId) {
-      const page = await this.pageRepo.findOne({
-        where: { id: effectivePageId },
-        relations: ['members'],
-      });
+    if (
+      data.postingMode === 'individual' ||
+      data.companyId === null ||
+      data.pageId === null
+    ) {
+      pageId = null;
+      branchId = null;
+    }
 
-      if (!page) throw new BadRequestException('Page not found');
-
-      const member =
-        page.ownerId === userId
-          ? { role: 'owner' }
-          : page.members.find((m) => m.userId === userId);
-
-      if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
-        throw new BadRequestException(
-          'You are not allowed to update jobs for this page',
-        );
+    if (branchId) {
+      const branch = await this.branchRepo.findOne({ where: { id: branchId } });
+      if (!branch) throw new BadRequestException('Branch not found');
+      if (pageId && branch.companyId !== pageId) {
+        throw new BadRequestException('Branch does not belong to company');
       }
-    } else {
-      if (job.createdBy !== userId) {
-        throw new BadRequestException('You are not allowed to update this job');
-      }
+      pageId = branch.companyId;
     }
 
-    // ────────────────────────────────────────────────
-    // 2️⃣ LOCATION (optional)
-    // If location is provided:
-    //   - isRemote === true => location null
-    //   - else require lat/lng and build POINT
-    // ────────────────────────────────────────────────
-    let locationUpdate: any = undefined;
-
-    if (data.isRemote === true) {
-      locationUpdate = null;
-    } else if (data.location) {
-      if (
-        typeof data.location?.lat !== 'number' ||
-        typeof data.location?.lng !== 'number'
-      ) {
-        throw new BadRequestException('Valid location is required');
-      }
-
-      locationUpdate = () =>
-        `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+    if (pageId) {
+      await this.assertCompanyPermission(pageId, userId, 'editJobs');
+    } else if (job.createdBy !== userId) {
+      throw new ForbiddenException('You are not allowed to update this job');
     }
 
-    // ────────────────────────────────────────────────
-    // 3️⃣ CLEAN PATCH DATA
-    // - prevent changing createdBy
-    // - remove raw location object
-    // ────────────────────────────────────────────────
-    const patch = { ...data };
-    delete patch.createdBy;
-    delete patch.location;
+    const status = (data.status || job.status || 'active') as JobStatus;
+    const payload = this.normalizeJobPayload(
+      { ...data, status, isRemote: data.isRemote ?? job.isRemote },
+      pageId,
+      branchId,
+    );
+    const locationUpdate = this.buildLocationUpdate(data, status);
 
-    // If pageId passed explicitly, keep it (can set to null too if you allow)
-    // NOTE: effectivePageId logic already handled permissions above
+    delete payload.createdBy;
 
-    // ────────────────────────────────────────────────
-    // 4️⃣ APPLY UPDATE
-    // ────────────────────────────────────────────────
-    const updatePayload: any = {
-      ...patch,
-    };
-
-    if (data.pageId !== undefined) {
-      updatePayload.pageId = data.pageId ?? null;
-    }
-
-    if (locationUpdate !== undefined) {
-      updatePayload.location = locationUpdate;
-    }
+    const updatePayload: any = { ...payload };
+    if (locationUpdate !== undefined) updatePayload.location = locationUpdate;
+    if (data.location === undefined) delete updatePayload.location;
 
     await this.jobRepo.update({ id }, updatePayload);
 
-    // Return updated job
-    const updated = await this.jobRepo.findOne({ where: { id } });
-    if (!updated) throw new BadRequestException('Failed to load updated job');
+    return this.findJobById(id, userId);
+  }
 
-    return updated;
+  async updateJobStatus(id: number, status: JobStatus, userId: number) {
+    if (!['draft', 'active', 'closed'].includes(status)) {
+      throw new BadRequestException('Invalid job status');
+    }
+
+    const job = await this.jobRepo.findOne({ where: { id } });
+    if (!job) throw new NotFoundException('Job not found');
+
+    if (job.pageId) {
+      await this.assertCompanyPermission(job.pageId, userId, 'editJobs');
+    } else if (job.createdBy !== userId) {
+      throw new ForbiddenException('You are not allowed to update this job');
+    }
+
+    await this.jobRepo.update(
+      { id },
+      {
+        status,
+        isActive: status === 'active',
+      },
+    );
+
+    return this.findJobById(id, userId);
+  }
+
+  async closeJob(id: number, userId: number) {
+    return this.updateJobStatus(id, 'closed', userId);
+  }
+
+  private async findJobEntityForResponse(id: number) {
+    const qb = this.jobRepo
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.page', 'page')
+      .leftJoinAndSelect('job.branch', 'branch')
+      .leftJoinAndSelect('job.creator', 'creator')
+      .loadRelationCountAndMap('job.applicationsCount', 'job.applications')
+      .where('job.id = :id', { id });
+
+    return qb.getOne();
+  }
+
+  private formatJob(job: Job & { applicationsCount?: number }) {
+    const creatorName =
+      job.creator?.full_name ||
+      [job.creator?.firstName, job.creator?.lastName].filter(Boolean).join(' ');
+    const companyName = job.page?.company_name || creatorName || 'Individual';
+    const location = this.formatLocation(job.location);
+
+    return {
+      ...job,
+      status: job.status || (job.isActive ? 'active' : 'closed'),
+      applicationsCount: Number((job as any).applicationsCount || 0),
+      companyId: job.pageId || null,
+      companyName,
+      employerName: companyName,
+      employerType: job.pageId ? 'company' : 'individual',
+      employer: {
+        id: job.pageId || job.createdBy,
+        type: job.pageId ? 'company' : 'individual',
+        name: companyName,
+        logoUrl: job.page?.company_logo || job.creator?.profile_photo || null,
+      },
+      pageTaggedJob: Boolean(job.pageId),
+      page: job.pageId
+        ? {
+            id: job.page.id,
+            company_name: job.page.company_name,
+            username: job.page.username,
+            company_logo: job.page.company_logo,
+          }
+        : null,
+      branch: this.formatBranch(job.branch),
+      location,
+      positions: job.vacancies ?? null,
+      payType: job.salaryType,
+    };
+  }
+
+  private formatRawJob(job: any) {
+    const creatorName =
+      job.creator_full_name ||
+      [job.creator_firstName, job.creator_lastName].filter(Boolean).join(' ');
+    const companyName = job.company_name || creatorName || 'Individual';
+    const location =
+      job.lat === null || job.lng === null
+        ? null
+        : {
+            lat: Number(job.lat),
+            lng: Number(job.lng),
+          };
+
+    return {
+      ...job,
+      id: Number(job.id),
+      filterId: Number(job.filterId),
+      salaryAmount: Number(job.salaryAmount),
+      applicationsCount: Number(job.applicationsCount || 0),
+      distance: job.distance === null ? null : Number(job.distance),
+      location,
+      status: job.status || (job.isActive ? 'active' : 'closed'),
+      companyId: job.page_id || null,
+      companyName,
+      employerName: companyName,
+      employerType: job.page_id ? 'company' : 'individual',
+      employer: {
+        id: job.page_id || job.createdBy,
+        type: job.page_id ? 'company' : 'individual',
+        name: companyName,
+        logoUrl: job.company_logo || job.creator_profile_photo || null,
+      },
+      pageTaggedJob: Boolean(job.page_id),
+      page: job.page_id
+        ? {
+            id: job.page_id,
+            company_name: job.company_name,
+            username: job.page_username,
+            company_logo: job.company_logo,
+          }
+        : null,
+      branch: job.branch_id
+        ? {
+            id: job.branch_id,
+            label: job.branch_label,
+            address: job.branch_address,
+            lat: job.branch_lat,
+            lng: job.branch_lng,
+          }
+        : null,
+      positions: job.vacancies ?? null,
+      payType: job.salaryType,
+    };
+  }
+
+  private formatLocation(location: any) {
+    if (!location) return null;
+    if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+      return { lat: location.lat, lng: location.lng };
+    }
+    if (typeof location.y === 'number' && typeof location.x === 'number') {
+      return { lat: location.y, lng: location.x };
+    }
+    return null;
+  }
+
+  private formatBranch(branch?: CompanyBranch | null) {
+    if (!branch) return null;
+
+    return {
+      id: branch.id,
+      label: branch.label,
+      address: branch.address,
+      lat: branch.lat,
+      lng: branch.lng,
+      location:
+        branch.lat === null || branch.lng === null
+          ? null
+          : {
+              lat: Number(branch.lat),
+              lng: Number(branch.lng),
+            },
+    };
   }
 }

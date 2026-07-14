@@ -32,7 +32,7 @@ export class EmployerJobApplicationController {
       new JoiValidationPipe(
         Joi.object({
           status: Joi.string()
-            .valid('pending', 'accepted', 'rejected', 'all')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed', 'all')
             .default('all'),
           page: Joi.number().integer().min(1).default(1),
           limit: Joi.number().integer().min(1).max(100).default(20),
@@ -67,7 +67,7 @@ export class EmployerJobApplicationController {
       new JoiValidationPipe(
         Joi.object({
           status: Joi.string()
-            .valid('pending', 'accepted', 'rejected')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed')
             .required(),
         }),
       ),

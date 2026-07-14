@@ -8,6 +8,12 @@ export declare class ChatMessage {
     sender: User;
     content: string;
     mediaUrl: string;
+    attachments: Array<{
+        fileUrl: string;
+        fileName?: string;
+        contentType?: string;
+    }>;
     messageType: string;
+    readAt: Date;
     createdAt: Date;
 }

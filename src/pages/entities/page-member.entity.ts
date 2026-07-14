@@ -28,6 +28,18 @@ export class PageMember {
   })
   role: 'owner' | 'admin' | 'editor';
 
+  @Column({ default: true })
+  hasAccess: boolean;
+
+  @Column({ type: 'json', nullable: true })
+  permissions: {
+    postJobs?: boolean;
+    editJobs?: boolean;
+    viewApplicants?: boolean;
+    chatApplicants?: boolean;
+    manageTeam?: boolean;
+  };
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -16,5 +16,21 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
         joined: boolean;
         room: string;
     }>;
-    sendMessage(client: Socket, dto: SendMessageDto): Promise<import("./entities/chat-message.entity").ChatMessage>;
+    sendMessage(client: Socket, dto: SendMessageDto): Promise<{
+        id: number;
+        chatId: number;
+        jobApplicationId: number;
+        senderId: number;
+        senderName: string;
+        senderAvatar: string;
+        text: string;
+        attachments: {
+            fileUrl: string;
+            fileName?: string;
+            contentType?: string;
+        }[];
+        messageType: string;
+        createdAt: Date;
+        readAt: Date;
+    }>;
 }

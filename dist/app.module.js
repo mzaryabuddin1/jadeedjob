@@ -13,7 +13,6 @@ const app_service_1 = require("./app.service");
 const config_1 = require("@nestjs/config");
 const auth_module_1 = require("./auth/auth.module");
 const users_module_1 = require("./users/users.module");
-const otp_service_1 = require("./otp/otp.service");
 const otp_module_1 = require("./otp/otp.module");
 const twilio_module_1 = require("./twilio/twilio.module");
 const country_module_1 = require("./country/country.module");
@@ -32,6 +31,8 @@ const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
 const auth_session_module_1 = require("./auth/auth-session.module");
 const reels_module_1 = require("./reels/reels.module");
+const notifications_module_1 = require("./notifications/notifications.module");
+const support_module_1 = require("./support/support.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -75,11 +76,12 @@ exports.AppModule = AppModule = __decorate([
             chat_module_1.ChatModule,
             rating_module_1.RatingModule,
             reels_module_1.ReelsModule,
+            notifications_module_1.NotificationsModule,
+            support_module_1.SupportModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [
             app_service_1.AppService,
-            otp_service_1.OtpService,
             {
                 provide: core_1.APP_GUARD,
                 useClass: throttler_1.ThrottlerGuard,

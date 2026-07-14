@@ -413,6 +413,92 @@ export declare class ReelsService implements OnModuleInit {
     private getViewableReelOrThrow;
     private getReelByIdOrThrow;
     private formatReels;
+    getReelAudio(reelId: number, viewerId: number): Promise<{
+        audioId: string;
+        audioTitle: string;
+        creator: {
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        };
+        originalReel: {
+            id: string;
+            videoUrl: string;
+            category: ReelCategory;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            caption: string;
+            audioTitle: string;
+            linkedJobId: number;
+            stats: {
+                likes: number;
+                comments: number;
+                saves: number;
+                shares: number;
+            };
+            viewerState: {
+                liked: boolean;
+                saved: boolean;
+                followingCreator: boolean;
+                isOwner: boolean;
+            };
+            visibility: ReelVisibility;
+            status: import("./entities/reel.entity").ReelStatus;
+            allowComments: boolean;
+            allowSharing: boolean;
+            createdAt: Date;
+            publishedAt: Date;
+        };
+        usageCount: number;
+    }>;
+    getReelsByAudio(audioId: string, viewerId: number, query?: any): Promise<{
+        audioId: string;
+        audioTitle: string;
+        usageCount: number;
+        relatedReels: {
+            id: string;
+            videoUrl: string;
+            category: ReelCategory;
+            author: {
+                id: string;
+                name: string;
+                handle: string;
+                avatarUri: string;
+                verified: boolean;
+            };
+            caption: string;
+            audioTitle: string;
+            linkedJobId: number;
+            stats: {
+                likes: number;
+                comments: number;
+                saves: number;
+                shares: number;
+            };
+            viewerState: {
+                liked: boolean;
+                saved: boolean;
+                followingCreator: boolean;
+                isOwner: boolean;
+            };
+            visibility: ReelVisibility;
+            status: import("./entities/reel.entity").ReelStatus;
+            allowComments: boolean;
+            allowSharing: boolean;
+            createdAt: Date;
+            publishedAt: Date;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
     private formatReel;
     private formatReelSync;
     private formatComment;

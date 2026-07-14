@@ -33,10 +33,16 @@ export class JobApplication {
 
   @Column({
     type: 'enum',
-    enum: ['pending', 'accepted', 'rejected'],
+    enum: ['pending', 'accepted', 'rejected', 'withdrawn', 'completed'],
     default: 'pending',
   })
   status: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  withdrawnAt: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  completedAt: Date;
 
   @OneToMany(() => ChatMessage, (msg) => msg.jobApplication)
   messages: ChatMessage[];

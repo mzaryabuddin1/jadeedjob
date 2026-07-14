@@ -458,6 +458,47 @@ let ReelsService = class ReelsService {
         const followedCreatorIds = new Set(follows.map((follow) => follow.creatorId));
         return reels.map((reel) => this.formatReelSync(reel, viewerId, likedIds, savedIds, followedCreatorIds));
     }
+    async getReelAudio(reelId, viewerId) {
+        const reel = await this.getViewableReelOrThrow(reelId, viewerId);
+        const audioTitle = reel.audioTitle || 'Original audio';
+        const usageCount = await this.reelRepo.count({
+            where: {
+                audioTitle,
+                status: 'published',
+            },
+        });
+        return {
+            audioId: encodeURIComponent(audioTitle),
+            audioTitle,
+            creator: this.formatAuthor(reel.creator),
+            originalReel: this.formatReelSync(reel, viewerId, new Set(), new Set(), new Set()),
+            usageCount,
+        };
+    }
+    async getReelsByAudio(audioId, viewerId, query = {}) {
+        const audioTitle = decodeURIComponent(audioId);
+        const limit = Math.min(50, Math.max(1, Number(query.limit) || 20));
+        const page = Math.max(1, Number(query.page) || 1);
+        const [reels, total] = await this.reelRepo.findAndCount({
+            where: {
+                audioTitle,
+                status: 'published',
+            },
+            relations: ['creator', 'linkedJob'],
+            order: { publishedAt: 'DESC', createdAt: 'DESC' },
+            skip: (page - 1) * limit,
+            take: limit,
+        });
+        return {
+            audioId: encodeURIComponent(audioTitle),
+            audioTitle,
+            usageCount: total,
+            relatedReels: await this.formatReels(reels, viewerId),
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: page,
+        };
+    }
     async formatReel(reel, viewerId) {
         const [like, save, follow] = await Promise.all([
             this.likeRepo.findOne({ where: { reelId: reel.id, userId: viewerId } }),

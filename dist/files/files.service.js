@@ -11,8 +11,9 @@ const common_1 = require("@nestjs/common");
 const fs_1 = require("fs");
 const path_1 = require("path");
 let FilesService = class FilesService {
-    getFileUrl(fileName) {
-        return `${process.env.APP_URL || 'http://localhost:3000'}/uploads/${fileName}`;
+    getFileUrl(fileName, folder) {
+        const normalizedFolder = folder ? `${folder.replace(/^\/|\/$/g, '')}/` : '';
+        return `${process.env.APP_URL || 'http://localhost:3000'}/uploads/${normalizedFolder}${fileName}`;
     }
     deleteFile(fileName) {
         const filePath = (0, path_1.join)(__dirname, '../../uploads', fileName);

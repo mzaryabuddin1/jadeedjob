@@ -51,7 +51,12 @@ const users_service_1 = require("./users.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const Joi = __importStar(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
-const auth_service_1 = require("../auth/auth.service");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
+const fs_1 = require("fs");
+const path_1 = require("path");
+const crypto_1 = require("crypto");
+const files_service_1 = require("../files/files.service");
 const optionalString = () => Joi.string().allow('', null).optional();
 const optionalUri = () => Joi.string().uri().allow('', null).optional();
 const optionalDate = () => Joi.alternatives()
@@ -91,17 +96,40 @@ const spokenLanguageSchema = Joi.object({
     language: optionalString(),
     level: optionalString(),
 });
+const documentUploadOptions = {
+    storage: (0, multer_1.diskStorage)({
+        destination: (req, file, callback) => {
+            const uploadPath = './uploads/profile-documents';
+            (0, fs_1.mkdirSync)(uploadPath, { recursive: true });
+            callback(null, uploadPath);
+        },
+        filename: (req, file, callback) => {
+            const uniqueName = `${Date.now()}-${(0, crypto_1.randomBytes)(6).toString('hex')}${(0, path_1.extname)(file.originalname)}`;
+            callback(null, uniqueName);
+        },
+    }),
+    limits: {
+        fileSize: 5 * 1024 * 1024,
+    },
+    fileFilter: (req, file, callback) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (!allowed.includes(file.mimetype)) {
+            callback(new common_1.BadRequestException('Unsupported document file type'), false);
+            return;
+        }
+        callback(null, true);
+    },
+};
 let UsersController = class UsersController {
-    constructor(usersService, authService) {
+    constructor(usersService, filesService) {
         this.usersService = usersService;
-        this.authService = authService;
+        this.filesService = filesService;
     }
     async getMe(req) {
         const userId = req.user?.id;
         if (!userId)
             throw new common_1.NotFoundException('User not found or unauthorized');
-        const user = await this.usersService.getPublicUserById(userId);
-        return { user };
+        return this.usersService.getMyProfileResponse(userId);
     }
     async updateMe(req, body) {
         const userId = req.user?.id;
@@ -115,29 +143,43 @@ let UsersController = class UsersController {
         const forbidden = [
             'passwordHash',
             'passwordSalt',
+            'password',
+            'phone',
             'isBanned',
             'isVerified',
             'verified_by_admin_id',
             'kyc_status',
             'verification_date',
             'rejection_reason',
+            'referralCode',
+            'tokenVersion',
+            'phoneVerifiedAt',
+            'admin_notes',
         ];
         forbidden.forEach((field) => delete body[field]);
-        if (body?.password) {
-            const { salt, hash } = this.authService.hashPassword(body.password);
-            body.passwordHash = hash;
-            body.passwordSalt = salt;
-            delete body.password;
-        }
-        let updatedUser = await this.usersService.updateMyProfile(userId, body);
+        await this.usersService.updateMyProfile(userId, body);
         if (newFilterPreferences !== undefined) {
-            const normalizedFilterPreferences = await this.usersService.updateUserFilterPreferences(userId, newFilterPreferences);
-            updatedUser.filter_preferences = normalizedFilterPreferences;
-            updatedUser = await this.usersService.getPublicUserById(userId);
+            await this.usersService.updateUserFilterPreferences(userId, newFilterPreferences);
         }
+        const profile = await this.usersService.getMyProfileResponse(userId);
         return {
             message: 'Profile updated successfully',
-            user: updatedUser,
+            ...profile,
+        };
+    }
+    async uploadMyDocument(req, file, body) {
+        const userId = req.user?.id;
+        if (!userId)
+            throw new common_1.NotFoundException('User not found or unauthorized');
+        if (!file)
+            throw new common_1.BadRequestException('No file provided');
+        const fileUrl = this.filesService.getFileUrl(file.filename, 'profile-documents');
+        const profile = await this.usersService.updateProfileDocument(userId, body.type, fileUrl);
+        return {
+            message: 'Document uploaded successfully',
+            fileName: file.filename,
+            fileUrl,
+            ...profile,
         };
     }
     async getMyPreferences(req) {
@@ -158,14 +200,10 @@ __decorate([
         email: Joi.string().email().allow('', null).optional(),
         firstName: optionalString(),
         lastName: optionalString(),
-        phone: optionalString(),
         country: optionalRelationId(),
+        countryId: optionalRelationId(),
         language: optionalRelationId(),
-        password: Joi.string()
-            .min(6)
-            .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
-            .message('Password must include uppercase, lowercase, number, and special character')
-            .optional(),
+        languageId: optionalRelationId(),
         filter_preferences: Joi.array()
             .items(Joi.number().integer().positive())
             .optional(),
@@ -196,13 +234,13 @@ __decorate([
         id_document_back: optionalUri(),
         address_proof_document: optionalUri(),
         professional_summary: optionalString(),
-        skills: Joi.array().items(Joi.string()).optional(),
-        technical_skills: Joi.array().items(Joi.string()).optional(),
-        soft_skills: Joi.array().items(Joi.string()).optional(),
-        languages_spoken: Joi.array().items(spokenLanguageSchema).optional(),
-        work_experience: Joi.array().items(workExperienceSchema).optional(),
-        education: Joi.array().items(educationSchema).optional(),
-        certifications: Joi.array().items(certificationSchema).optional(),
+        skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
+        technical_skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
+        soft_skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
+        languages_spoken: Joi.array().max(20).items(spokenLanguageSchema).optional(),
+        work_experience: Joi.array().max(25).items(workExperienceSchema).optional(),
+        education: Joi.array().max(25).items(educationSchema).optional(),
+        certifications: Joi.array().max(25).items(certificationSchema).optional(),
         linkedin_url: optionalUri(),
         github_url: optionalUri(),
         portfolio_url: optionalUri(),
@@ -221,6 +259,20 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "updateMe", null);
 __decorate([
+    (0, common_1.Post)('me/documents'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', documentUploadOptions)),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(Joi.object({
+        type: Joi.string()
+            .valid('id_front', 'id_back', 'address_proof', 'profile_photo')
+            .required(),
+    })))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "uploadMyDocument", null);
+__decorate([
     (0, common_1.Get)('me/preferences'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -231,6 +283,6 @@ exports.UsersController = UsersController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('users'),
     __metadata("design:paramtypes", [users_service_1.UsersService,
-        auth_service_1.AuthService])
+        files_service_1.FilesService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map

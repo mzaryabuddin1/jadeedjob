@@ -26,6 +26,13 @@ export class SendMessageDto {
   @IsOptional()
   mediaUrl?: string;
 
+  @IsOptional()
+  attachments?: Array<{
+    fileUrl: string;
+    fileName?: string;
+    contentType?: string;
+  }>;
+
   @IsEnum(['text', 'image', 'video', 'audio', 'file'])
   messageType: 'text' | 'image' | 'video' | 'audio' | 'file';
 }

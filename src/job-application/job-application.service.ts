@@ -5,14 +5,23 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
+import { PageMember } from 'src/pages/entities/page-member.entity';
+import { NotificationsService } from 'src/notifications/notifications.service';
+
+type ApplicationStatus =
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+  | 'withdrawn'
+  | 'completed';
 
 type ReceivedApplicationsQuery = {
-  status?: 'pending' | 'accepted' | 'rejected' | 'all';
+  status?: ApplicationStatus | 'all';
   page?: number;
   limit?: number;
 };
@@ -31,6 +40,11 @@ export class JobApplicationService {
 
     @InjectRepository(Rating)
     private ratingRepo: Repository<Rating>,
+
+    @InjectRepository(PageMember)
+    private pageMemberRepo: Repository<PageMember>,
+
+    private notificationsService: NotificationsService,
   ) {}
 
   private formatDemand(job: Job) {
@@ -41,6 +55,7 @@ export class JobApplicationService {
         : '0';
 
     if (job.salaryType === 'daily-wage') return `${currency} ${amount} / day`;
+    if (job.salaryType === 'hourly') return `${currency} ${amount} / hour`;
     if (job.salaryType === 'monthly') return `${currency} ${amount} / month`;
 
     return `${currency} ${amount}`;
@@ -55,7 +70,18 @@ export class JobApplicationService {
     return [applicant.firstName, applicant.lastName].filter(Boolean).join(' ');
   }
 
+  private getEmployerName(job: Job) {
+    return (
+      job.page?.company_name ||
+      job.creator?.full_name ||
+      [job.creator?.firstName, job.creator?.lastName].filter(Boolean).join(' ') ||
+      'Individual'
+    );
+  }
+
   private getJobSummary(job: Job) {
+    const employerName = this.getEmployerName(job);
+
     return {
       id: job.id,
       title: job.title,
@@ -64,15 +90,62 @@ export class JobApplicationService {
       salaryAmount: job.salaryAmount,
       currency: job.currency,
       filter: job.filter ?? null,
+      companyName: employerName,
+      employerName,
+      employerType: job.pageId ? 'company' : 'individual',
+      status: job.status || (job.isActive ? 'active' : 'closed'),
+      payType: job.salaryType,
     };
+  }
+
+  private getEmployerSummary(job: Job) {
+    const name = this.getEmployerName(job);
+
+    return {
+      id: job.pageId || job.createdBy,
+      type: job.pageId ? 'company' : 'individual',
+      companyId: job.pageId || null,
+      name,
+      companyName: name,
+      logoUrl: job.page?.company_logo || job.creator?.profile_photo || null,
+    };
+  }
+
+  private async canManageJob(job: Job, userId: number) {
+    if (job.createdBy === userId) return true;
+    if (!job.pageId) return false;
+
+    const member = await this.pageMemberRepo.findOne({
+      where: { pageId: job.pageId, userId },
+    });
+    if (!member || member.hasAccess === false) return false;
+
+    const defaultPermissions =
+      member.role === 'editor'
+        ? {
+            viewApplicants: true,
+            chatApplicants: true,
+          }
+        : {
+            viewApplicants: true,
+            chatApplicants: true,
+          };
+
+    const permissions = {
+      ...defaultPermissions,
+      ...(member.permissions || {}),
+    };
+
+    return Boolean(permissions.viewApplicants);
   }
 
   async apply(data: { jobId: number; applicantId: number }) {
     const job = await this.jobRepo.findOne({
       where: { id: data.jobId, isActive: true },
+      relations: ['page', 'creator'],
     });
 
-    if (!job) {
+    if (!job || (job.status && job.status !== 'active')) {
       throw new BadRequestException('Job does not exist or is not active');
     }
 
@@ -83,34 +156,105 @@ export class JobApplicationService {
       },
     });
 
-    if (existing) {
+    if (existing && existing.status !== 'withdrawn') {
       throw new BadRequestException('You already applied to this job');
     }
 
-    const app = this.jobAppRepo.create({
-      jobId: data.jobId,
-      applicantId: data.applicantId,
+    const app = existing || this.jobAppRepo.create(data);
+    app.status = 'pending';
+    app.withdrawnAt = null;
+    app.completedAt = null;
+    const saved = await this.jobAppRepo.save(app);
+
+    await this.notificationsService.create({
+      userId: job.createdBy,
+      type: 'job_application',
+      title: 'New application received',
+      message: `Someone applied to ${job.title}.`,
+      data: {
+        jobId: job.id,
+        applicationId: saved.id,
+        chatId: saved.id,
+        companyId: job.pageId ?? null,
+      },
     });
 
-    return this.jobAppRepo.save(app);
+    return saved;
   }
 
-  async getApplicationsByUser(userId: number, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
+  async getApplicationsByUser(
+    userId: number,
+    page = 1,
+    limit = 10,
+    status?: ApplicationStatus | 'all',
+  ) {
+    const currentPage = Math.max(1, Number(page) || 1);
+    const take = Math.min(100, Math.max(1, Number(limit) || 10));
+    const where: any = { applicantId: userId };
+
+    if (status && status !== 'all') {
+      where.status = status;
+    } else {
+      where.status = Not('withdrawn');
+    }
 
     const [applications, total] = await this.jobAppRepo.findAndCount({
-      where: { applicantId: userId },
-      relations: ['job'],
-      skip,
-      take: limit,
+      where,
+      relations: ['job', 'job.page', 'job.creator', 'job.filter'],
+      skip: (currentPage - 1) * take,
+      take,
       order: { createdAt: 'DESC' },
     });
 
     return {
-      data: applications,
+      data: applications.map((application) => ({
+        applicationId: application.id,
+        id: application.id,
+        status: application.status,
+        createdAt: application.createdAt,
+        updatedAt: application.updatedAt,
+        job: this.getJobSummary(application.job),
+        employer: this.getEmployerSummary(application.job),
+        chatId: application.id,
+      })),
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / take),
+      currentPage,
+    };
+  }
+
+  async getApplicationHistory(
+    userId: number,
+    status: ApplicationStatus = 'completed',
+    page = 1,
+    limit = 20,
+  ) {
+    const currentPage = Math.max(1, Number(page) || 1);
+    const take = Math.min(100, Math.max(1, Number(limit) || 20));
+
+    const [applications, total] = await this.jobAppRepo.findAndCount({
+      where: { applicantId: userId, status },
+      relations: ['job', 'job.page', 'job.creator', 'job.filter'],
+      order: { updatedAt: 'DESC' },
+      skip: (currentPage - 1) * take,
+      take,
+    });
+
+    return {
+      data: applications.map((application) => ({
+        id: application.id,
+        applicationId: application.id,
+        jobTitle: application.job?.title,
+        amount: application.job?.salaryAmount,
+        description: application.job?.description,
+        completedAt: application.completedAt || application.updatedAt,
+        status: application.status,
+        employer: this.getEmployerSummary(application.job),
+        paymentStatus: 'pending',
+      })),
+      total,
+      totalPages: Math.ceil(total / take),
+      currentPage,
     };
   }
 
@@ -132,13 +276,11 @@ export class JobApplicationService {
 
     const job = await this.jobRepo.findOne({
       where: { id: jobId },
+      relations: ['page', 'creator', 'filter'],
     });
 
-    if (!job) {
-      throw new NotFoundException('Job not found');
-    }
-
-    if (job.createdBy !== employerId) {
+    if (!job) throw new NotFoundException('Job not found');
+    if (!(await this.canManageJob(job, employerId))) {
       throw new ForbiddenException('You cannot view applications for this job');
     }
 
@@ -159,10 +301,12 @@ export class JobApplicationService {
       order: { createdAt: 'DESC' },
     });
 
-    const [pending, accepted, rejected] = await Promise.all([
+    const [pending, accepted, rejected, withdrawn, completed] = await Promise.all([
       this.jobAppRepo.count({ where: { jobId, status: 'pending' } }),
       this.jobAppRepo.count({ where: { jobId, status: 'accepted' } }),
       this.jobAppRepo.count({ where: { jobId, status: 'rejected' } }),
+      this.jobAppRepo.count({ where: { jobId, status: 'withdrawn' } }),
+      this.jobAppRepo.count({ where: { jobId, status: 'completed' } }),
     ]);
 
     const applicationIds = applications.map((application) => application.id);
@@ -214,6 +358,7 @@ export class JobApplicationService {
             ratingAverage,
             ratingCount,
           },
+          chatId: application.id,
           createdAt: application.createdAt,
           updatedAt: application.updatedAt,
         };
@@ -222,7 +367,9 @@ export class JobApplicationService {
         pending,
         accepted,
         rejected,
-        all: pending + accepted + rejected,
+        withdrawn,
+        completed,
+        all: pending + accepted + rejected + withdrawn + completed,
       },
       job: this.getJobSummary(job),
       total,
@@ -231,21 +378,72 @@ export class JobApplicationService {
     };
   }
 
-  async updateStatus(id: number, status: string, employerId: number) {
+  async updateStatus(id: number, status: ApplicationStatus, employerId: number) {
+    const app = await this.jobAppRepo.findOne({
+      where: { id },
+      relations: ['job', 'job.page', 'job.creator'],
+    });
+
+    if (!app) throw new BadRequestException('Application not found');
+    if (!(await this.canManageJob(app.job, employerId))) {
+      throw new ForbiddenException('You cannot update this application');
+    }
+
+    app.status = status;
+    if (status === 'completed') app.completedAt = new Date();
+    if (status !== 'withdrawn') app.withdrawnAt = null;
+    const saved = await this.jobAppRepo.save(app);
+
+    await this.notificationsService.create({
+      userId: app.applicantId,
+      type: 'application_status',
+      title: 'Application status updated',
+      message: `Your application for ${app.job.title} is now ${status}.`,
+      data: {
+        jobId: app.jobId,
+        applicationId: app.id,
+        chatId: app.id,
+        companyId: app.job.pageId ?? null,
+      },
+    });
+
+    return saved;
+  }
+
+  async withdraw(id: number, applicantId: number) {
     const app = await this.jobAppRepo.findOne({
       where: { id },
       relations: ['job'],
     });
 
-    if (!app) {
-      throw new BadRequestException('Application not found');
+    if (!app) throw new NotFoundException('Application not found');
+    if (app.applicantId !== applicantId) {
+      throw new ForbiddenException('You cannot withdraw this application');
+    }
+    if (['accepted', 'completed'].includes(app.status)) {
+      throw new BadRequestException('This application cannot be withdrawn');
     }
 
-    if (app.job.createdBy !== employerId) {
-      throw new ForbiddenException('You cannot update this application');
-    }
+    app.status = 'withdrawn';
+    app.withdrawnAt = new Date();
+    const saved = await this.jobAppRepo.save(app);
 
-    app.status = status;
-    return this.jobAppRepo.save(app);
+    await this.notificationsService.create({
+      userId: app.job.createdBy,
+      type: 'application_withdrawn',
+      title: 'Application withdrawn',
+      message: `An application for ${app.job.title} was withdrawn.`,
+      data: {
+        jobId: app.jobId,
+        applicationId: app.id,
+        chatId: app.id,
+        companyId: app.job.pageId ?? null,
+      },
+    });
+
+    return {
+      message: 'Application withdrawn successfully',
+      application: saved,
+    };
   }
 }

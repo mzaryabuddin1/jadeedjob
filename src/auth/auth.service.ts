@@ -12,6 +12,8 @@ import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
+import { computeUserIsVerified } from 'src/users/profile-verification.util';
+import { generateReferralCode } from 'src/users/referral-code.util';
 
 @Injectable()
 export class AuthService {
@@ -32,7 +34,10 @@ export class AuthService {
   ) {}
 
   generateToken(user: any) {
-    return this.jwtService.sign({ id: user.id });
+    return this.jwtService.sign({
+      id: user.id,
+      tokenVersion: Number(user.tokenVersion || 0),
+    });
   }
 
   toPublicUser(user: any) {
@@ -41,10 +46,26 @@ export class AuthService {
       passwordSalt,
       fcmTokens,
       password,
+      admin_notes,
+      verified_by_admin_id,
       ...publicUser
     } = user as any;
 
     return publicUser;
+  }
+
+  private async generateUniqueReferralCode() {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const referralCode = generateReferralCode();
+      const existing = await this.userRepo.findOne({
+        where: { referralCode },
+        select: ['id'],
+      });
+
+      if (!existing) return referralCode;
+    }
+
+    throw new BadRequestException('Unable to generate referral code');
   }
 
   // ────────────────────────────────────────────────
@@ -104,6 +125,8 @@ export class AuthService {
       country,
       language,
       isBanned: false,
+      referralCode: data.referralCode || (await this.generateUniqueReferralCode()),
+      isVerified: computeUserIsVerified(userData as any),
       filter_preferences: defaultFilterPreferences, // ✅ AUTO SET
     });
 
@@ -159,10 +182,68 @@ export class AuthService {
   // RESET PASSWORD (forgot-password)
   // ────────────────────────────────────────────────
   async resetPassword(phone: string, salt: string, hash: string) {
-    await this.userRepo.update(
-      { phone },
-      { passwordSalt: salt, passwordHash: hash },
+    const user = await this.findUserByPhone(phone);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+
+    return this.userRepo.save(user);
+  }
+
+  async validateUserByIdAndPassword(userId: number, password: string) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: ['country', 'language'],
+    });
+    if (!user) throw new UnauthorizedException('Invalid user session');
+
+    const isValid = this.validatePassword(
+      password,
+      user.passwordHash,
+      user.passwordSalt,
     );
+
+    if (!isValid) throw new UnauthorizedException('Invalid password');
+    if (user.isBanned)
+      throw new UnauthorizedException('Your account is blocked!');
+
+    return user;
+  }
+
+  async changePassword(userId: number, newPassword: string) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: ['country', 'language'],
+    });
+    if (!user) throw new UnauthorizedException('Invalid user session');
+
+    const { salt, hash } = this.hashPassword(newPassword);
+    user.passwordSalt = salt;
+    user.passwordHash = hash;
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+
+    return this.userRepo.save(user);
+  }
+
+  async changePhone(userId: number, newPhone: string) {
+    const existing = await this.findUserByPhone(newPhone);
+    if (existing && existing.id !== userId) {
+      throw new BadRequestException('Phone already registered');
+    }
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: ['country', 'language'],
+    });
+    if (!user) throw new UnauthorizedException('Invalid user session');
+
+    user.phone = newPhone;
+    user.phoneVerifiedAt = new Date();
+    user.isVerified = computeUserIsVerified(user);
+
+    return this.userRepo.save(user);
   }
 
   async attachFcmToken(userId: number, fcmToken: string) {

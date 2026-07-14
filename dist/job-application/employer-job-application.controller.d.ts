@@ -28,6 +28,7 @@ export declare class EmployerJobApplicationController {
                 ratingAverage: number;
                 ratingCount: number;
             };
+            chatId: number;
             createdAt: Date;
             updatedAt: Date;
         }[];
@@ -35,6 +36,8 @@ export declare class EmployerJobApplicationController {
             pending: number;
             accepted: number;
             rejected: number;
+            withdrawn: number;
+            completed: number;
             all: number;
         };
         job: {
@@ -45,6 +48,11 @@ export declare class EmployerJobApplicationController {
             salaryAmount: number;
             currency: string;
             filter: import("../filter/entities/filter.entity").Filter;
+            companyName: string;
+            employerName: string;
+            employerType: string;
+            status: "active" | "draft" | "closed";
+            payType: string;
         };
         total: number;
         totalPages: number;

@@ -5,8 +5,9 @@ import { join } from 'path';
 @Injectable()
 export class FilesService {
   // Return full URL path for the uploaded file
-  getFileUrl(fileName: string): string {
-    return `${process.env.APP_URL || 'http://localhost:3000'}/uploads/${fileName}`;
+  getFileUrl(fileName: string, folder?: string): string {
+    const normalizedFolder = folder ? `${folder.replace(/^\/|\/$/g, '')}/` : '';
+    return `${process.env.APP_URL || 'http://localhost:3000'}/uploads/${normalizedFolder}${fileName}`;
   }
 
   // Delete a file if needed (for re-uploads or cleanup)

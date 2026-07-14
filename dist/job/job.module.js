@@ -16,12 +16,28 @@ const filter_entity_1 = require("../filter/entities/filter.entity");
 const firebase_module_1 = require("../firebase/firebase.module");
 const user_entity_1 = require("../users/entities/user.entity");
 const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const company_branch_entity_1 = require("../pages/entities/company-branch.entity");
+const page_member_entity_1 = require("../pages/entities/page-member.entity");
+const job_application_entity_1 = require("../job-application/entities/job-application.entity");
+const notifications_module_1 = require("../notifications/notifications.module");
 let JobModule = class JobModule {
 };
 exports.JobModule = JobModule;
 exports.JobModule = JobModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([job_entity_1.Job, filter_entity_1.Filter, user_entity_1.User, company_page_entity_1.CompanyPage]), firebase_module_1.FirebaseModule],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([
+                job_entity_1.Job,
+                filter_entity_1.Filter,
+                user_entity_1.User,
+                company_page_entity_1.CompanyPage,
+                company_branch_entity_1.CompanyBranch,
+                page_member_entity_1.PageMember,
+                job_application_entity_1.JobApplication,
+            ]),
+            firebase_module_1.FirebaseModule,
+            notifications_module_1.NotificationsModule,
+        ],
         controllers: [job_controller_1.JobController],
         providers: [job_service_1.JobService],
     })

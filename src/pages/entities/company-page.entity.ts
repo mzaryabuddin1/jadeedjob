@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { PageMember } from './page-member.entity';
+import { CompanyBranch } from './company-branch.entity';
 
 @Entity('pages')
 export class CompanyPage  {
@@ -141,6 +142,11 @@ export class CompanyPage  {
     cascade: true,
   })
   members: PageMember[];
+
+  @OneToMany(() => CompanyBranch, (branch) => branch.company, {
+    cascade: true,
+  })
+  branches: CompanyBranch[];
 
   @CreateDateColumn()
   createdAt: Date;

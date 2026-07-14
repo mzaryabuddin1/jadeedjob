@@ -89,6 +89,12 @@ let ReelsController = class ReelsController {
     getFeed(query, req) {
         return this.reelsService.getFeed(query, req.user.id);
     }
+    getReelsByAudio(audioId, query, req) {
+        return this.reelsService.getReelsByAudio(audioId, req.user.id, query);
+    }
+    getAudio(id, req) {
+        return this.reelsService.getReelAudio(id, req.user.id);
+    }
     like(id, req) {
         return this.reelsService.likeReel(id, req.user.id);
     }
@@ -162,6 +168,23 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], ReelsController.prototype, "getFeed", null);
+__decorate([
+    (0, common_1.Get)('audio/:audioId/reels'),
+    __param(0, (0, common_1.Param)('audioId')),
+    __param(1, (0, common_1.Query)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], ReelsController.prototype, "getReelsByAudio", null);
+__decorate([
+    (0, common_1.Get)(':id/audio'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", void 0)
+], ReelsController.prototype, "getAudio", null);
 __decorate([
     (0, common_1.Post)(':id/like'),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),

@@ -12,6 +12,7 @@ import { Filter } from 'src/filter/entities/filter.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { User } from 'src/users/entities/user.entity';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { CompanyBranch } from 'src/pages/entities/company-branch.entity';
 
 @Entity('jobs')
 export class Job {
@@ -43,6 +44,15 @@ export class Job {
   @Column('simple-array', { nullable: true })
   jobTypes: string[];
 
+  @Column({ nullable: true })
+  jobType: string;
+
+  @Column({ nullable: true })
+  shift: string;
+
+  @Column({ nullable: true })
+  working_hours: string;
+
   @Column()
   salaryType: string;
 
@@ -51,6 +61,12 @@ export class Job {
 
   @Column({ nullable: true })
   currency: string;
+
+  @Column({ type: 'int', nullable: true })
+  vacancies: number;
+
+  @Column({ default: false })
+  isRemote: boolean;
 
   // MySQL Geo Point
   @Column({
@@ -86,6 +102,9 @@ export class Job {
   @Column({ type: 'date', nullable: true })
   endDate: Date;
 
+  @Column({ type: 'date', nullable: true })
+  deadline: Date;
+
   @Column({ nullable: true })
   industry: string;
 
@@ -97,6 +116,26 @@ export class Job {
 
   @Column('simple-array', { nullable: true })
   languageRequirements: string[];
+
+  @Column({ nullable: true })
+  contactEmail: string;
+
+  @Column({ nullable: true })
+  contactPhone: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['individual', 'company'],
+    default: 'individual',
+  })
+  postingMode: 'individual' | 'company';
+
+  @Column({
+    type: 'enum',
+    enum: ['draft', 'active', 'closed'],
+    default: 'active',
+  })
+  status: 'draft' | 'active' | 'closed';
 
   @Column({ default: true })
   isActive: boolean;
@@ -123,4 +162,11 @@ export class Job {
   @ManyToOne(() => CompanyPage, { nullable: true })
   @JoinColumn({ name: 'pageId' })
   page?: CompanyPage;
+
+  @Column({ nullable: true })
+  branchId?: number;
+
+  @ManyToOne(() => CompanyBranch, { nullable: true })
+  @JoinColumn({ name: 'branchId' })
+  branch?: CompanyBranch;
 }

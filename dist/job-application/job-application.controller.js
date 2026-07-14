@@ -31,8 +31,11 @@ let JobApplicationController = class JobApplicationController {
             applicantId: req.user.id,
         });
     }
-    async getMyApplications(req, page = 1, limit = 10) {
-        return this.jobAppService.getApplicationsByUser(req.user.id, +page, +limit);
+    async getMyApplications(req, page = 1, limit = 10, status) {
+        return this.jobAppService.getApplicationsByUser(req.user.id, +page, +limit, status);
+    }
+    async getHistory(req, status = 'completed', page = 1, limit = 20) {
+        return this.jobAppService.getApplicationHistory(req.user.id, status, Number(page), Number(limit));
     }
     async getReceivedByJob(params, query, req) {
         return this.jobAppService.getReceivedApplicationsForJob(Number(params.jobId), req.user.id, {
@@ -46,6 +49,9 @@ let JobApplicationController = class JobApplicationController {
     }
     async updateStatus(params, body, req) {
         return this.jobAppService.updateStatus(Number(params.id), body.status, req.user.id);
+    }
+    async withdraw(id, req) {
+        return this.jobAppService.withdraw(id, req.user.id);
     }
 };
 exports.JobApplicationController = JobApplicationController;
@@ -65,10 +71,21 @@ __decorate([
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('page')),
     __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "getMyApplications", null);
+__decorate([
+    (0, common_1.Get)('history'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('page')),
+    __param(3, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], JobApplicationController.prototype, "getHistory", null);
 __decorate([
     (0, common_1.Get)('job/:jobId/received'),
     __param(0, (0, common_1.Param)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
@@ -76,7 +93,7 @@ __decorate([
     })))),
     __param(1, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         status: joi_1.default.string()
-            .valid('pending', 'accepted', 'rejected', 'all')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed', 'all')
             .default('all'),
         page: joi_1.default.number().integer().min(1).default(1),
         limit: joi_1.default.number().integer().min(1).max(100).default(20),
@@ -103,7 +120,7 @@ __decorate([
     })))),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         status: joi_1.default.string()
-            .valid('pending', 'accepted', 'rejected')
+            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed')
             .required(),
     })))),
     __param(2, (0, common_1.Req)()),
@@ -111,6 +128,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)(':id/withdraw'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", Promise)
+], JobApplicationController.prototype, "withdraw", null);
 exports.JobApplicationController = JobApplicationController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('job-application'),

@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   ParseIntPipe,
+  Delete,
 } from '@nestjs/common';
 import { JobService } from './job.service';
 import Joi from 'joi';
@@ -29,8 +30,14 @@ export class JobController {
         filterId: Joi.number().required(),
         description: Joi.string().required(),
         pageId: Joi.number().optional(),
+        companyId: Joi.number().allow(null).optional(),
+        branchId: Joi.number().allow(null).optional(),
+        postingMode: Joi.string().valid('individual', 'company').optional(),
         requirements: Joi.string().optional(),
         benefits: Joi.array().items(Joi.string()).optional(),
+        jobType: Joi.string().optional(),
+        shift: Joi.string().optional(),
+        working_hours: Joi.string().optional(),
         shifts: Joi.array().items(
           Joi.string().valid('morning', 'evening', 'night', 'rotational'),
         ),
@@ -57,18 +64,24 @@ export class JobController {
           .required(),
         salaryAmount: Joi.number().required(),
         currency: Joi.string().optional(),
+        vacancies: Joi.number().integer().min(1).optional(),
+        isRemote: Joi.boolean().optional(),
+        status: Joi.string().valid('draft', 'active', 'closed').optional(),
 
         location: Joi.object({
           lat: Joi.number().required(),
           lng: Joi.number().required(),
-        }).required(),
+        }).optional(),
 
         startDate: Joi.date().optional(),
         endDate: Joi.date().optional(),
+        deadline: Joi.date().optional(),
         industry: Joi.string().optional(),
         educationLevel: Joi.string().optional(),
         experienceRequired: Joi.string().optional(),
         languageRequirements: Joi.array().items(Joi.string()).optional(),
+        contactEmail: Joi.string().email().optional(),
+        contactPhone: Joi.string().optional(),
       }),
     ),
   )
@@ -83,8 +96,8 @@ export class JobController {
   }
 
   @Get(':id')
-  async findJob(@Param('id') id: number) {
-    return this.jobService.findJobById(id);
+  async findJob(@Param('id') id: number, @Req() req: any) {
+    return this.jobService.findJobById(Number(id), req.user.id);
   }
 
   @Patch(':id')
@@ -95,9 +108,15 @@ export class JobController {
         title: Joi.string().optional(),
         description: Joi.string().optional(),
         pageId: Joi.number().optional(),
+        companyId: Joi.number().allow(null).optional(),
+        branchId: Joi.number().allow(null).optional(),
+        postingMode: Joi.string().valid('individual', 'company').optional(),
         filterId: Joi.number().optional(),
         requirements: Joi.string().optional(),
         benefits: Joi.array().items(Joi.string()).optional(),
+        jobType: Joi.string().optional(),
+        shift: Joi.string().optional(),
+        working_hours: Joi.string().optional(),
         shifts: Joi.array().items(
           Joi.string().valid('morning', 'evening', 'night', 'rotational'),
         ),
@@ -124,6 +143,9 @@ export class JobController {
           .optional(),
         salaryAmount: Joi.number().optional(),
         currency: Joi.string().optional(),
+        vacancies: Joi.number().integer().min(1).optional(),
+        isRemote: Joi.boolean().optional(),
+        status: Joi.string().valid('draft', 'active', 'closed').optional(),
 
         location: Joi.object({
           lat: Joi.number().required(),
@@ -132,10 +154,13 @@ export class JobController {
 
         startDate: Joi.date().optional(),
         endDate: Joi.date().optional(),
+        deadline: Joi.date().optional(),
         industry: Joi.string().optional(),
         educationLevel: Joi.string().optional(),
         experienceRequired: Joi.string().optional(),
         languageRequirements: Joi.array().items(Joi.string()).optional(),
+        contactEmail: Joi.string().email().optional(),
+        contactPhone: Joi.string().optional(),
       }),
     )) body: any,
     @Req() req: any,
@@ -143,4 +168,24 @@ export class JobController {
     return this.jobService.updateJob(id, body, req.user.id);
   }
 
+  @Patch(':id/status')
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          status: Joi.string().valid('draft', 'active', 'closed').required(),
+        }),
+      ),
+    )
+    body: any,
+    @Req() req: any,
+  ) {
+    return this.jobService.updateJobStatus(id, body.status, req.user.id);
+  }
+
+  @Delete(':id')
+  async deleteJob(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.jobService.closeJob(id, req.user.id);
+  }
 }
