@@ -1,6 +1,7 @@
 import { User } from 'src/users/entities/user.entity';
 import { PageMember } from './page-member.entity';
 import { CompanyBranch } from './company-branch.entity';
+export type CompanyVerificationStatus = 'pending' | 'approved' | 'needs_changes' | 'rejected' | 'suspended';
 export declare class CompanyPage {
     id: number;
     company_name: string;
@@ -41,6 +42,11 @@ export declare class CompanyPage {
     client_list: string[];
     certifications: string[];
     company_rating: number;
+    verificationStatus: CompanyVerificationStatus;
+    verificationReason: string;
+    verifiedAt: Date;
+    verifiedByAdminId: number;
+    verifiedByAdmin: User;
     ownerId: number;
     owner: User;
     members: PageMember[];

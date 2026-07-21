@@ -33,6 +33,8 @@ const auth_session_module_1 = require("./auth/auth-session.module");
 const reels_module_1 = require("./reels/reels.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const support_module_1 = require("./support/support.module");
+const profiles_module_1 = require("./profiles/profiles.module");
+const posts_module_1 = require("./posts/posts.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -78,6 +80,8 @@ exports.AppModule = AppModule = __decorate([
             reels_module_1.ReelsModule,
             notifications_module_1.NotificationsModule,
             support_module_1.SupportModule,
+            profiles_module_1.ProfilesModule,
+            posts_module_1.PostsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

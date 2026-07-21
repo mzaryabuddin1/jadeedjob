@@ -18,7 +18,13 @@ export declare class EmployerCompanyController {
                 viewApplicants: boolean;
                 chatApplicants: boolean;
                 manageTeam: boolean;
+                publishContent: boolean;
             };
+            verificationStatus: any;
+            verificationReason: any;
+            canPublish: boolean;
+            canPostJobs: boolean;
+            jobPostingDisabledReason: any;
         }[];
     }>;
     getCompanySelectOptions(req: any): Promise<{
@@ -33,22 +39,26 @@ export declare class EmployerCompanyController {
                 viewApplicants: boolean;
                 chatApplicants: boolean;
                 manageTeam: boolean;
+                publishContent: boolean;
             };
+            verificationStatus: any;
+            verificationReason: any;
+            canPublish: boolean;
+            canPostJobs: boolean;
+            jobPostingDisabledReason: any;
         }[];
     }>;
     getCompany(companyId: number, req: any): Promise<{
         data: {
-            myRole: "owner" | "admin" | "editor";
-            myPermissions: {
-                postJobs: boolean;
-                editJobs: boolean;
-                viewApplicants: boolean;
-                chatApplicants: boolean;
-                manageTeam: boolean;
-            };
+            myRole: import("./company-permissions").CompanyMemberRole;
+            myPermissions: import("./company-permissions").CompanyPermissions;
+            canPublish: boolean;
+            canPostJobs: boolean;
+            jobPostingDisabledReason: string;
             id: number;
             name: string;
             companyName: string;
+            username: string;
             businessName: string;
             logoUrl: string;
             description: string;
@@ -79,6 +89,9 @@ export declare class EmployerCompanyController {
                     lng: number;
                 };
             }[];
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verifiedAt: Date;
             createdAt: Date;
             updatedAt: Date;
         };
@@ -89,6 +102,7 @@ export declare class EmployerCompanyController {
             id: number;
             name: string;
             companyName: string;
+            username: string;
             businessName: string;
             logoUrl: string;
             description: string;
@@ -119,6 +133,9 @@ export declare class EmployerCompanyController {
                     lng: number;
                 };
             }[];
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verifiedAt: Date;
             createdAt: Date;
             updatedAt: Date;
         };
@@ -162,16 +179,10 @@ export declare class EmployerCompanyController {
             name: string;
             phone: string;
             avatarUrl: string;
-            roleType: "owner" | "admin" | "editor";
+            roleType: import("./company-permissions").CompanyMemberRole;
             roleLabel: string;
             hasAccess: boolean;
-            permissions: {
-                postJobs: boolean;
-                editJobs: boolean;
-                viewApplicants: boolean;
-                chatApplicants: boolean;
-                manageTeam: boolean;
-            };
+            permissions: import("./company-permissions").CompanyPermissions;
         }[];
     }>;
     inviteOrGrant(companyId: number, body: any, req: any): Promise<{
@@ -183,16 +194,10 @@ export declare class EmployerCompanyController {
             name: string;
             phone: string;
             avatarUrl: string;
-            roleType: "owner" | "admin" | "editor";
+            roleType: import("./company-permissions").CompanyMemberRole;
             roleLabel: string;
             hasAccess: boolean;
-            permissions: {
-                postJobs: boolean;
-                editJobs: boolean;
-                viewApplicants: boolean;
-                chatApplicants: boolean;
-                manageTeam: boolean;
-            };
+            permissions: import("./company-permissions").CompanyPermissions;
         };
     }>;
     updateAccess(memberId: number, body: any, req: any): Promise<{
@@ -204,16 +209,10 @@ export declare class EmployerCompanyController {
             name: string;
             phone: string;
             avatarUrl: string;
-            roleType: "owner" | "admin" | "editor";
+            roleType: import("./company-permissions").CompanyMemberRole;
             roleLabel: string;
             hasAccess: boolean;
-            permissions: {
-                postJobs: boolean;
-                editJobs: boolean;
-                viewApplicants: boolean;
-                chatApplicants: boolean;
-                manageTeam: boolean;
-            };
+            permissions: import("./company-permissions").CompanyPermissions;
         };
     }>;
     updatePermissions(memberId: number, body: any, req: any): Promise<{
@@ -225,16 +224,10 @@ export declare class EmployerCompanyController {
             name: string;
             phone: string;
             avatarUrl: string;
-            roleType: "owner" | "admin" | "editor";
+            roleType: import("./company-permissions").CompanyMemberRole;
             roleLabel: string;
             hasAccess: boolean;
-            permissions: {
-                postJobs: boolean;
-                editJobs: boolean;
-                viewApplicants: boolean;
-                chatApplicants: boolean;
-                manageTeam: boolean;
-            };
+            permissions: import("./company-permissions").CompanyPermissions;
         };
     }>;
 }

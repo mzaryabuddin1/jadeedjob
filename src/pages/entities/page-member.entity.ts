@@ -1,6 +1,13 @@
-import { User } from "src/users/entities/user.entity";
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
-import { CompanyPage } from "./company-page.entity";
+import { User } from 'src/users/entities/user.entity';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { CompanyPage } from './company-page.entity';
+import { CompanyMemberRole, CompanyPermissions } from '../company-permissions';
 
 // src/pages/entities/page-member.entity.ts
 @Entity('page_members')
@@ -26,19 +33,13 @@ export class PageMember {
     type: 'enum',
     enum: ['owner', 'admin', 'editor'],
   })
-  role: 'owner' | 'admin' | 'editor';
+  role: CompanyMemberRole;
 
   @Column({ default: true })
   hasAccess: boolean;
 
   @Column({ type: 'json', nullable: true })
-  permissions: {
-    postJobs?: boolean;
-    editJobs?: boolean;
-    viewApplicants?: boolean;
-    chatApplicants?: boolean;
-    manageTeam?: boolean;
-  };
+  permissions: Partial<CompanyPermissions>;
 
   @CreateDateColumn()
   createdAt: Date;

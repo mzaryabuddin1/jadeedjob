@@ -20,20 +20,46 @@ const company_page_entity_1 = require("./entities/company-page.entity");
 const page_member_entity_1 = require("./entities/page-member.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const company_branch_entity_1 = require("./entities/company-branch.entity");
-const EMPLOYER_PERMISSION_KEYS = [
-    'postJobs',
-    'editJobs',
-    'viewApplicants',
-    'chatApplicants',
-    'manageTeam',
+const company_permissions_1 = require("./company-permissions");
+const profile_format_util_1 = require("../profiles/profile-format.util");
+const COMPANY_MUTABLE_FIELDS = [
+    'company_name',
+    'business_name',
+    'company_logo',
+    'website_url',
+    'official_email',
+    'official_phone',
+    'industry_type',
+    'company_description',
+    'founded_year',
+    'country',
+    'state',
+    'city',
+    'postal_code',
+    'address_line1',
+    'address_line2',
+    'google_maps_link',
+    'business_registration_number',
+    'tax_identification_number',
+    'registration_authority',
+    'business_license_document',
+    'company_type',
+    'representative_name',
+    'representative_designation',
+    'representative_email',
+    'representative_phone',
+    'id_proof_document',
+    'linkedin_page_url',
+    'facebook_page_url',
+    'instagram_page_url',
+    'twitter_page_url',
+    'youtube_channel_url',
+    'verified_email_domain',
+    'number_of_employees',
+    'annual_revenue_range',
+    'client_list',
+    'certifications',
 ];
-const FULL_EMPLOYER_PERMISSIONS = {
-    postJobs: true,
-    editJobs: true,
-    viewApplicants: true,
-    chatApplicants: true,
-    manageTeam: true,
-};
 let PagesService = class PagesService {
     constructor(pageRepo, memberRepo, userRepo, branchRepo) {
         this.pageRepo = pageRepo;
@@ -42,28 +68,10 @@ let PagesService = class PagesService {
         this.branchRepo = branchRepo;
     }
     getDefaultPermissions(role) {
-        if (role === 'editor') {
-            return {
-                postJobs: true,
-                editJobs: true,
-                viewApplicants: true,
-                chatApplicants: true,
-                manageTeam: false,
-            };
-        }
-        return { ...FULL_EMPLOYER_PERMISSIONS };
+        return (0, company_permissions_1.getDefaultCompanyPermissions)(role);
     }
     normalizePermissions(role, permissions) {
-        const normalized = this.getDefaultPermissions(role);
-        for (const key of EMPLOYER_PERMISSION_KEYS) {
-            if (typeof permissions?.[key] === 'boolean') {
-                normalized[key] = permissions[key];
-            }
-        }
-        if (role === 'owner') {
-            return { ...FULL_EMPLOYER_PERMISSIONS };
-        }
-        return normalized;
+        return (0, company_permissions_1.normalizeCompanyPermissions)(role, permissions);
     }
     memberForUser(page, userId) {
         if (page.ownerId === userId) {
@@ -72,12 +80,12 @@ let PagesService = class PagesService {
                 userId,
                 role: 'owner',
                 hasAccess: true,
-                permissions: FULL_EMPLOYER_PERMISSIONS,
+                permissions: company_permissions_1.FULL_COMPANY_PERMISSIONS,
             };
         }
         return page.members?.find((member) => member.userId === userId) ?? null;
     }
-    async getPageForEmployerAccess(companyId, userId, permission) {
+    async getCompanyAccess(companyId, userId, permission) {
         const page = await this.pageRepo.findOne({
             where: { id: companyId },
             relations: ['members', 'members.user', 'branches'],
@@ -93,6 +101,13 @@ let PagesService = class PagesService {
             throw new common_1.ForbiddenException('You do not have permission for this action');
         }
         return { page, member, permissions };
+    }
+    async assertCompanyCanPublish(companyId, userId) {
+        const access = await this.getCompanyAccess(companyId, userId, 'publishContent');
+        if (access.page.verificationStatus !== 'approved') {
+            throw new common_1.ForbiddenException(`Company publishing is unavailable while verification is ${access.page.verificationStatus || 'pending'}`);
+        }
+        return access;
     }
     formatBranch(branch) {
         if (!branch)
@@ -116,6 +131,7 @@ let PagesService = class PagesService {
             id: page.id,
             name: page.company_name,
             companyName: page.company_name,
+            username: page.username,
             businessName: page.business_name,
             logoUrl: page.company_logo,
             description: page.company_description,
@@ -136,8 +152,64 @@ let PagesService = class PagesService {
                 youtube: page.youtube_channel_url,
             },
             branches: (page.branches || []).map((branch) => this.formatBranch(branch)),
+            verificationStatus: page.verificationStatus || 'pending',
+            verificationReason: page.verificationReason || null,
+            verifiedAt: page.verifiedAt || null,
             createdAt: page.createdAt,
             updatedAt: page.updatedAt,
+        };
+    }
+    formatLegacyPublicCompany(page) {
+        return {
+            id: page.id,
+            company_name: page.company_name,
+            business_name: page.business_name,
+            username: page.username,
+            company_logo: page.company_logo,
+            website_url: page.website_url,
+            industry_type: page.industry_type,
+            company_description: page.company_description,
+            founded_year: page.founded_year,
+            country: page.country,
+            state: page.state,
+            city: page.city,
+            company_type: page.company_type,
+            linkedin_page_url: page.linkedin_page_url,
+            facebook_page_url: page.facebook_page_url,
+            instagram_page_url: page.instagram_page_url,
+            twitter_page_url: page.twitter_page_url,
+            youtube_channel_url: page.youtube_channel_url,
+            number_of_employees: page.number_of_employees,
+            certifications: page.certifications || [],
+            verificationStatus: page.verificationStatus || 'pending',
+            verified: page.verificationStatus === 'approved',
+            createdAt: page.createdAt,
+            updatedAt: page.updatedAt,
+        };
+    }
+    formatLegacyManagedCompany(page) {
+        return {
+            ...this.formatLegacyPublicCompany(page),
+            official_email: page.official_email,
+            official_phone: page.official_phone,
+            postal_code: page.postal_code,
+            address_line1: page.address_line1,
+            address_line2: page.address_line2,
+            google_maps_link: page.google_maps_link,
+            business_registration_number: page.business_registration_number,
+            tax_identification_number: page.tax_identification_number,
+            registration_authority: page.registration_authority,
+            business_license_document: page.business_license_document,
+            representative_name: page.representative_name,
+            representative_designation: page.representative_designation,
+            representative_email: page.representative_email,
+            representative_phone: page.representative_phone,
+            id_proof_document: page.id_proof_document,
+            verified_email_domain: page.verified_email_domain,
+            annual_revenue_range: page.annual_revenue_range,
+            client_list: page.client_list || [],
+            verificationReason: page.verificationReason || null,
+            verifiedAt: page.verifiedAt || null,
         };
     }
     formatMember(member, page) {
@@ -183,9 +255,10 @@ let PagesService = class PagesService {
             username = unique;
         }
         const page = this.pageRepo.create({
-            ...data,
+            ...this.mapCompanyPatch(data),
             username,
             ownerId: userId,
+            verificationStatus: 'pending',
             members: [
                 {
                     userId,
@@ -200,7 +273,10 @@ let PagesService = class PagesService {
         };
     }
     async getPages(query, userId) {
-        const { page = 1, limit = 20, search, mine = false } = query;
+        const { search } = query;
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+        const mine = query.mine === true || query.mine === 'true';
         const qb = this.pageRepo
             .createQueryBuilder('page')
             .leftJoinAndSelect('page.members', 'member');
@@ -208,8 +284,11 @@ let PagesService = class PagesService {
             qb.andWhere('(page.company_name LIKE :search OR page.username LIKE :search)', { search: `%${search}%` });
         }
         if (mine) {
-            qb.andWhere('(page.ownerId = :userId OR member.userId = :userId)', {
-                userId,
+            qb.andWhere('(page.ownerId = :userId OR (member.userId = :userId AND member.hasAccess = :hasAccess))', { userId, hasAccess: true });
+        }
+        else {
+            qb.andWhere('page.verificationStatus = :verificationStatus', {
+                verificationStatus: 'approved',
             });
         }
         qb.orderBy('page.createdAt', 'DESC')
@@ -219,8 +298,11 @@ let PagesService = class PagesService {
         return {
             data: data.map((p) => {
                 const member = p.members.find((m) => m.userId === userId);
+                const formatted = mine
+                    ? this.formatLegacyManagedCompany(p)
+                    : this.formatLegacyPublicCompany(p);
                 return {
-                    ...p,
+                    ...formatted,
                     association: member
                         ? member.role
                         : p.ownerId === userId
@@ -276,28 +358,29 @@ let PagesService = class PagesService {
             },
         };
     }
-    async getPageById(id) {
-        const page = await this.pageRepo.findOne({ where: { id } });
-        if (!page) {
-            throw new common_1.BadRequestException('Company page not found');
-        }
-        return page;
-    }
-    async updatePage(id, data, userId) {
+    async getPageById(id, viewerId) {
         const page = await this.pageRepo.findOne({
             where: { id },
             relations: ['members'],
         });
-        if (!page)
-            throw new common_1.BadRequestException('Page not found');
-        const member = page.members.find((m) => m.userId === userId);
-        if (!member || !['owner', 'admin'].includes(member.role)) {
-            throw new common_1.BadRequestException('You are not allowed to update this page');
+        if (!page) {
+            throw new common_1.BadRequestException('Company page not found');
         }
-        await this.pageRepo.update(id, data);
+        const member = this.memberForUser(page, viewerId);
+        if (member && member.hasAccess !== false) {
+            return this.formatLegacyManagedCompany(page);
+        }
+        if (page.verificationStatus !== 'approved') {
+            throw new common_1.NotFoundException('Company page not found');
+        }
+        return this.formatLegacyPublicCompany(page);
+    }
+    async updatePage(id, data, userId) {
+        await this.getCompanyAccess(id, userId, 'manageTeam');
+        await this.pageRepo.update(id, this.mapCompanyPatch(data));
         return {
             message: 'Page updated successfully',
-            data: await this.pageRepo.findOne({ where: { id } }),
+            data: this.formatLegacyManagedCompany(await this.pageRepo.findOne({ where: { id } })),
         };
     }
     async deletePage(id, userId) {
@@ -390,12 +473,25 @@ let PagesService = class PagesService {
             branchLocation: null,
             logoUrl: null,
             postingMode: 'individual',
-            permissions: { ...FULL_EMPLOYER_PERMISSIONS },
+            permissions: { ...company_permissions_1.FULL_COMPANY_PERMISSIONS },
+            verificationStatus: null,
+            verificationReason: null,
+            canPublish: true,
+            canPostJobs: true,
+            jobPostingDisabledReason: null,
         };
         const companyAccounts = pages.map((page) => {
             const member = this.memberForUser(page, userId);
             const role = member?.role || 'owner';
             const branch = page.branches?.[0] || null;
+            const permissions = this.normalizePermissions(role, member?.permissions);
+            const jobPostingDisabledReason = !member || member.hasAccess === false
+                ? 'Company access is disabled'
+                : page.verificationStatus !== 'approved'
+                    ? `Company verification is ${page.verificationStatus || 'pending'}`
+                    : !permissions.postJobs
+                        ? 'Post jobs permission is required'
+                        : null;
             return {
                 id: `company:${page.id}`,
                 companyId: page.id,
@@ -412,7 +508,14 @@ let PagesService = class PagesService {
                     : null,
                 logoUrl: page.company_logo || null,
                 postingMode: 'company',
-                permissions: this.normalizePermissions(role, member?.permissions),
+                permissions,
+                verificationStatus: page.verificationStatus || 'pending',
+                verificationReason: page.verificationReason || null,
+                canPublish: member?.hasAccess !== false &&
+                    page.verificationStatus === 'approved' &&
+                    permissions.publishContent,
+                canPostJobs: !jobPostingDisabledReason,
+                jobPostingDisabledReason,
             };
         });
         return { data: [individual, ...companyAccounts] };
@@ -426,21 +529,33 @@ let PagesService = class PagesService {
                 logoUrl: account.logoUrl,
                 postingMode: account.postingMode,
                 permissions: account.permissions,
+                verificationStatus: account.verificationStatus,
+                verificationReason: account.verificationReason,
+                canPublish: account.canPublish,
+                canPostJobs: account.canPostJobs,
+                jobPostingDisabledReason: account.jobPostingDisabledReason,
             })),
         };
     }
     async getEmployerCompany(companyId, userId) {
-        const { page, member, permissions } = await this.getPageForEmployerAccess(companyId, userId);
+        const { page, member, permissions } = await this.getCompanyAccess(companyId, userId);
         return {
             data: {
                 ...this.formatCompany(page),
                 myRole: member.role,
                 myPermissions: permissions,
+                canPublish: page.verificationStatus === 'approved' && permissions.publishContent,
+                canPostJobs: page.verificationStatus === 'approved' && permissions.postJobs,
+                jobPostingDisabledReason: page.verificationStatus !== 'approved'
+                    ? `Company verification is ${page.verificationStatus || 'pending'}`
+                    : permissions.postJobs
+                        ? null
+                        : 'Post jobs permission is required',
             },
         };
     }
     async updateEmployerCompany(companyId, userId, data) {
-        await this.getPageForEmployerAccess(companyId, userId, 'manageTeam');
+        await this.getCompanyAccess(companyId, userId, 'manageTeam');
         const patch = this.mapEmployerCompanyPatch(data);
         await this.pageRepo.update(companyId, patch);
         const page = await this.pageRepo.findOne({
@@ -453,7 +568,7 @@ let PagesService = class PagesService {
         };
     }
     async createBranch(companyId, userId, data) {
-        await this.getPageForEmployerAccess(companyId, userId, 'manageTeam');
+        await this.getCompanyAccess(companyId, userId, 'manageTeam');
         const branch = await this.branchRepo.save(this.branchRepo.create({
             companyId,
             label: data.label,
@@ -467,7 +582,7 @@ let PagesService = class PagesService {
         };
     }
     async updateBranch(companyId, branchId, userId, data) {
-        await this.getPageForEmployerAccess(companyId, userId, 'manageTeam');
+        await this.getCompanyAccess(companyId, userId, 'manageTeam');
         const branch = await this.branchRepo.findOne({
             where: { id: branchId, companyId },
         });
@@ -491,20 +606,20 @@ let PagesService = class PagesService {
         };
     }
     async deleteBranch(companyId, branchId, userId) {
-        await this.getPageForEmployerAccess(companyId, userId, 'manageTeam');
+        await this.getCompanyAccess(companyId, userId, 'manageTeam');
         const result = await this.branchRepo.delete({ id: branchId, companyId });
         if (!result.affected)
             throw new common_1.NotFoundException('Branch not found');
         return { message: 'Branch deleted successfully' };
     }
     async getCompanyTeam(companyId, userId) {
-        const { page } = await this.getPageForEmployerAccess(companyId, userId, 'manageTeam');
+        const { page } = await this.getCompanyAccess(companyId, userId, 'manageTeam');
         return {
             data: (page.members || []).map((member) => this.formatMember(member, page)),
         };
     }
     async inviteOrGrantCompanyTeamMember(companyId, userId, data) {
-        await this.getPageForEmployerAccess(companyId, userId, 'manageTeam');
+        await this.getCompanyAccess(companyId, userId, 'manageTeam');
         let target = null;
         if (data.userId) {
             target = await this.userRepo.findOne({ where: { id: Number(data.userId) } });
@@ -555,7 +670,7 @@ let PagesService = class PagesService {
         });
         if (!member)
             throw new common_1.NotFoundException('Team member not found');
-        await this.getPageForEmployerAccess(member.pageId, userId, 'manageTeam');
+        await this.getCompanyAccess(member.pageId, userId, 'manageTeam');
         if (member.role === 'owner') {
             throw new common_1.BadRequestException('Owner access cannot be changed');
         }
@@ -573,7 +688,7 @@ let PagesService = class PagesService {
         });
         if (!member)
             throw new common_1.NotFoundException('Team member not found');
-        await this.getPageForEmployerAccess(member.pageId, userId, 'manageTeam');
+        await this.getCompanyAccess(member.pageId, userId, 'manageTeam');
         if (member.role === 'owner') {
             throw new common_1.BadRequestException('Owner permissions cannot be changed');
         }
@@ -585,11 +700,109 @@ let PagesService = class PagesService {
         };
     }
     async userHasCompanyPermission(companyId, userId, permission) {
-        await this.getPageForEmployerAccess(companyId, userId, permission);
+        await this.getCompanyAccess(companyId, userId, permission);
         return true;
     }
+    async getReelPublisherOptions(userId) {
+        return this.getPublisherOptions(userId, 'publishContent');
+    }
+    async getPublisherOptions(userId, capability = 'publishContent') {
+        if (capability !== 'publishContent') {
+            throw new common_1.BadRequestException('Unsupported publisher capability');
+        }
+        const user = await this.userRepo.findOne({ where: { id: userId } });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        const pages = await this.pageRepo
+            .createQueryBuilder('page')
+            .leftJoinAndSelect('page.members', 'member')
+            .where('page.ownerId = :userId', { userId })
+            .orWhere('member.userId = :userId', { userId })
+            .orderBy('page.company_name', 'ASC')
+            .getMany();
+        const userName = user.full_name ||
+            [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+            'Jadeed user';
+        const companies = pages.map((page) => {
+            const member = this.memberForUser(page, userId);
+            const permissions = this.normalizePermissions(member?.role || 'editor', member?.permissions);
+            let disabledReason;
+            if (!member || member.hasAccess === false) {
+                disabledReason = 'Company access is disabled';
+            }
+            else if (page.verificationStatus !== 'approved') {
+                disabledReason = `Company verification is ${page.verificationStatus || 'pending'}`;
+            }
+            else if (!permissions.publishContent) {
+                disabledReason = 'Publish content permission is required';
+            }
+            return {
+                type: 'company',
+                id: String(page.id),
+                name: page.company_name,
+                handle: `@${page.username}`,
+                avatarUri: page.company_logo || null,
+                verified: page.verificationStatus === 'approved',
+                canPublish: !disabledReason,
+                ...(disabledReason ? { disabledReason } : {}),
+            };
+        });
+        return {
+            data: [
+                {
+                    type: 'user',
+                    id: String(user.id),
+                    name: userName,
+                    handle: (0, profile_format_util_1.buildUserHandle)(user),
+                    avatarUri: user.profile_photo || null,
+                    verified: Boolean(user.isVerified),
+                    canPublish: true,
+                },
+                ...companies,
+            ],
+        };
+    }
+    async getManageablePublishingCompanyIds(userId, companyIds) {
+        const ids = Array.from(new Set(companyIds.filter(Boolean)));
+        if (!ids.length)
+            return [];
+        const pages = await this.pageRepo.find({
+            where: { id: (0, typeorm_2.In)(ids) },
+            relations: ['members'],
+        });
+        return pages.flatMap((page) => {
+            const member = this.memberForUser(page, userId);
+            if (!member || member.hasAccess === false)
+                return [];
+            const permissions = this.normalizePermissions(member.role, member.permissions);
+            return (member.role === 'owner' || member.role === 'admin') &&
+                permissions.publishContent
+                ? [page.id]
+                : [];
+        });
+    }
+    async updateCompanyVerification(companyId, adminId, status, reason) {
+        const page = await this.pageRepo.findOne({ where: { id: companyId } });
+        if (!page)
+            throw new common_1.NotFoundException('Company not found');
+        page.verificationStatus = status;
+        page.verificationReason = reason?.trim() || null;
+        page.verifiedAt = status === 'approved' ? new Date() : null;
+        page.verifiedByAdminId = status === 'approved' ? adminId : null;
+        const saved = await this.pageRepo.save(page);
+        return {
+            message: 'Company verification updated successfully',
+            company: {
+                id: saved.id,
+                verificationStatus: saved.verificationStatus,
+                verificationReason: saved.verificationReason || null,
+                verifiedAt: saved.verifiedAt || null,
+                verifiedByAdminId: saved.verifiedByAdminId || null,
+            },
+        };
+    }
     mapEmployerCompanyPatch(data) {
-        const patch = { ...data };
+        const patch = this.mapCompanyPatch(data);
         if (data.name !== undefined)
             patch.company_name = data.name;
         if (data.logoUrl !== undefined)
@@ -604,14 +817,15 @@ let PagesService = class PagesService {
             patch.instagram_page_url = data.socials.instagram ?? patch.instagram_page_url;
             patch.twitter_page_url = data.socials.twitter ?? patch.twitter_page_url;
             patch.youtube_channel_url = data.socials.youtube ?? patch.youtube_channel_url;
-            delete patch.socials;
         }
-        delete patch.id;
-        delete patch.companyId;
-        delete patch.name;
-        delete patch.logoUrl;
-        delete patch.description;
-        delete patch.website;
+        return patch;
+    }
+    mapCompanyPatch(data) {
+        const patch = {};
+        for (const field of COMPANY_MUTABLE_FIELDS) {
+            if (data[field] !== undefined)
+                patch[field] = data[field];
+        }
         return patch;
     }
 };

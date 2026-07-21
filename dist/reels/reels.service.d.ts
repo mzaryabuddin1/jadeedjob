@@ -3,12 +3,14 @@ import { Repository } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { ReelStorageService } from './reel-storage.service';
-import { Reel, ReelCategory, ReelVisibility } from './entities/reel.entity';
+import { Reel, ReelCategory, ReelPublisherType, ReelVisibility } from './entities/reel.entity';
 import { ReelUploadSession } from './entities/reel-upload-session.entity';
 import { ReelLike } from './entities/reel-like.entity';
 import { ReelSave } from './entities/reel-save.entity';
 import { ReelComment } from './entities/reel-comment.entity';
-import { ReelCreatorFollow } from './entities/reel-creator-follow.entity';
+import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
+import { PagesService } from 'src/pages/pages.service';
+import { ProfilesService } from 'src/profiles/profiles.service';
 type CreateReelPayload = {
     caption: string;
     category: ReelCategory;
@@ -17,6 +19,12 @@ type CreateReelPayload = {
     visibility: ReelVisibility;
     allowComments: boolean;
     allowSharing: boolean;
+    publisher?: {
+        type: 'user';
+    } | {
+        type: 'company';
+        id: number;
+    };
     media: {
         fileName: string;
         contentType: string;
@@ -29,6 +37,8 @@ type FeedQuery = {
     category?: ReelCategory;
     cursor?: string;
     limit?: number;
+    publisherType?: ReelPublisherType;
+    publisherId?: number;
 };
 export declare class ReelsService implements OnModuleInit {
     private readonly reelRepo;
@@ -36,23 +46,68 @@ export declare class ReelsService implements OnModuleInit {
     private readonly likeRepo;
     private readonly saveRepo;
     private readonly commentRepo;
-    private readonly followRepo;
+    private readonly profileFollowRepo;
     private readonly jobRepo;
     private readonly userRepo;
+    private readonly pagesService;
+    private readonly profilesService;
     private readonly storage;
     private cleanupTimer?;
-    constructor(reelRepo: Repository<Reel>, uploadSessionRepo: Repository<ReelUploadSession>, likeRepo: Repository<ReelLike>, saveRepo: Repository<ReelSave>, commentRepo: Repository<ReelComment>, followRepo: Repository<ReelCreatorFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, storage: ReelStorageService);
+    constructor(reelRepo: Repository<Reel>, uploadSessionRepo: Repository<ReelUploadSession>, likeRepo: Repository<ReelLike>, saveRepo: Repository<ReelSave>, commentRepo: Repository<ReelComment>, profileFollowRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, pagesService: PagesService, profilesService: ProfilesService, storage: ReelStorageService);
     onModuleInit(): void;
+    getPublisherOptions(userId: number): Promise<{
+        data: ({
+            disabledReason?: string;
+            type: "company";
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+            canPublish: boolean;
+        } | {
+            type: "user";
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+            canPublish: boolean;
+        })[];
+    }>;
     createReel(data: CreateReelPayload, userId: number): Promise<{
         reel: {
             id: string;
             videoUrl: string;
             category: ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -67,6 +122,7 @@ export declare class ReelsService implements OnModuleInit {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -101,11 +157,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -120,6 +199,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -135,11 +215,34 @@ export declare class ReelsService implements OnModuleInit {
             id: string;
             videoUrl: string;
             category: ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -154,6 +257,7 @@ export declare class ReelsService implements OnModuleInit {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -171,10 +275,11 @@ export declare class ReelsService implements OnModuleInit {
             id: string;
             reelId: string;
             author: {
+                avatarUri: string;
+                type: "user";
                 id: string;
                 name: string;
                 handle: string;
-                avatarUri: string;
                 verified: boolean;
             };
             text: string;
@@ -186,10 +291,11 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         reelId: string;
         author: {
+            avatarUri: string;
+            type: "user";
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         text: string;
@@ -199,11 +305,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -218,6 +347,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -232,11 +362,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -251,6 +404,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -265,11 +419,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -284,6 +461,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -298,11 +476,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -317,6 +518,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -331,11 +533,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -350,6 +575,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -362,10 +588,14 @@ export declare class ReelsService implements OnModuleInit {
     }>;
     followCreator(creatorId: number, followerId: number): Promise<{
         creatorId: string;
+        profileType: import("src/profiles/entities/profile-follow.entity").ProfileType;
+        profileId: string;
         following: boolean;
     }>;
     unfollowCreator(creatorId: number, followerId: number): Promise<{
         creatorId: string;
+        profileType: import("src/profiles/entities/profile-follow.entity").ProfileType;
+        profileId: string;
         following: boolean;
     }>;
     deleteReel(reelId: number, userId: number): Promise<{
@@ -376,11 +606,34 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         videoUrl: string;
         category: ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -395,6 +648,7 @@ export declare class ReelsService implements OnModuleInit {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -416,22 +670,68 @@ export declare class ReelsService implements OnModuleInit {
     getReelAudio(reelId: number, viewerId: number): Promise<{
         audioId: string;
         audioTitle: string;
-        creator: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        creator: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         originalReel: {
             id: string;
             videoUrl: string;
             category: ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -446,6 +746,7 @@ export declare class ReelsService implements OnModuleInit {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -466,11 +767,34 @@ export declare class ReelsService implements OnModuleInit {
             id: string;
             videoUrl: string;
             category: ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -485,6 +809,7 @@ export declare class ReelsService implements OnModuleInit {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -503,6 +828,15 @@ export declare class ReelsService implements OnModuleInit {
     private formatReelSync;
     private formatComment;
     private formatAuthor;
+    private resolvePublisher;
+    private assertPublisherCanPublish;
+    private validateLinkedJob;
+    private getPublisherType;
+    private getPublisherId;
+    private publisherKey;
+    private formatPublisher;
+    private publisherFollowExistsSql;
+    private createViewablePublishedQuery;
     private getUploadExpiry;
     private isExpired;
     private markSessionExpired;

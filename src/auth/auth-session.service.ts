@@ -7,6 +7,7 @@ import { User } from 'src/users/entities/user.entity';
 
 export type AuthenticatedUserPayload = JwtPayload & {
   id: number;
+  systemRole: 'user' | 'admin';
 };
 
 @Injectable()
@@ -59,7 +60,7 @@ export class AuthSessionService {
 
     const user = await this.userRepo.findOne({
       where: { id },
-      select: ['id', 'isBanned', 'tokenVersion'],
+      select: ['id', 'isBanned', 'tokenVersion', 'systemRole'],
     });
 
     if (!user) {
@@ -78,6 +79,7 @@ export class AuthSessionService {
     return {
       ...decoded,
       id,
+      systemRole: user.systemRole || 'user',
     };
   }
 }

@@ -60,6 +60,28 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Reel company publishing migration
+
+Apply the idempotent MySQL migration before deploying the company-publisher and
+unified-profile APIs:
+
+```bash
+npm run migrate:reel-publishers
+```
+
+The migration does not promote an administrator automatically. Promote only a
+trusted existing user, using that user's numeric database ID:
+
+```sql
+UPDATE users
+SET systemRole = 'admin'
+WHERE id = <trusted-admin-user-id>;
+```
+
+System administrators can review companies through
+`PATCH /admin/companies/:companyId/verification`. New and existing companies
+remain `pending` until explicitly approved.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

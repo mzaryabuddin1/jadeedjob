@@ -40,7 +40,23 @@ const createReelSchema = joi_1.default.object({
         fileSizeBytes: joi_1.default.number().integer().positive().optional(),
         durationSeconds: joi_1.default.number().positive().max(60).optional(),
     }).required(),
+    publisher: joi_1.default.alternatives()
+        .try(joi_1.default.object({
+        type: joi_1.default.string().valid('user').required(),
+    }), joi_1.default.object({
+        type: joi_1.default.string().valid('company').required(),
+        id: joi_1.default.number().integer().positive().required(),
+    }))
+        .optional(),
 });
+const feedQuerySchema = joi_1.default.object({
+    feed: joi_1.default.string().valid('forYou', 'following', 'mine').default('forYou'),
+    category: joi_1.default.string().valid('community', 'jobs', 'social').optional(),
+    cursor: joi_1.default.string().optional(),
+    limit: joi_1.default.number().integer().min(1).max(20).default(10),
+    publisherType: joi_1.default.string().valid('user', 'company').optional(),
+    publisherId: joi_1.default.number().integer().positive().optional(),
+}).and('publisherType', 'publisherId');
 const completeUploadSchema = joi_1.default.object({
     uploadId: joi_1.default.string().guid({ version: 'uuidv4' }).required(),
 });
@@ -88,6 +104,9 @@ let ReelsController = class ReelsController {
     }
     getFeed(query, req) {
         return this.reelsService.getFeed(query, req.user.id);
+    }
+    getPublisherOptions(req) {
+        return this.reelsService.getPublisherOptions(req.user.id);
     }
     getReelsByAudio(audioId, query, req) {
         return this.reelsService.getReelsByAudio(audioId, req.user.id, query);
@@ -162,12 +181,19 @@ __decorate([
 ], ReelsController.prototype, "completeUpload", null);
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)()),
+    __param(0, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(feedQuerySchema))),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], ReelsController.prototype, "getFeed", null);
+__decorate([
+    (0, common_1.Get)('publisher-options'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], ReelsController.prototype, "getPublisherOptions", null);
 __decorate([
     (0, common_1.Get)('audio/:audioId/reels'),
     __param(0, (0, common_1.Param)('audioId')),

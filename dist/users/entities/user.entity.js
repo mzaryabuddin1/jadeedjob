@@ -69,6 +69,14 @@ __decorate([
     __metadata("design:type", Number)
 ], User.prototype, "tokenVersion", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['user', 'admin'],
+        default: 'user',
+    }),
+    __metadata("design:type", String)
+], User.prototype, "systemRole", void 0);
+__decorate([
     (0, typeorm_1.Column)({ default: false }),
     __metadata("design:type", Boolean)
 ], User.prototype, "isBanned", void 0);

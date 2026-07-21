@@ -31,8 +31,8 @@ let PagesController = class PagesController {
     getPages(query, req) {
         return this.pagesService.getPages(query, req.user.id);
     }
-    getPageById(id) {
-        return this.pagesService.getPageById(Number(id));
+    getPageById(id, req) {
+        return this.pagesService.getPageById(Number(id), req.user.id);
     }
     updatePage(id, body, req) {
         return this.pagesService.updatePage(Number(id), body, req.user.id);
@@ -90,7 +90,6 @@ __decorate([
         annual_revenue_range: joi_1.default.string().optional(),
         client_list: joi_1.default.array().items(joi_1.default.string()).optional(),
         certifications: joi_1.default.array().items(joi_1.default.string()).optional(),
-        company_rating: joi_1.default.number().optional(),
     }))),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -109,14 +108,52 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], PagesController.prototype, "getPageById", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Body)()),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        company_name: joi_1.default.string().optional(),
+        business_name: joi_1.default.string().allow('', null).optional(),
+        company_logo: joi_1.default.string().allow('', null).optional(),
+        website_url: joi_1.default.string().uri().allow('', null).optional(),
+        official_email: joi_1.default.string().email().allow('', null).optional(),
+        official_phone: joi_1.default.string().allow('', null).optional(),
+        industry_type: joi_1.default.string().allow('', null).optional(),
+        company_description: joi_1.default.string().allow('', null).optional(),
+        founded_year: joi_1.default.number().integer().allow(null).optional(),
+        country: joi_1.default.string().allow('', null).optional(),
+        state: joi_1.default.string().allow('', null).optional(),
+        city: joi_1.default.string().allow('', null).optional(),
+        postal_code: joi_1.default.string().allow('', null).optional(),
+        address_line1: joi_1.default.string().allow('', null).optional(),
+        address_line2: joi_1.default.string().allow('', null).optional(),
+        google_maps_link: joi_1.default.string().allow('', null).optional(),
+        business_registration_number: joi_1.default.string().allow('', null).optional(),
+        tax_identification_number: joi_1.default.string().allow('', null).optional(),
+        registration_authority: joi_1.default.string().allow('', null).optional(),
+        business_license_document: joi_1.default.string().allow('', null).optional(),
+        company_type: joi_1.default.string().allow('', null).optional(),
+        representative_name: joi_1.default.string().allow('', null).optional(),
+        representative_designation: joi_1.default.string().allow('', null).optional(),
+        representative_email: joi_1.default.string().email().allow('', null).optional(),
+        representative_phone: joi_1.default.string().allow('', null).optional(),
+        id_proof_document: joi_1.default.string().allow('', null).optional(),
+        linkedin_page_url: joi_1.default.string().allow('', null).optional(),
+        facebook_page_url: joi_1.default.string().allow('', null).optional(),
+        instagram_page_url: joi_1.default.string().allow('', null).optional(),
+        twitter_page_url: joi_1.default.string().allow('', null).optional(),
+        youtube_channel_url: joi_1.default.string().allow('', null).optional(),
+        verified_email_domain: joi_1.default.string().allow('', null).optional(),
+        number_of_employees: joi_1.default.number().integer().allow(null).optional(),
+        annual_revenue_range: joi_1.default.string().allow('', null).optional(),
+        client_list: joi_1.default.array().items(joi_1.default.string()).allow(null).optional(),
+        certifications: joi_1.default.array().items(joi_1.default.string()).allow(null).optional(),
+    })))),
     __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object, Object]),

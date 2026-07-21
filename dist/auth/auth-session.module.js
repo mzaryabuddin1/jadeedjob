@@ -12,6 +12,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const user_entity_1 = require("../users/entities/user.entity");
 const auth_session_service_1 = require("./auth-session.service");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
+const system_admin_guard_1 = require("./system-admin.guard");
 let AuthSessionModule = class AuthSessionModule {
 };
 exports.AuthSessionModule = AuthSessionModule;
@@ -19,8 +20,8 @@ exports.AuthSessionModule = AuthSessionModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
         imports: [typeorm_1.TypeOrmModule.forFeature([user_entity_1.User])],
-        providers: [auth_session_service_1.AuthSessionService, jwt_auth_guard_1.JwtAuthGuard],
-        exports: [auth_session_service_1.AuthSessionService, jwt_auth_guard_1.JwtAuthGuard],
+        providers: [auth_session_service_1.AuthSessionService, jwt_auth_guard_1.JwtAuthGuard, system_admin_guard_1.SystemAdminGuard],
+        exports: [auth_session_service_1.AuthSessionService, jwt_auth_guard_1.JwtAuthGuard, system_admin_guard_1.SystemAdminGuard],
     })
 ], AuthSessionModule);
 //# sourceMappingURL=auth-session.module.js.map

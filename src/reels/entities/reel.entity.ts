@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 
 export type ReelCategory = 'community' | 'jobs' | 'social';
 export type ReelVisibility = 'public' | 'followers' | 'draft';
@@ -20,10 +21,23 @@ export type ReelStatus =
   | 'draft'
   | 'failed'
   | 'deleted';
+export type ReelPublisherType = 'user' | 'company';
 
 @Entity('reels')
 @Index(['status', 'visibility', 'createdAt'])
 @Index(['creatorId', 'createdAt'])
+@Index('IDX_reels_publisher_user_status_created_at', [
+  'publisherType',
+  'creatorId',
+  'status',
+  'createdAt',
+])
+@Index('IDX_reels_publisher_company_status_created_at', [
+  'publisherType',
+  'publisherCompanyId',
+  'status',
+  'createdAt',
+])
 export class Reel {
   @PrimaryGeneratedColumn()
   id: number;
@@ -34,6 +48,23 @@ export class Reel {
   @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'creatorId' })
   creator: User;
+
+  @Column({
+    type: 'enum',
+    enum: ['user', 'company'],
+    default: 'user',
+  })
+  publisherType: ReelPublisherType;
+
+  @Column({ nullable: true })
+  publisherCompanyId: number;
+
+  @ManyToOne(() => CompanyPage, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'publisherCompanyId',
+    foreignKeyConstraintName: 'FK_reels_publisher_company',
+  })
+  publisherCompany: CompanyPage;
 
   @Column({ type: 'text' })
   caption: string;
@@ -63,7 +94,14 @@ export class Reel {
 
   @Column({
     type: 'enum',
-    enum: ['upload_pending', 'processing', 'published', 'draft', 'failed', 'deleted'],
+    enum: [
+      'upload_pending',
+      'processing',
+      'published',
+      'draft',
+      'failed',
+      'deleted',
+    ],
     default: 'upload_pending',
   })
   status: ReelStatus;

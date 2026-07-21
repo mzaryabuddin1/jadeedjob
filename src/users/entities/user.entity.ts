@@ -59,6 +59,13 @@ export class User {
   @Column({ type: 'int', default: 0 })
   tokenVersion: number;
 
+  @Column({
+    type: 'enum',
+    enum: ['user', 'admin'],
+    default: 'user',
+  })
+  systemRole: 'user' | 'admin';
+
   @Column({ default: false })
   isBanned: boolean;
 

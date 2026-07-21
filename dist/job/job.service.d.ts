@@ -18,10 +18,11 @@ export declare class JobService {
     private firebaseService;
     private notificationsService;
     constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, branchRepo: Repository<CompanyBranch>, memberRepo: Repository<PageMember>, jobApplicationRepo: Repository<JobApplication>, firebaseService: FirebaseService, notificationsService: NotificationsService);
-    private getDefaultPermissions;
     private assertCompanyPermission;
     private normalizeCompanyAndBranch;
+    private assertJobUpdateAccess;
     private optionalPositiveId;
+    private parseJobStatuses;
     private normalizeJobPayload;
     private buildLocationUpdate;
     createJob(data: any, userId: number): Promise<{
@@ -105,6 +106,84 @@ export declare class JobService {
     }>;
     findJobs(query: any, userId?: number): Promise<{
         data: any;
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    } | {
+        statusCounts: any;
+        data: {
+            status: "active" | "draft" | "closed";
+            applicationsCount: number;
+            companyId: number;
+            companyName: string;
+            employerName: string;
+            employerType: string;
+            employer: {
+                id: number;
+                type: string;
+                name: string;
+                logoUrl: string;
+            };
+            pageTaggedJob: boolean;
+            page: {
+                id: number;
+                company_name: string;
+                username: string;
+                company_logo: string;
+            };
+            branch: {
+                id: number;
+                label: string;
+                address: string;
+                lat: number;
+                lng: number;
+                location: {
+                    lat: number;
+                    lng: number;
+                };
+            };
+            location: {
+                lat: any;
+                lng: any;
+            };
+            positions: number;
+            payType: string;
+            id: number;
+            filter: import("../filter/entities/filter.entity").Filter;
+            filterId: number;
+            title: string;
+            description: string;
+            requirements: string;
+            benefits: string[];
+            shifts: string[];
+            jobTypes: string[];
+            jobType: string;
+            shift: string;
+            working_hours: string;
+            salaryType: string;
+            salaryAmount: number;
+            currency: string;
+            vacancies: number;
+            isRemote: boolean;
+            startDate: Date;
+            endDate: Date;
+            deadline: Date;
+            industry: string;
+            educationLevel: string;
+            experienceRequired: string;
+            languageRequirements: string[];
+            contactEmail: string;
+            contactPhone: string;
+            postingMode: "individual" | "company";
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            createdBy: number;
+            creator: User;
+            applications: JobApplication[];
+            pageId?: number;
+            branchId?: number;
+        }[];
         total: number;
         totalPages: number;
         currentPage: number;

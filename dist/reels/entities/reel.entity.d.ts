@@ -1,12 +1,17 @@
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 export type ReelCategory = 'community' | 'jobs' | 'social';
 export type ReelVisibility = 'public' | 'followers' | 'draft';
 export type ReelStatus = 'upload_pending' | 'processing' | 'published' | 'draft' | 'failed' | 'deleted';
+export type ReelPublisherType = 'user' | 'company';
 export declare class Reel {
     id: number;
     creatorId: number;
     creator: User;
+    publisherType: ReelPublisherType;
+    publisherCompanyId: number;
+    publisherCompany: CompanyPage;
     caption: string;
     category: ReelCategory;
     audioTitle: string;

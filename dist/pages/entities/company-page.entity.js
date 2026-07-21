@@ -174,6 +174,34 @@ __decorate([
     __metadata("design:type", Number)
 ], CompanyPage.prototype, "company_rating", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['pending', 'approved', 'needs_changes', 'rejected', 'suspended'],
+        default: 'pending',
+    }),
+    __metadata("design:type", String)
+], CompanyPage.prototype, "verificationStatus", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], CompanyPage.prototype, "verificationReason", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], CompanyPage.prototype, "verifiedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], CompanyPage.prototype, "verifiedByAdminId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'verifiedByAdminId',
+        foreignKeyConstraintName: 'FK_pages_verified_by_admin',
+    }),
+    __metadata("design:type", user_entity_1.User)
+], CompanyPage.prototype, "verifiedByAdmin", void 0);
+__decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", Number)
 ], CompanyPage.prototype, "ownerId", void 0);
@@ -203,6 +231,10 @@ __decorate([
     __metadata("design:type", Date)
 ], CompanyPage.prototype, "updatedAt", void 0);
 exports.CompanyPage = CompanyPage = __decorate([
-    (0, typeorm_1.Entity)('pages')
+    (0, typeorm_1.Entity)('pages'),
+    (0, typeorm_1.Index)('IDX_pages_verification_status_created_at', [
+        'verificationStatus',
+        'createdAt',
+    ])
 ], CompanyPage);
 //# sourceMappingURL=company-page.entity.js.map

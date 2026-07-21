@@ -3,6 +3,7 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 export type AuthenticatedUserPayload = JwtPayload & {
     id: number;
+    systemRole: 'user' | 'admin';
 };
 export declare class AuthSessionService {
     private readonly userRepo;

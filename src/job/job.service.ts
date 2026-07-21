@@ -14,14 +14,12 @@ import { CompanyBranch } from 'src/pages/entities/company-branch.entity';
 import { PageMember } from 'src/pages/entities/page-member.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import {
+  CompanyPermissionKey,
+  normalizeCompanyPermissions,
+} from 'src/pages/company-permissions';
 
 type JobStatus = 'draft' | 'active' | 'closed';
-type EmployerPermission =
-  | 'postJobs'
-  | 'editJobs'
-  | 'viewApplicants'
-  | 'chatApplicants'
-  | 'manageTeam';
 
 const JOB_SORT_COLUMNS: Record<string, string> = {
   createdAt: 'job.createdAt',
@@ -57,30 +55,11 @@ export class JobService {
     private notificationsService: NotificationsService,
   ) {}
 
-  private getDefaultPermissions(role: 'owner' | 'admin' | 'editor') {
-    if (role === 'editor') {
-      return {
-        postJobs: true,
-        editJobs: true,
-        viewApplicants: true,
-        chatApplicants: true,
-        manageTeam: false,
-      };
-    }
-
-    return {
-      postJobs: true,
-      editJobs: true,
-      viewApplicants: true,
-      chatApplicants: true,
-      manageTeam: true,
-    };
-  }
-
   private async assertCompanyPermission(
     pageId: number | null | undefined,
     userId: number,
-    permission: EmployerPermission,
+    permission: CompanyPermissionKey,
+    requireApproval = false,
   ) {
     if (!pageId) return;
 
@@ -90,6 +69,14 @@ export class JobService {
     });
     if (!page) throw new BadRequestException('Company not found');
 
+    if (requireApproval && page.verificationStatus !== 'approved') {
+      throw new ForbiddenException(
+        `Company job posting is unavailable while verification is ${
+          page.verificationStatus || 'pending'
+        }`,
+      );
+    }
+
     if (page.ownerId === userId) return;
 
     const member = page.members?.find((item) => item.userId === userId);
@@ -97,10 +84,10 @@ export class JobService {
       throw new ForbiddenException('You do not have access to this company');
     }
 
-    const permissions = {
-      ...this.getDefaultPermissions(member.role),
-      ...(member.permissions || {}),
-    };
+    const permissions = normalizeCompanyPermissions(
+      member.role,
+      member.permissions,
+    );
     if (!permissions[permission]) {
       throw new ForbiddenException('You do not have permission for this action');
     }
@@ -132,9 +119,54 @@ export class JobService {
       throw new BadRequestException('companyId is required for company posting');
     }
 
-    await this.assertCompanyPermission(pageId, userId, 'postJobs');
+    await this.assertCompanyPermission(pageId, userId, 'postJobs', true);
 
     return { pageId: pageId ?? null, branchId: branchId ?? null };
+  }
+
+  private async assertJobUpdateAccess(
+    job: Pick<Job, 'createdBy' | 'pageId'>,
+    nextPageId: number | null,
+    userId: number,
+  ) {
+    const currentPageId = job.pageId ?? null;
+
+    if (currentPageId === nextPageId) {
+      if (nextPageId) {
+        await this.assertCompanyPermission(
+          nextPageId,
+          userId,
+          'editJobs',
+          true,
+        );
+      } else if (job.createdBy !== userId) {
+        throw new ForbiddenException('You are not allowed to update this job');
+      }
+      return;
+    }
+
+    if (currentPageId) {
+      await this.assertCompanyPermission(
+        currentPageId,
+        userId,
+        'editJobs',
+      );
+    } else if (job.createdBy !== userId) {
+      throw new ForbiddenException('You are not allowed to update this job');
+    }
+
+    if (nextPageId) {
+      await this.assertCompanyPermission(
+        nextPageId,
+        userId,
+        'postJobs',
+        true,
+      );
+    } else if (job.createdBy !== userId) {
+      throw new ForbiddenException(
+        'Only the job creator can move it to an individual account',
+      );
+    }
   }
 
   private optionalPositiveId(value: unknown) {
@@ -144,6 +176,25 @@ export class JobService {
       throw new BadRequestException('Invalid ID value');
     }
     return id;
+  }
+
+  private parseJobStatuses(value: unknown): JobStatus[] {
+    if (value === undefined || value === null || value === '') return [];
+
+    const values = Array.isArray(value) ? value : String(value).split(',');
+    const statuses = [
+      ...new Set(
+        values
+          .map((item) => String(item).trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (statuses.some((item) => !['draft', 'active', 'closed'].includes(item))) {
+      throw new BadRequestException('Invalid job status filter');
+    }
+
+    return statuses as JobStatus[];
   }
 
   private normalizeJobPayload(data: any, pageId: number | null, branchId: number | null) {
@@ -354,16 +405,47 @@ export class JobService {
       lng,
       myjobs = false,
       status,
+      statuses,
+      companyId,
     } = query;
+
+    const requestedCompanyId = this.optionalPositiveId(companyId);
+
+    const requestedStatuses = this.parseJobStatuses(statuses);
+    const requestedStatus = status ? String(status).trim().toLowerCase() : '';
+
+    if (requestedStatus && !['draft', 'active', 'closed'].includes(requestedStatus)) {
+      throw new BadRequestException('Invalid job status filter');
+    }
+
+    if (requestedStatus && requestedStatuses.length > 0) {
+      throw new BadRequestException('Use status or statuses, not both');
+    }
 
     if (
       lat !== undefined &&
       lng !== undefined &&
       lat !== '' &&
       lng !== '' &&
-      myjobs !== 'true'
+      myjobs !== 'true' &&
+      !requestedCompanyId
     ) {
       return this.findNearbyJobs(query);
+    }
+
+    if (requestedCompanyId && myjobs === 'true') {
+      throw new BadRequestException(
+        'companyId cannot be combined with myjobs',
+      );
+    }
+
+    if (requestedCompanyId) {
+      const company = await this.pageRepo.findOne({
+        where: {id: requestedCompanyId},
+      });
+      if (!company || company.verificationStatus !== 'approved') {
+        throw new NotFoundException('Company profile not found');
+      }
     }
 
     const currentPage = Math.max(1, Number(page) || 1);
@@ -395,14 +477,33 @@ export class JobService {
     }
 
     if (filter) qb.andWhere('job.filterId = :filterId', { filterId: Number(filter) });
-    if (status) qb.andWhere('job.status = :status', { status });
+    if (requestedCompanyId) {
+      qb.andWhere('job.pageId = :companyId', {
+        companyId: requestedCompanyId,
+      });
+    }
+    if (requestedStatuses.length > 0) {
+      qb.andWhere(
+        "COALESCE(job.status, 'active') IN (:...jobStatuses)",
+        { jobStatuses: requestedStatuses },
+      );
+    } else if (requestedStatus) {
+      qb.andWhere(
+        "COALESCE(job.status, 'active') = :status",
+        { status: requestedStatus },
+      );
+    }
     if (search) {
       qb.andWhere(
         new Brackets((inner) => {
           inner
             .where('job.title LIKE :search', { search: `%${search}%` })
             .orWhere('job.description LIKE :search', { search: `%${search}%` })
-            .orWhere('page.company_name LIKE :search', { search: `%${search}%` });
+            .orWhere('page.company_name LIKE :search', { search: `%${search}%` })
+            .orWhere('page.username LIKE :search', { search: `%${search}%` })
+            .orWhere('creator.full_name LIKE :search', { search: `%${search}%` })
+            .orWhere('creator.firstName LIKE :search', { search: `%${search}%` })
+            .orWhere('creator.lastName LIKE :search', { search: `%${search}%` });
         }),
       );
     }
@@ -413,11 +514,78 @@ export class JobService {
 
     const [jobs, total] = await qb.getManyAndCount();
 
-    return {
+    const baseResponse = {
       data: jobs.map((job) => this.formatJob(job)),
       total,
       totalPages: Math.ceil(total / take),
       currentPage,
+    };
+
+    if (myjobs !== 'true') return baseResponse;
+
+    const statusCountsQuery = this.jobRepo
+      .createQueryBuilder('countJob')
+      .leftJoin('countJob.page', 'countPage')
+      .leftJoin('countPage.members', 'countMember')
+      .leftJoin('countJob.creator', 'countCreator')
+      .select("COALESCE(countJob.status, 'active')", 'status')
+      .addSelect('COUNT(DISTINCT countJob.id)', 'count')
+      .where(
+        "COALESCE(countJob.status, 'active') IN (:...countStatuses)",
+        {countStatuses: ['active', 'closed']},
+      );
+
+    statusCountsQuery.andWhere(
+      new Brackets((inner) => {
+        inner
+          .where('countJob.createdBy = :countUserId', {countUserId: userId})
+          .orWhere('countPage.ownerId = :countUserId', {countUserId: userId})
+          .orWhere('countMember.userId = :countUserId', {countUserId: userId});
+      }),
+    );
+
+    if (filter) {
+      statusCountsQuery.andWhere('countJob.filterId = :countFilterId', {
+        countFilterId: Number(filter),
+      });
+    }
+
+    if (search) {
+      statusCountsQuery.andWhere(
+        new Brackets((inner) => {
+          inner
+            .where('countJob.title LIKE :countSearch', {countSearch: `%${search}%`})
+            .orWhere('countJob.description LIKE :countSearch', {countSearch: `%${search}%`})
+            .orWhere('countPage.company_name LIKE :countSearch', {countSearch: `%${search}%`})
+            .orWhere('countPage.username LIKE :countSearch', {countSearch: `%${search}%`})
+            .orWhere('countCreator.full_name LIKE :countSearch', {countSearch: `%${search}%`})
+            .orWhere('countCreator.firstName LIKE :countSearch', {countSearch: `%${search}%`})
+            .orWhere('countCreator.lastName LIKE :countSearch', {countSearch: `%${search}%`});
+        }),
+      );
+    }
+
+    const rawStatusCounts = await statusCountsQuery
+      .groupBy("COALESCE(countJob.status, 'active')")
+      .getRawMany();
+
+    const statusCounts = rawStatusCounts.reduce(
+      (result, row) => {
+        const rowStatus = String(row.status || '').toLowerCase();
+        if (rowStatus === 'active' || rowStatus === 'closed') {
+          result[rowStatus] = Number(row.count || 0);
+        }
+        return result;
+      },
+      {active: 0, closed: 0} as {active: number; closed: number},
+    );
+
+    return {
+      ...baseResponse,
+      statusCounts: {
+        ...statusCounts,
+        total: statusCounts.active + statusCounts.closed,
+      },
     };
   }
 
@@ -470,11 +638,7 @@ export class JobService {
       pageId = branch.companyId;
     }
 
-    if (pageId) {
-      await this.assertCompanyPermission(pageId, userId, 'editJobs');
-    } else if (job.createdBy !== userId) {
-      throw new ForbiddenException('You are not allowed to update this job');
-    }
+    await this.assertJobUpdateAccess(job, pageId, userId);
 
     const status = (data.status || job.status || 'active') as JobStatus;
     const payload = this.normalizeJobPayload(
@@ -504,7 +668,12 @@ export class JobService {
     if (!job) throw new NotFoundException('Job not found');
 
     if (job.pageId) {
-      await this.assertCompanyPermission(job.pageId, userId, 'editJobs');
+      await this.assertCompanyPermission(
+        job.pageId,
+        userId,
+        'editJobs',
+        status !== 'closed',
+      );
     } else if (job.createdBy !== userId) {
       throw new ForbiddenException('You are not allowed to update this job');
     }

@@ -45,7 +45,27 @@ const createReelSchema = Joi.object({
     fileSizeBytes: Joi.number().integer().positive().optional(),
     durationSeconds: Joi.number().positive().max(60).optional(),
   }).required(),
+  publisher: Joi.alternatives()
+    .try(
+      Joi.object({
+        type: Joi.string().valid('user').required(),
+      }),
+      Joi.object({
+        type: Joi.string().valid('company').required(),
+        id: Joi.number().integer().positive().required(),
+      }),
+    )
+    .optional(),
 });
+
+const feedQuerySchema = Joi.object({
+  feed: Joi.string().valid('forYou', 'following', 'mine').default('forYou'),
+  category: Joi.string().valid('community', 'jobs', 'social').optional(),
+  cursor: Joi.string().optional(),
+  limit: Joi.number().integer().min(1).max(20).default(10),
+  publisherType: Joi.string().valid('user', 'company').optional(),
+  publisherId: Joi.number().integer().positive().optional(),
+}).and('publisherType', 'publisherId');
 
 const completeUploadSchema = Joi.object({
   uploadId: Joi.string().guid({ version: 'uuidv4' }).required(),
@@ -117,8 +137,16 @@ export class ReelsController {
   }
 
   @Get()
-  getFeed(@Query() query: any, @Req() req: any) {
+  getFeed(
+    @Query(new JoiValidationPipe(feedQuerySchema)) query: any,
+    @Req() req: any,
+  ) {
     return this.reelsService.getFeed(query, req.user.id);
+  }
+
+  @Get('publisher-options')
+  getPublisherOptions(@Req() req: any) {
+    return this.reelsService.getPublisherOptions(req.user.id);
   }
 
   @Get('audio/:audioId/reels')

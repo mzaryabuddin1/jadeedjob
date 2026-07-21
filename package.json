@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "seed:demo": "node scripts/seed-demo-data.js",
+    "migrate:reel-publishers": "node scripts/migrate-reel-company-publishing.js",
     "docs:openapi": "node -e \"fetch('http://localhost:3000/docs-json').then(async r => { if (!r.ok) throw new Error('OpenAPI endpoint returned ' + r.status); const spec = await r.json(); if (spec.openapi && spec.info && spec.paths) { console.log('OpenAPI spec ready:', spec.info.title, spec.info.version); return; } throw new Error('Invalid OpenAPI document'); }).catch(err => { console.error(err.message); process.exit(1); })\"",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

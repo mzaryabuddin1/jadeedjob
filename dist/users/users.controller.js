@@ -155,6 +155,7 @@ let UsersController = class UsersController {
             'tokenVersion',
             'phoneVerifiedAt',
             'admin_notes',
+            'systemRole',
         ];
         forbidden.forEach((field) => delete body[field]);
         await this.usersService.updateMyProfile(userId, body);

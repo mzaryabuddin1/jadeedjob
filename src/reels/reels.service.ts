@@ -6,7 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository } from 'typeorm';
+import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
@@ -17,12 +17,23 @@ import {
   isAllowedReelMimeType,
   ReelStorageService,
 } from './reel-storage.service';
-import { Reel, ReelCategory, ReelVisibility } from './entities/reel.entity';
+import {
+  Reel,
+  ReelCategory,
+  ReelPublisherType,
+  ReelVisibility,
+} from './entities/reel.entity';
 import { ReelUploadSession } from './entities/reel-upload-session.entity';
 import { ReelLike } from './entities/reel-like.entity';
 import { ReelSave } from './entities/reel-save.entity';
 import { ReelComment } from './entities/reel-comment.entity';
-import { ReelCreatorFollow } from './entities/reel-creator-follow.entity';
+import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
+import { PagesService } from 'src/pages/pages.service';
+import { ProfilesService } from 'src/profiles/profiles.service';
+import {
+  formatCompanyPublisher,
+  formatUserPublisher,
+} from 'src/profiles/profile-format.util';
 
 type CreateReelPayload = {
   caption: string;
@@ -32,6 +43,9 @@ type CreateReelPayload = {
   visibility: ReelVisibility;
   allowComments: boolean;
   allowSharing: boolean;
+  publisher?:
+    | { type: 'user' }
+    | { type: 'company'; id: number };
   media: {
     fileName: string;
     contentType: string;
@@ -45,6 +59,8 @@ type FeedQuery = {
   category?: ReelCategory;
   cursor?: string;
   limit?: number;
+  publisherType?: ReelPublisherType;
+  publisherId?: number;
 };
 
 @Injectable()
@@ -67,14 +83,18 @@ export class ReelsService implements OnModuleInit {
     @InjectRepository(ReelComment)
     private readonly commentRepo: Repository<ReelComment>,
 
-    @InjectRepository(ReelCreatorFollow)
-    private readonly followRepo: Repository<ReelCreatorFollow>,
+    @InjectRepository(ProfileFollow)
+    private readonly profileFollowRepo: Repository<ProfileFollow>,
 
     @InjectRepository(Job)
     private readonly jobRepo: Repository<Job>,
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+
+    private readonly pagesService: PagesService,
+
+    private readonly profilesService: ProfilesService,
 
     private readonly storage: ReelStorageService,
   ) {}
@@ -89,23 +109,26 @@ export class ReelsService implements OnModuleInit {
     this.cleanupTimer.unref?.();
   }
 
+  getPublisherOptions(userId: number) {
+    return this.pagesService.getReelPublisherOptions(userId);
+  }
+
   async createReel(data: CreateReelPayload, userId: number) {
     await this.cleanupExpiredUploadSessions();
     this.validateCreateMedia(data.media);
-
-    if (data.linkedJobId) {
-      const job = await this.jobRepo.findOne({
-        where: { id: Number(data.linkedJobId), isActive: true },
-      });
-
-      if (!job) {
-        throw new BadRequestException('Linked job does not exist or is not active');
-      }
-    }
+    const publisher = await this.resolvePublisher(data.publisher, userId);
+    await this.validateLinkedJob(
+      data.linkedJobId,
+      userId,
+      publisher.type,
+      publisher.companyId,
+    );
 
     const reel = await this.reelRepo.save(
       this.reelRepo.create({
         creatorId: userId,
+        publisherType: publisher.type,
+        publisherCompanyId: publisher.companyId,
         caption: data.caption.trim(),
         category: data.category,
         audioTitle: data.audioTitle?.trim() || 'Original audio',
@@ -224,6 +247,14 @@ export class ReelsService implements OnModuleInit {
       throw new BadRequestException('Upload session has expired');
     }
 
+    await this.assertPublisherCanPublish(reel, userId);
+    await this.validateLinkedJob(
+      reel.linkedJobId,
+      userId,
+      this.getPublisherType(reel),
+      reel.publisherCompanyId,
+    );
+
     const now = new Date();
     const nextStatus = reel.visibility === 'draft' ? 'draft' : 'published';
 
@@ -257,6 +288,7 @@ export class ReelsService implements OnModuleInit {
     const qb = this.reelRepo
       .createQueryBuilder('reel')
       .leftJoinAndSelect('reel.creator', 'creator')
+      .leftJoinAndSelect('reel.publisherCompany', 'publisherCompany')
       .where('reel.deletedAt IS NULL');
 
     if (feed === 'mine') {
@@ -265,15 +297,15 @@ export class ReelsService implements OnModuleInit {
       qb.andWhere('reel.status = :publishedStatus', {
         publishedStatus: 'published',
       });
+      qb.andWhere(
+        `(
+          COALESCE(reel.publisherType, 'user') = 'user'
+          OR publisherCompany.verificationStatus = 'approved'
+        )`,
+      );
 
       if (feed === 'following') {
-        qb.andWhere(
-          `EXISTS (
-            SELECT 1 FROM reel_creator_follows f
-            WHERE f.creatorId = reel.creatorId AND f.followerId = :userId
-          )`,
-          { userId },
-        );
+        qb.andWhere(this.publisherFollowExistsSql('reel'), { userId });
       } else {
         qb.andWhere(
           new Brackets((visibilityQb) => {
@@ -284,10 +316,7 @@ export class ReelsService implements OnModuleInit {
             visibilityQb.orWhere(
               `(
                 reel.visibility = :followersVisibility
-                AND EXISTS (
-                  SELECT 1 FROM reel_creator_follows f
-                  WHERE f.creatorId = reel.creatorId AND f.followerId = :userId
-                )
+                AND ${this.publisherFollowExistsSql('reel')}
               )`,
               { followersVisibility: 'followers', userId },
             );
@@ -298,6 +327,24 @@ export class ReelsService implements OnModuleInit {
 
     if (query.category) {
       qb.andWhere('reel.category = :category', { category: query.category });
+    }
+
+    if (query.publisherType && query.publisherId) {
+      if (query.publisherType === 'company') {
+        qb.andWhere('reel.publisherType = :publisherType', {
+          publisherType: 'company',
+        });
+        qb.andWhere('reel.publisherCompanyId = :publisherId', {
+          publisherId: Number(query.publisherId),
+        });
+      } else {
+        qb.andWhere("COALESCE(reel.publisherType, 'user') = :publisherType", {
+          publisherType: 'user',
+        });
+        qb.andWhere('reel.creatorId = :publisherId', {
+          publisherId: Number(query.publisherId),
+        });
+      }
     }
 
     if (cursor) {
@@ -412,6 +459,7 @@ export class ReelsService implements OnModuleInit {
   }
 
   async unlikeReel(reelId: number, userId: number) {
+    await this.getViewableReelOrThrow(reelId, userId);
     const existing = await this.likeRepo.findOne({ where: { reelId, userId } });
 
     if (existing) {
@@ -435,6 +483,7 @@ export class ReelsService implements OnModuleInit {
   }
 
   async unsaveReel(reelId: number, userId: number) {
+    await this.getViewableReelOrThrow(reelId, userId);
     const existing = await this.saveRepo.findOne({ where: { reelId, userId } });
 
     if (existing) {
@@ -458,38 +507,21 @@ export class ReelsService implements OnModuleInit {
   }
 
   async followCreator(creatorId: number, followerId: number) {
-    if (creatorId === followerId) {
-      throw new BadRequestException('You cannot follow yourself');
-    }
-
-    const creator = await this.userRepo.findOne({ where: { id: creatorId } });
-    if (!creator) {
-      throw new NotFoundException('Creator not found');
-    }
-
-    const existing = await this.followRepo.findOne({
-      where: { creatorId, followerId },
-    });
-
-    if (!existing) {
-      await this.followRepo.save(
-        this.followRepo.create({ creatorId, followerId }),
-      );
-    }
-
-    return { creatorId: String(creatorId), following: true };
+    const result = await this.profilesService.follow(
+      'user',
+      creatorId,
+      followerId,
+    );
+    return { ...result, creatorId: String(creatorId) };
   }
 
   async unfollowCreator(creatorId: number, followerId: number) {
-    const existing = await this.followRepo.findOne({
-      where: { creatorId, followerId },
-    });
-
-    if (existing) {
-      await this.followRepo.delete(existing.id);
-    }
-
-    return { creatorId: String(creatorId), following: false };
+    const result = await this.profilesService.unfollow(
+      'user',
+      creatorId,
+      followerId,
+    );
+    return { ...result, creatorId: String(creatorId) };
   }
 
   async deleteReel(reelId: number, userId: number) {
@@ -506,6 +538,14 @@ export class ReelsService implements OnModuleInit {
     if (!reel.videoUrl) {
       throw new BadRequestException('Reel video must be uploaded before publishing');
     }
+
+    await this.assertPublisherCanPublish(reel, userId);
+    await this.validateLinkedJob(
+      reel.linkedJobId,
+      userId,
+      this.getPublisherType(reel),
+      reel.publisherCompanyId,
+    );
 
     const now = new Date();
     reel.status = 'published';
@@ -602,9 +642,21 @@ export class ReelsService implements OnModuleInit {
       throw new NotFoundException('Reel not found');
     }
 
+    if (
+      this.getPublisherType(reel) === 'company' &&
+      reel.publisherCompany?.verificationStatus !== 'approved' &&
+      reel.creatorId !== userId
+    ) {
+      throw new NotFoundException('Reel not found');
+    }
+
     if (reel.visibility === 'followers' && reel.creatorId !== userId) {
-      const follows = await this.followRepo.findOne({
-        where: { creatorId: reel.creatorId, followerId: userId },
+      const follows = await this.profileFollowRepo.findOne({
+        where: {
+          followerUserId: userId,
+          profileType: this.getPublisherType(reel),
+          profileId: this.getPublisherId(reel),
+        },
       });
 
       if (!follows) {
@@ -618,7 +670,7 @@ export class ReelsService implements OnModuleInit {
   private async getReelByIdOrThrow(reelId: number) {
     const reel = await this.reelRepo.findOne({
       where: { id: reelId },
-      relations: ['creator', 'linkedJob'],
+      relations: ['creator', 'linkedJob', 'publisherCompany'],
     });
 
     if (!reel || reel.status === 'deleted' || reel.deletedAt) {
@@ -634,48 +686,78 @@ export class ReelsService implements OnModuleInit {
     }
 
     const reelIds = reels.map((reel) => reel.id);
-    const creatorIds = Array.from(new Set(reels.map((reel) => reel.creatorId)));
+    const userPublisherIds = Array.from(
+      new Set(
+        reels
+          .filter((reel) => this.getPublisherType(reel) === 'user')
+          .map((reel) => reel.creatorId),
+      ),
+    );
+    const companyPublisherIds = Array.from(
+      new Set(
+        reels
+          .filter((reel) => this.getPublisherType(reel) === 'company')
+          .map((reel) => reel.publisherCompanyId)
+          .filter(Boolean),
+      ),
+    );
 
-    const [likes, saves, follows] = await Promise.all([
+    const [likes, saves, userFollows, companyFollows] = await Promise.all([
       this.likeRepo.find({ where: { userId: viewerId, reelId: In(reelIds) } }),
       this.saveRepo.find({ where: { userId: viewerId, reelId: In(reelIds) } }),
-      this.followRepo.find({
-        where: { followerId: viewerId, creatorId: In(creatorIds) },
-      }),
+      userPublisherIds.length
+        ? this.profileFollowRepo.find({
+            where: {
+              followerUserId: viewerId,
+              profileType: 'user',
+              profileId: In(userPublisherIds),
+            },
+          })
+        : Promise.resolve([]),
+      companyPublisherIds.length
+        ? this.profileFollowRepo.find({
+            where: {
+              followerUserId: viewerId,
+              profileType: 'company',
+              profileId: In(companyPublisherIds),
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
     const likedIds = new Set(likes.map((like) => like.reelId));
     const savedIds = new Set(saves.map((save) => save.reelId));
-    const followedCreatorIds = new Set(
-      follows.map((follow) => follow.creatorId),
+    const followedPublisherKeys = new Set(
+      [...userFollows, ...companyFollows].map((follow) =>
+        this.publisherKey(follow.profileType, follow.profileId),
+      ),
     );
 
     return reels.map((reel) =>
-      this.formatReelSync(reel, viewerId, likedIds, savedIds, followedCreatorIds),
+      this.formatReelSync(
+        reel,
+        viewerId,
+        likedIds,
+        savedIds,
+        followedPublisherKeys,
+      ),
     );
   }
 
   async getReelAudio(reelId: number, viewerId: number) {
     const reel = await this.getViewableReelOrThrow(reelId, viewerId);
     const audioTitle = reel.audioTitle || 'Original audio';
-    const usageCount = await this.reelRepo.count({
-      where: {
-        audioTitle,
-        status: 'published',
-      },
-    });
+    const usageCount = await this.createViewablePublishedQuery(viewerId)
+      .andWhere('reel.audioTitle = :audioTitle', { audioTitle })
+      .getCount();
+    const publisher = this.formatPublisher(reel);
 
     return {
       audioId: encodeURIComponent(audioTitle),
       audioTitle,
-      creator: this.formatAuthor(reel.creator),
-      originalReel: this.formatReelSync(
-        reel,
-        viewerId,
-        new Set(),
-        new Set(),
-        new Set(),
-      ),
+      publisher,
+      creator: publisher,
+      originalReel: await this.formatReel(reel, viewerId),
       usageCount,
     };
   }
@@ -685,16 +767,14 @@ export class ReelsService implements OnModuleInit {
     const limit = Math.min(50, Math.max(1, Number(query.limit) || 20));
     const page = Math.max(1, Number(query.page) || 1);
 
-    const [reels, total] = await this.reelRepo.findAndCount({
-      where: {
-        audioTitle,
-        status: 'published',
-      },
-      relations: ['creator', 'linkedJob'],
-      order: { publishedAt: 'DESC', createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const [reels, total] = await this.createViewablePublishedQuery(viewerId)
+      .leftJoinAndSelect('reel.linkedJob', 'linkedJob')
+      .andWhere('reel.audioTitle = :audioTitle', { audioTitle })
+      .orderBy('reel.publishedAt', 'DESC')
+      .addOrderBy('reel.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
     return {
       audioId: encodeURIComponent(audioTitle),
@@ -711,8 +791,12 @@ export class ReelsService implements OnModuleInit {
     const [like, save, follow] = await Promise.all([
       this.likeRepo.findOne({ where: { reelId: reel.id, userId: viewerId } }),
       this.saveRepo.findOne({ where: { reelId: reel.id, userId: viewerId } }),
-      this.followRepo.findOne({
-        where: { creatorId: reel.creatorId, followerId: viewerId },
+      this.profileFollowRepo.findOne({
+        where: {
+          followerUserId: viewerId,
+          profileType: this.getPublisherType(reel),
+          profileId: this.getPublisherId(reel),
+        },
       }),
     ]);
 
@@ -721,7 +805,11 @@ export class ReelsService implements OnModuleInit {
       viewerId,
       new Set(like ? [reel.id] : []),
       new Set(save ? [reel.id] : []),
-      new Set(follow ? [reel.creatorId] : []),
+      new Set(
+        follow
+          ? [this.publisherKey(follow.profileType, follow.profileId)]
+          : [],
+      ),
     );
   }
 
@@ -730,13 +818,21 @@ export class ReelsService implements OnModuleInit {
     viewerId: number,
     likedIds: Set<number>,
     savedIds: Set<number>,
-    followedCreatorIds: Set<number>,
+    followedPublisherKeys: Set<string>,
   ) {
+    const publisherType = this.getPublisherType(reel);
+    const publisherId = this.getPublisherId(reel);
+    const publisher = this.formatPublisher(reel);
+    const followingPublisher = followedPublisherKeys.has(
+      this.publisherKey(publisherType, publisherId),
+    );
+
     return {
       id: String(reel.id),
       videoUrl: reel.videoUrl,
       category: reel.category,
-      author: this.formatAuthor(reel.creator),
+      publisher,
+      author: publisher,
       caption: reel.caption,
       audioTitle: reel.audioTitle,
       linkedJobId: reel.linkedJobId || undefined,
@@ -749,7 +845,8 @@ export class ReelsService implements OnModuleInit {
       viewerState: {
         liked: likedIds.has(reel.id),
         saved: savedIds.has(reel.id),
-        followingCreator: followedCreatorIds.has(reel.creatorId),
+        followingPublisher,
+        followingCreator: followingPublisher,
         isOwner: reel.creatorId === viewerId,
       },
       visibility: reel.visibility,
@@ -776,25 +873,167 @@ export class ReelsService implements OnModuleInit {
   }
 
   private formatAuthor(user?: User) {
-    const name =
-      user?.full_name ||
-      [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
-      'Jadeed user';
-    const handleBase = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 28);
-
+    const author = formatUserPublisher(user);
     return {
-      id: user?.id ? String(user.id) : undefined,
-      name,
-      handle: `@${handleBase || `user_${user?.id || 'unknown'}`}`,
+      ...author,
       avatarUri:
-        user?.profile_photo ||
+        author.avatarUri ||
         `https://i.pravatar.cc/160?u=jadeed-${user?.id || 'anonymous'}`,
-      verified: Boolean(user?.isVerified),
     };
+  }
+
+  private async resolvePublisher(
+    publisher: CreateReelPayload['publisher'],
+    userId: number,
+  ) {
+    if (!publisher || publisher.type === 'user') {
+      return { type: 'user' as const, companyId: null };
+    }
+
+    if (publisher.type !== 'company') {
+      throw new BadRequestException('Invalid reel publisher');
+    }
+
+    const companyId = Number(publisher.id);
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      throw new BadRequestException('Invalid company publisher');
+    }
+
+    await this.pagesService.assertCompanyCanPublish(companyId, userId);
+    return { type: 'company' as const, companyId };
+  }
+
+  private async assertPublisherCanPublish(reel: Reel, userId: number) {
+    if (this.getPublisherType(reel) !== 'company') return;
+    if (!reel.publisherCompanyId) {
+      throw new BadRequestException('Company publisher is missing');
+    }
+
+    await this.pagesService.assertCompanyCanPublish(
+      reel.publisherCompanyId,
+      userId,
+    );
+  }
+
+  private async validateLinkedJob(
+    linkedJobId: number | null | undefined,
+    userId: number,
+    publisherType: ReelPublisherType,
+    publisherCompanyId?: number | null,
+  ) {
+    if (!linkedJobId) return;
+
+    const job = await this.jobRepo.findOne({
+      where: { id: Number(linkedJobId) },
+    });
+    const active = job?.isActive && (!job.status || job.status === 'active');
+    if (!job || !active) {
+      throw new BadRequestException('Linked job does not exist or is not active');
+    }
+
+    if (publisherType === 'company') {
+      if (!publisherCompanyId || job.pageId !== publisherCompanyId) {
+        throw new BadRequestException(
+          'Linked job does not belong to the selected company',
+        );
+      }
+      return;
+    }
+
+    if (job.createdBy !== userId) {
+      throw new BadRequestException('Linked job was not created by this user');
+    }
+  }
+
+  private getPublisherType(reel: Reel): ReelPublisherType {
+    return reel.publisherType === 'company' ? 'company' : 'user';
+  }
+
+  private getPublisherId(reel: Reel) {
+    return this.getPublisherType(reel) === 'company'
+      ? Number(reel.publisherCompanyId)
+      : Number(reel.creatorId);
+  }
+
+  private publisherKey(type: ReelPublisherType, id: number) {
+    return `${type}:${id}`;
+  }
+
+  private formatPublisher(reel: Reel) {
+    if (this.getPublisherType(reel) === 'company') {
+      const publisher = formatCompanyPublisher(reel.publisherCompany);
+      return {
+        ...publisher,
+        id: String(reel.publisherCompanyId),
+        avatarUri: publisher.avatarUri || '',
+      };
+    }
+
+    const publisher = formatUserPublisher(reel.creator);
+    return {
+      ...publisher,
+      id: String(reel.creatorId),
+      avatarUri:
+        publisher.avatarUri ||
+        `https://i.pravatar.cc/160?u=jadeed-${reel.creatorId}`,
+    };
+  }
+
+  private publisherFollowExistsSql(reelAlias: string) {
+    return `EXISTS (
+      SELECT 1 FROM profile_follows pf
+      WHERE pf.followerUserId = :userId
+        AND (
+          (
+            pf.profileType = 'user'
+            AND COALESCE(${reelAlias}.publisherType, 'user') = 'user'
+            AND pf.profileId = ${reelAlias}.creatorId
+          )
+          OR (
+            pf.profileType = 'company'
+            AND ${reelAlias}.publisherType = 'company'
+            AND pf.profileId = ${reelAlias}.publisherCompanyId
+          )
+        )
+    )`;
+  }
+
+  private createViewablePublishedQuery(viewerId: number) {
+    const qb = this.reelRepo
+      .createQueryBuilder('reel')
+      .leftJoinAndSelect('reel.creator', 'creator')
+      .leftJoinAndSelect('reel.publisherCompany', 'publisherCompany')
+      .where('reel.deletedAt IS NULL')
+      .andWhere('reel.status = :publishedStatus', {
+        publishedStatus: 'published',
+      })
+      .andWhere(
+        `(
+          COALESCE(reel.publisherType, 'user') = 'user'
+          OR publisherCompany.verificationStatus = 'approved'
+          OR reel.creatorId = :userId
+        )`,
+        { userId: viewerId },
+      )
+      .andWhere(
+        new Brackets((visibilityQb) => {
+          visibilityQb.where('reel.visibility = :publicVisibility', {
+            publicVisibility: 'public',
+          });
+          visibilityQb.orWhere('reel.creatorId = :userId', {
+            userId: viewerId,
+          });
+          visibilityQb.orWhere(
+            `(
+              reel.visibility = :followersVisibility
+              AND ${this.publisherFollowExistsSql('reel')}
+            )`,
+            { followersVisibility: 'followers', userId: viewerId },
+          );
+        }),
+      );
+
+    return qb as SelectQueryBuilder<Reel>;
   }
 
   private getUploadExpiry() {

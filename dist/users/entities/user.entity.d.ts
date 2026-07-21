@@ -24,6 +24,7 @@ export declare class User {
     phoneVerifiedAt: Date;
     referralCode: string;
     tokenVersion: number;
+    systemRole: 'user' | 'admin';
     isBanned: boolean;
     full_name: string;
     father_name: string;

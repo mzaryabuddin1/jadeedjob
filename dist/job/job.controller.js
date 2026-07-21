@@ -21,6 +21,10 @@ const job_service_1 = require("./job.service");
 const joi_1 = __importDefault(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const JOB_TITLE_MAX_LENGTH = 35;
+const jobTitleSchema = joi_1.default.string().trim().max(JOB_TITLE_MAX_LENGTH).messages({
+    'string.max': 'Title cannot exceed 35 characters',
+});
 let JobController = class JobController {
     constructor(jobService) {
         this.jobService = jobService;
@@ -49,7 +53,7 @@ exports.JobController = JobController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        title: joi_1.default.string().required(),
+        title: jobTitleSchema.required(),
         filterId: joi_1.default.number().required(),
         description: joi_1.default.string().required(),
         pageId: joi_1.default.number().optional(),
@@ -111,7 +115,7 @@ __decorate([
     (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        title: joi_1.default.string().optional(),
+        title: jobTitleSchema.optional(),
         description: joi_1.default.string().optional(),
         pageId: joi_1.default.number().optional(),
         companyId: joi_1.default.number().allow(null).optional(),

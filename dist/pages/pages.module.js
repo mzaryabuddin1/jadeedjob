@@ -16,6 +16,7 @@ const page_member_entity_1 = require("./entities/page-member.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const company_branch_entity_1 = require("./entities/company-branch.entity");
 const employer_company_controller_1 = require("./employer-company.controller");
+const admin_company_controller_1 = require("./admin-company.controller");
 let PagesModule = class PagesModule {
 };
 exports.PagesModule = PagesModule;
@@ -24,7 +25,11 @@ exports.PagesModule = PagesModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature([company_page_entity_1.CompanyPage, page_member_entity_1.PageMember, user_entity_1.User, company_branch_entity_1.CompanyBranch]),
         ],
-        controllers: [pages_controller_1.PagesController, employer_company_controller_1.EmployerCompanyController],
+        controllers: [
+            pages_controller_1.PagesController,
+            employer_company_controller_1.EmployerCompanyController,
+            admin_company_controller_1.AdminCompanyController,
+        ],
         providers: [pages_service_1.PagesService],
         exports: [pages_service_1.PagesService],
     })

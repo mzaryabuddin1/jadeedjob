@@ -24,6 +24,7 @@ const company_branch_entity_1 = require("../pages/entities/company-branch.entity
 const page_member_entity_1 = require("../pages/entities/page-member.entity");
 const job_application_entity_1 = require("../job-application/entities/job-application.entity");
 const notifications_service_1 = require("../notifications/notifications.service");
+const company_permissions_1 = require("../pages/company-permissions");
 const JOB_SORT_COLUMNS = {
     createdAt: 'job.createdAt',
     updatedAt: 'job.updatedAt',
@@ -42,25 +43,7 @@ let JobService = class JobService {
         this.firebaseService = firebaseService;
         this.notificationsService = notificationsService;
     }
-    getDefaultPermissions(role) {
-        if (role === 'editor') {
-            return {
-                postJobs: true,
-                editJobs: true,
-                viewApplicants: true,
-                chatApplicants: true,
-                manageTeam: false,
-            };
-        }
-        return {
-            postJobs: true,
-            editJobs: true,
-            viewApplicants: true,
-            chatApplicants: true,
-            manageTeam: true,
-        };
-    }
-    async assertCompanyPermission(pageId, userId, permission) {
+    async assertCompanyPermission(pageId, userId, permission, requireApproval = false) {
         if (!pageId)
             return;
         const page = await this.pageRepo.findOne({
@@ -69,16 +52,16 @@ let JobService = class JobService {
         });
         if (!page)
             throw new common_1.BadRequestException('Company not found');
+        if (requireApproval && page.verificationStatus !== 'approved') {
+            throw new common_1.ForbiddenException(`Company job posting is unavailable while verification is ${page.verificationStatus || 'pending'}`);
+        }
         if (page.ownerId === userId)
             return;
         const member = page.members?.find((item) => item.userId === userId);
         if (!member || member.hasAccess === false) {
             throw new common_1.ForbiddenException('You do not have access to this company');
         }
-        const permissions = {
-            ...this.getDefaultPermissions(member.role),
-            ...(member.permissions || {}),
-        };
+        const permissions = (0, company_permissions_1.normalizeCompanyPermissions)(member.role, member.permissions);
         if (!permissions[permission]) {
             throw new common_1.ForbiddenException('You do not have permission for this action');
         }
@@ -104,8 +87,32 @@ let JobService = class JobService {
         if (data.postingMode === 'company' && !pageId) {
             throw new common_1.BadRequestException('companyId is required for company posting');
         }
-        await this.assertCompanyPermission(pageId, userId, 'postJobs');
+        await this.assertCompanyPermission(pageId, userId, 'postJobs', true);
         return { pageId: pageId ?? null, branchId: branchId ?? null };
+    }
+    async assertJobUpdateAccess(job, nextPageId, userId) {
+        const currentPageId = job.pageId ?? null;
+        if (currentPageId === nextPageId) {
+            if (nextPageId) {
+                await this.assertCompanyPermission(nextPageId, userId, 'editJobs', true);
+            }
+            else if (job.createdBy !== userId) {
+                throw new common_1.ForbiddenException('You are not allowed to update this job');
+            }
+            return;
+        }
+        if (currentPageId) {
+            await this.assertCompanyPermission(currentPageId, userId, 'editJobs');
+        }
+        else if (job.createdBy !== userId) {
+            throw new common_1.ForbiddenException('You are not allowed to update this job');
+        }
+        if (nextPageId) {
+            await this.assertCompanyPermission(nextPageId, userId, 'postJobs', true);
+        }
+        else if (job.createdBy !== userId) {
+            throw new common_1.ForbiddenException('Only the job creator can move it to an individual account');
+        }
     }
     optionalPositiveId(value) {
         if (value === undefined || value === null || value === '')
@@ -115,6 +122,20 @@ let JobService = class JobService {
             throw new common_1.BadRequestException('Invalid ID value');
         }
         return id;
+    }
+    parseJobStatuses(value) {
+        if (value === undefined || value === null || value === '')
+            return [];
+        const values = Array.isArray(value) ? value : String(value).split(',');
+        const statuses = [
+            ...new Set(values
+                .map((item) => String(item).trim().toLowerCase())
+                .filter(Boolean)),
+        ];
+        if (statuses.some((item) => !['draft', 'active', 'closed'].includes(item))) {
+            throw new common_1.BadRequestException('Invalid job status filter');
+        }
+        return statuses;
     }
     normalizeJobPayload(data, pageId, branchId) {
         const status = (data.status || 'active');
@@ -267,13 +288,34 @@ let JobService = class JobService {
         };
     }
     async findJobs(query, userId) {
-        const { filter, page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'DESC', lat, lng, myjobs = false, status, } = query;
+        const { filter, page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'DESC', lat, lng, myjobs = false, status, statuses, companyId, } = query;
+        const requestedCompanyId = this.optionalPositiveId(companyId);
+        const requestedStatuses = this.parseJobStatuses(statuses);
+        const requestedStatus = status ? String(status).trim().toLowerCase() : '';
+        if (requestedStatus && !['draft', 'active', 'closed'].includes(requestedStatus)) {
+            throw new common_1.BadRequestException('Invalid job status filter');
+        }
+        if (requestedStatus && requestedStatuses.length > 0) {
+            throw new common_1.BadRequestException('Use status or statuses, not both');
+        }
         if (lat !== undefined &&
             lng !== undefined &&
             lat !== '' &&
             lng !== '' &&
-            myjobs !== 'true') {
+            myjobs !== 'true' &&
+            !requestedCompanyId) {
             return this.findNearbyJobs(query);
+        }
+        if (requestedCompanyId && myjobs === 'true') {
+            throw new common_1.BadRequestException('companyId cannot be combined with myjobs');
+        }
+        if (requestedCompanyId) {
+            const company = await this.pageRepo.findOne({
+                where: { id: requestedCompanyId },
+            });
+            if (!company || company.verificationStatus !== 'approved') {
+                throw new common_1.NotFoundException('Company profile not found');
+            }
         }
         const currentPage = Math.max(1, Number(page) || 1);
         const take = Math.min(100, Math.max(1, Number(limit) || 10));
@@ -302,25 +344,88 @@ let JobService = class JobService {
         }
         if (filter)
             qb.andWhere('job.filterId = :filterId', { filterId: Number(filter) });
-        if (status)
-            qb.andWhere('job.status = :status', { status });
+        if (requestedCompanyId) {
+            qb.andWhere('job.pageId = :companyId', {
+                companyId: requestedCompanyId,
+            });
+        }
+        if (requestedStatuses.length > 0) {
+            qb.andWhere("COALESCE(job.status, 'active') IN (:...jobStatuses)", { jobStatuses: requestedStatuses });
+        }
+        else if (requestedStatus) {
+            qb.andWhere("COALESCE(job.status, 'active') = :status", { status: requestedStatus });
+        }
         if (search) {
             qb.andWhere(new typeorm_2.Brackets((inner) => {
                 inner
                     .where('job.title LIKE :search', { search: `%${search}%` })
                     .orWhere('job.description LIKE :search', { search: `%${search}%` })
-                    .orWhere('page.company_name LIKE :search', { search: `%${search}%` });
+                    .orWhere('page.company_name LIKE :search', { search: `%${search}%` })
+                    .orWhere('page.username LIKE :search', { search: `%${search}%` })
+                    .orWhere('creator.full_name LIKE :search', { search: `%${search}%` })
+                    .orWhere('creator.firstName LIKE :search', { search: `%${search}%` })
+                    .orWhere('creator.lastName LIKE :search', { search: `%${search}%` });
             }));
         }
         qb.orderBy(orderColumn, orderDirection)
             .skip((currentPage - 1) * take)
             .take(take);
         const [jobs, total] = await qb.getManyAndCount();
-        return {
+        const baseResponse = {
             data: jobs.map((job) => this.formatJob(job)),
             total,
             totalPages: Math.ceil(total / take),
             currentPage,
+        };
+        if (myjobs !== 'true')
+            return baseResponse;
+        const statusCountsQuery = this.jobRepo
+            .createQueryBuilder('countJob')
+            .leftJoin('countJob.page', 'countPage')
+            .leftJoin('countPage.members', 'countMember')
+            .leftJoin('countJob.creator', 'countCreator')
+            .select("COALESCE(countJob.status, 'active')", 'status')
+            .addSelect('COUNT(DISTINCT countJob.id)', 'count')
+            .where("COALESCE(countJob.status, 'active') IN (:...countStatuses)", { countStatuses: ['active', 'closed'] });
+        statusCountsQuery.andWhere(new typeorm_2.Brackets((inner) => {
+            inner
+                .where('countJob.createdBy = :countUserId', { countUserId: userId })
+                .orWhere('countPage.ownerId = :countUserId', { countUserId: userId })
+                .orWhere('countMember.userId = :countUserId', { countUserId: userId });
+        }));
+        if (filter) {
+            statusCountsQuery.andWhere('countJob.filterId = :countFilterId', {
+                countFilterId: Number(filter),
+            });
+        }
+        if (search) {
+            statusCountsQuery.andWhere(new typeorm_2.Brackets((inner) => {
+                inner
+                    .where('countJob.title LIKE :countSearch', { countSearch: `%${search}%` })
+                    .orWhere('countJob.description LIKE :countSearch', { countSearch: `%${search}%` })
+                    .orWhere('countPage.company_name LIKE :countSearch', { countSearch: `%${search}%` })
+                    .orWhere('countPage.username LIKE :countSearch', { countSearch: `%${search}%` })
+                    .orWhere('countCreator.full_name LIKE :countSearch', { countSearch: `%${search}%` })
+                    .orWhere('countCreator.firstName LIKE :countSearch', { countSearch: `%${search}%` })
+                    .orWhere('countCreator.lastName LIKE :countSearch', { countSearch: `%${search}%` });
+            }));
+        }
+        const rawStatusCounts = await statusCountsQuery
+            .groupBy("COALESCE(countJob.status, 'active')")
+            .getRawMany();
+        const statusCounts = rawStatusCounts.reduce((result, row) => {
+            const rowStatus = String(row.status || '').toLowerCase();
+            if (rowStatus === 'active' || rowStatus === 'closed') {
+                result[rowStatus] = Number(row.count || 0);
+            }
+            return result;
+        }, { active: 0, closed: 0 });
+        return {
+            ...baseResponse,
+            statusCounts: {
+                ...statusCounts,
+                total: statusCounts.active + statusCounts.closed,
+            },
         };
     }
     async findJobById(id, userId) {
@@ -364,12 +469,7 @@ let JobService = class JobService {
             }
             pageId = branch.companyId;
         }
-        if (pageId) {
-            await this.assertCompanyPermission(pageId, userId, 'editJobs');
-        }
-        else if (job.createdBy !== userId) {
-            throw new common_1.ForbiddenException('You are not allowed to update this job');
-        }
+        await this.assertJobUpdateAccess(job, pageId, userId);
         const status = (data.status || job.status || 'active');
         const payload = this.normalizeJobPayload({ ...data, status, isRemote: data.isRemote ?? job.isRemote }, pageId, branchId);
         const locationUpdate = this.buildLocationUpdate(data, status);
@@ -390,7 +490,7 @@ let JobService = class JobService {
         if (!job)
             throw new common_1.NotFoundException('Job not found');
         if (job.pageId) {
-            await this.assertCompanyPermission(job.pageId, userId, 'editJobs');
+            await this.assertCompanyPermission(job.pageId, userId, 'editJobs', status !== 'closed');
         }
         else if (job.createdBy !== userId) {
             throw new common_1.ForbiddenException('You are not allowed to update this job');

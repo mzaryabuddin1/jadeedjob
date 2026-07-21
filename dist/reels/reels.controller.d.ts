@@ -7,11 +7,34 @@ export declare class ReelsController {
             id: string;
             videoUrl: string;
             category: import("./entities/reel.entity").ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -26,6 +49,7 @@ export declare class ReelsController {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -60,11 +84,34 @@ export declare class ReelsController {
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -79,6 +126,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -94,11 +142,34 @@ export declare class ReelsController {
             id: string;
             videoUrl: string;
             category: import("./entities/reel.entity").ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -113,6 +184,7 @@ export declare class ReelsController {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -125,6 +197,26 @@ export declare class ReelsController {
         }[];
         nextCursor: string;
     }>;
+    getPublisherOptions(req: any): Promise<{
+        data: ({
+            disabledReason?: string;
+            type: "company";
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+            canPublish: boolean;
+        } | {
+            type: "user";
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+            canPublish: boolean;
+        })[];
+    }>;
     getReelsByAudio(audioId: string, query: any, req: any): Promise<{
         audioId: string;
         audioTitle: string;
@@ -133,11 +225,34 @@ export declare class ReelsController {
             id: string;
             videoUrl: string;
             category: import("./entities/reel.entity").ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -152,6 +267,7 @@ export declare class ReelsController {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -169,22 +285,68 @@ export declare class ReelsController {
     getAudio(id: number, req: any): Promise<{
         audioId: string;
         audioTitle: string;
-        creator: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        creator: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         originalReel: {
             id: string;
             videoUrl: string;
             category: import("./entities/reel.entity").ReelCategory;
-            author: {
+            publisher: {
                 id: string;
+                avatarUri: string;
+                type: "company";
                 name: string;
                 handle: string;
+                verified: boolean;
+            } | {
+                id: string;
                 avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
+                verified: boolean;
+            };
+            author: {
+                id: string;
+                avatarUri: string;
+                type: "company";
+                name: string;
+                handle: string;
+                verified: boolean;
+            } | {
+                id: string;
+                avatarUri: string;
+                type: "user";
+                name: string;
+                handle: string;
                 verified: boolean;
             };
             caption: string;
@@ -199,6 +361,7 @@ export declare class ReelsController {
             viewerState: {
                 liked: boolean;
                 saved: boolean;
+                followingPublisher: boolean;
                 followingCreator: boolean;
                 isOwner: boolean;
             };
@@ -215,11 +378,34 @@ export declare class ReelsController {
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -234,6 +420,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -248,11 +435,34 @@ export declare class ReelsController {
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -267,6 +477,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -281,11 +492,34 @@ export declare class ReelsController {
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -300,6 +534,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -314,11 +549,34 @@ export declare class ReelsController {
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -333,6 +591,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -348,10 +607,11 @@ export declare class ReelsController {
             id: string;
             reelId: string;
             author: {
+                avatarUri: string;
+                type: "user";
                 id: string;
                 name: string;
                 handle: string;
-                avatarUri: string;
                 verified: boolean;
             };
             text: string;
@@ -363,10 +623,11 @@ export declare class ReelsController {
         id: string;
         reelId: string;
         author: {
+            avatarUri: string;
+            type: "user";
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         text: string;
@@ -376,11 +637,34 @@ export declare class ReelsController {
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -395,6 +679,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };
@@ -407,21 +692,48 @@ export declare class ReelsController {
     }>;
     followCreator(creatorId: number, req: any): Promise<{
         creatorId: string;
+        profileType: import("../profiles/entities/profile-follow.entity").ProfileType;
+        profileId: string;
         following: boolean;
     }>;
     unfollowCreator(creatorId: number, req: any): Promise<{
         creatorId: string;
+        profileType: import("../profiles/entities/profile-follow.entity").ProfileType;
+        profileId: string;
         following: boolean;
     }>;
     publish(id: number, req: any): Promise<{
         id: string;
         videoUrl: string;
         category: import("./entities/reel.entity").ReelCategory;
-        author: {
+        publisher: {
             id: string;
+            avatarUri: string;
+            type: "company";
             name: string;
             handle: string;
+            verified: boolean;
+        } | {
+            id: string;
             avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
+            verified: boolean;
+        };
+        author: {
+            id: string;
+            avatarUri: string;
+            type: "company";
+            name: string;
+            handle: string;
+            verified: boolean;
+        } | {
+            id: string;
+            avatarUri: string;
+            type: "user";
+            name: string;
+            handle: string;
             verified: boolean;
         };
         caption: string;
@@ -436,6 +748,7 @@ export declare class ReelsController {
         viewerState: {
             liked: boolean;
             saved: boolean;
+            followingPublisher: boolean;
             followingCreator: boolean;
             isOwner: boolean;
         };

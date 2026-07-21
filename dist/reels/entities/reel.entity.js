@@ -13,6 +13,7 @@ exports.Reel = void 0;
 const typeorm_1 = require("typeorm");
 const job_entity_1 = require("../../job/entities/job.entity");
 const user_entity_1 = require("../../users/entities/user.entity");
+const company_page_entity_1 = require("../../pages/entities/company-page.entity");
 let Reel = class Reel {
 };
 exports.Reel = Reel;
@@ -29,6 +30,26 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'creatorId' }),
     __metadata("design:type", user_entity_1.User)
 ], Reel.prototype, "creator", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['user', 'company'],
+        default: 'user',
+    }),
+    __metadata("design:type", String)
+], Reel.prototype, "publisherType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], Reel.prototype, "publisherCompanyId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => company_page_entity_1.CompanyPage, { nullable: true, onDelete: 'RESTRICT' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'publisherCompanyId',
+        foreignKeyConstraintName: 'FK_reels_publisher_company',
+    }),
+    __metadata("design:type", company_page_entity_1.CompanyPage)
+], Reel.prototype, "publisherCompany", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'text' }),
     __metadata("design:type", String)
@@ -64,7 +85,14 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['upload_pending', 'processing', 'published', 'draft', 'failed', 'deleted'],
+        enum: [
+            'upload_pending',
+            'processing',
+            'published',
+            'draft',
+            'failed',
+            'deleted',
+        ],
         default: 'upload_pending',
     }),
     __metadata("design:type", String)
@@ -140,6 +168,18 @@ __decorate([
 exports.Reel = Reel = __decorate([
     (0, typeorm_1.Entity)('reels'),
     (0, typeorm_1.Index)(['status', 'visibility', 'createdAt']),
-    (0, typeorm_1.Index)(['creatorId', 'createdAt'])
+    (0, typeorm_1.Index)(['creatorId', 'createdAt']),
+    (0, typeorm_1.Index)('IDX_reels_publisher_user_status_created_at', [
+        'publisherType',
+        'creatorId',
+        'status',
+        'createdAt',
+    ]),
+    (0, typeorm_1.Index)('IDX_reels_publisher_company_status_created_at', [
+        'publisherType',
+        'publisherCompanyId',
+        'status',
+        'createdAt',
+    ])
 ], Reel);
 //# sourceMappingURL=reel.entity.js.map

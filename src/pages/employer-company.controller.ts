@@ -21,6 +21,7 @@ const permissionSchema = Joi.object({
   viewApplicants: Joi.boolean().optional(),
   chatApplicants: Joi.boolean().optional(),
   manageTeam: Joi.boolean().optional(),
+  publishContent: Joi.boolean().optional(),
 });
 
 const branchSchema = Joi.object({

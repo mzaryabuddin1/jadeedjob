@@ -41,7 +41,18 @@ let AuthService = class AuthService {
         });
     }
     toPublicUser(user) {
-        const { passwordHash, passwordSalt, fcmTokens, password, admin_notes, verified_by_admin_id, ...publicUser } = user;
+        const publicUser = { ...user };
+        for (const field of [
+            'passwordHash',
+            'passwordSalt',
+            'fcmTokens',
+            'password',
+            'admin_notes',
+            'verified_by_admin_id',
+            'systemRole',
+        ]) {
+            delete publicUser[field];
+        }
         return publicUser;
     }
     async generateUniqueReferralCode() {

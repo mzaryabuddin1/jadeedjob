@@ -17,6 +17,11 @@ import Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
+const JOB_TITLE_MAX_LENGTH = 35;
+const jobTitleSchema = Joi.string().trim().max(JOB_TITLE_MAX_LENGTH).messages({
+  'string.max': 'Title cannot exceed 35 characters',
+});
+
 @UseGuards(JwtAuthGuard)
 @Controller('job')
 export class JobController {
@@ -26,7 +31,7 @@ export class JobController {
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        title: Joi.string().required(),
+        title: jobTitleSchema.required(),
         filterId: Joi.number().required(),
         description: Joi.string().required(),
         pageId: Joi.number().optional(),
@@ -105,7 +110,7 @@ export class JobController {
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(
       Joi.object({
-        title: Joi.string().optional(),
+        title: jobTitleSchema.optional(),
         description: Joi.string().optional(),
         pageId: Joi.number().optional(),
         companyId: Joi.number().allow(null).optional(),

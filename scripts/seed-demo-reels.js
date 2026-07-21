@@ -227,6 +227,8 @@ async function ensureDemoReelTables(conn) {
     CREATE TABLE IF NOT EXISTS reels (
       id int NOT NULL AUTO_INCREMENT,
       creatorId int NOT NULL,
+      publisherType enum('user','company') NOT NULL DEFAULT 'user',
+      publisherCompanyId int NULL,
       caption text NOT NULL,
       category enum('community','jobs','social') NOT NULL,
       audioTitle varchar(255) NOT NULL DEFAULT 'Original audio',
@@ -253,6 +255,8 @@ async function ensureDemoReelTables(conn) {
       PRIMARY KEY (id),
       KEY IDX_reels_status_visibility_createdAt (status, visibility, createdAt),
       KEY IDX_reels_creatorId_createdAt (creatorId, createdAt),
+      KEY IDX_reels_publisher_user_status_created_at (publisherType, creatorId, status, createdAt),
+      KEY IDX_reels_publisher_company_status_created_at (publisherType, publisherCompanyId, status, createdAt),
       KEY IDX_reels_storageKey (storageKey)
     )
   `);
@@ -327,8 +331,22 @@ async function ensureDemoReelTables(conn) {
       followerId int NOT NULL,
       createdAt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
-      UNIQUE KEY IDX_reel_creator_follows_creatorId_followerId (creatorId, followerId),
-      KEY IDX_reel_creator_follows_followerId_creatorId (followerId, creatorId)
+      UNIQUE KEY IDX_reel_creator_follows_creator_follower_unique (creatorId, followerId),
+      KEY IDX_reel_creator_follows_follower_creator (followerId, creatorId)
+    )
+  `);
+
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS profile_follows (
+      id int NOT NULL AUTO_INCREMENT,
+      followerUserId int NOT NULL,
+      profileType enum('user','company') NOT NULL,
+      profileId int NOT NULL,
+      createdAt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY UQ_profile_follows_follower_type_profile (followerUserId, profileType, profileId),
+      KEY IDX_profile_follows_target_follower (profileType, profileId, followerUserId),
+      KEY IDX_profile_follows_follower_target (followerUserId, profileType, profileId)
     )
   `);
 }
@@ -400,6 +418,15 @@ async function cleanupDemoReelData(conn, options = {}) {
     { column: 'creatorId', values: creatorIds },
     { column: 'followerId', values: creatorIds },
   ]);
+  if (creatorIds.length && (await tableExists(conn, 'profile_follows'))) {
+    const ids = placeholders(creatorIds);
+    await conn.execute(
+      `DELETE FROM profile_follows
+       WHERE followerUserId IN (${ids})
+          OR (profileType = 'user' AND profileId IN (${ids}))`,
+      [...creatorIds, ...creatorIds],
+    );
+  }
   await deleteWhere(conn, 'reels', [{ column: 'id', values: reelIds }]);
   await deleteWhere(conn, 'users', [{ column: 'id', values: creatorIds }]);
 
@@ -503,12 +530,12 @@ async function insertDemoReels(conn, plan, creatorsByKey, jobsByKey = {}) {
 
     const [result] = await conn.execute(
       `INSERT INTO reels (
-        creatorId, caption, category, audioTitle, linkedJobId, visibility, status,
+        creatorId, publisherType, publisherCompanyId, caption, category, audioTitle, linkedJobId, visibility, status,
         allowComments, allowSharing, videoUrl, storageKey, originalFileName,
         contentType, fileSizeBytes, durationSeconds, likesCount, commentsCount,
         savesCount, sharesCount, publishedAt, processedAt, createdAt, updatedAt
       ) VALUES (
-        ?, ?, ?, ?, ?, 'public', 'published',
+        ?, 'user', NULL, ?, ?, ?, ?, 'public', 'published',
         1, 1, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?

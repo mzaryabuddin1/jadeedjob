@@ -7,13 +7,25 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { PageMember } from './page-member.entity';
 import { CompanyBranch } from './company-branch.entity';
 
+export type CompanyVerificationStatus =
+  | 'pending'
+  | 'approved'
+  | 'needs_changes'
+  | 'rejected'
+  | 'suspended';
+
 @Entity('pages')
-export class CompanyPage  {
+@Index('IDX_pages_verification_status_created_at', [
+  'verificationStatus',
+  'createdAt',
+])
+export class CompanyPage {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -130,6 +142,29 @@ export class CompanyPage  {
 
   @Column({ nullable: true })
   company_rating: number;
+
+  @Column({
+    type: 'enum',
+    enum: ['pending', 'approved', 'needs_changes', 'rejected', 'suspended'],
+    default: 'pending',
+  })
+  verificationStatus: CompanyVerificationStatus;
+
+  @Column({ type: 'text', nullable: true })
+  verificationReason: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  verifiedAt: Date;
+
+  @Column({ nullable: true })
+  verifiedByAdminId: number;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'verifiedByAdminId',
+    foreignKeyConstraintName: 'FK_pages_verified_by_admin',
+  })
+  verifiedByAdmin: User;
 
   @Column()
   ownerId: number;

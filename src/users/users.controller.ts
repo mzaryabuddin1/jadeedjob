@@ -215,6 +215,7 @@ export class UsersController {
       'tokenVersion',
       'phoneVerifiedAt',
       'admin_notes',
+      'systemRole',
     ];
     forbidden.forEach((field) => delete body[field]);
 

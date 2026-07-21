@@ -41,15 +41,18 @@ export class AuthService {
   }
 
   toPublicUser(user: any) {
-    const {
-      passwordHash,
-      passwordSalt,
-      fcmTokens,
-      password,
-      admin_notes,
-      verified_by_admin_id,
-      ...publicUser
-    } = user as any;
+    const publicUser = { ...(user as any) };
+    for (const field of [
+      'passwordHash',
+      'passwordSalt',
+      'fcmTokens',
+      'password',
+      'admin_notes',
+      'verified_by_admin_id',
+      'systemRole',
+    ]) {
+      delete publicUser[field];
+    }
 
     return publicUser;
   }

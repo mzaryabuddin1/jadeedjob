@@ -11,6 +11,9 @@ import { ReelUploadSession } from './entities/reel-upload-session.entity';
 import { ReelStorageService } from './reel-storage.service';
 import { ReelsController } from './reels.controller';
 import { ReelsService } from './reels.service';
+import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
+import { ProfilesModule } from 'src/profiles/profiles.module';
+import { PagesModule } from 'src/pages/pages.module';
 
 @Module({
   imports: [
@@ -23,7 +26,10 @@ import { ReelsService } from './reels.service';
       ReelCreatorFollow,
       Job,
       User,
+      ProfileFollow,
     ]),
+    PagesModule,
+    ProfilesModule,
   ],
   controllers: [ReelsController],
   providers: [ReelsService, ReelStorageService],

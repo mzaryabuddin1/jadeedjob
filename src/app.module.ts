@@ -30,6 +30,8 @@ import { AuthSessionModule } from './auth/auth-session.module';
 import { ReelsModule } from './reels/reels.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SupportModule } from './support/support.module';
+import { ProfilesModule } from './profiles/profiles.module';
+import { PostsModule } from './posts/posts.module';
 
 @Module({
   imports: [
@@ -74,6 +76,8 @@ import { SupportModule } from './support/support.module';
     ReelsModule,
     NotificationsModule,
     SupportModule,
+    ProfilesModule,
+    PostsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -60,7 +60,18 @@ let UsersService = class UsersService {
             .map((filter) => (0, filter_icon_util_1.withFilterIconMeta)(filter));
     }
     toPublicUser(user) {
-        const { passwordHash, passwordSalt, fcmTokens, password, admin_notes, verified_by_admin_id, ...publicUser } = user;
+        const publicUser = { ...user };
+        for (const field of [
+            'passwordHash',
+            'passwordSalt',
+            'fcmTokens',
+            'password',
+            'admin_notes',
+            'verified_by_admin_id',
+            'systemRole',
+        ]) {
+            delete publicUser[field];
+        }
         return publicUser;
     }
     async generateUniqueReferralCode(repo = this.userRepo) {

@@ -86,7 +86,7 @@ let AuthSessionService = class AuthSessionService {
         }
         const user = await this.userRepo.findOne({
             where: { id },
-            select: ['id', 'isBanned', 'tokenVersion'],
+            select: ['id', 'isBanned', 'tokenVersion', 'systemRole'],
         });
         if (!user) {
             throw new common_1.UnauthorizedException('Invalid user session');
@@ -101,6 +101,7 @@ let AuthSessionService = class AuthSessionService {
         return {
             ...decoded,
             id,
+            systemRole: user.systemRole || 'user',
         };
     }
 };
