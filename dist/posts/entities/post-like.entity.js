@@ -26,7 +26,10 @@ __decorate([
 ], PostLike.prototype, "postId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => community_post_entity_1.CommunityPost, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'postId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'postId',
+        foreignKeyConstraintName: 'FK_community_post_likes_post',
+    }),
     __metadata("design:type", community_post_entity_1.CommunityPost)
 ], PostLike.prototype, "post", void 0);
 __decorate([
@@ -35,7 +38,10 @@ __decorate([
 ], PostLike.prototype, "userId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'userId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'userId',
+        foreignKeyConstraintName: 'FK_community_post_likes_user',
+    }),
     __metadata("design:type", user_entity_1.User)
 ], PostLike.prototype, "user", void 0);
 __decorate([
@@ -44,6 +50,8 @@ __decorate([
 ], PostLike.prototype, "createdAt", void 0);
 exports.PostLike = PostLike = __decorate([
     (0, typeorm_1.Entity)('community_post_likes'),
-    (0, typeorm_1.Index)(['postId', 'userId'], { unique: true })
+    (0, typeorm_1.Index)('UQ_community_post_likes_post_user', ['postId', 'userId'], {
+        unique: true,
+    })
 ], PostLike);
 //# sourceMappingURL=post-like.entity.js.map

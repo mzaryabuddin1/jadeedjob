@@ -26,7 +26,10 @@ __decorate([
 ], PostReport.prototype, "postId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => community_post_entity_1.CommunityPost, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'postId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'postId',
+        foreignKeyConstraintName: 'FK_community_post_reports_post',
+    }),
     __metadata("design:type", community_post_entity_1.CommunityPost)
 ], PostReport.prototype, "post", void 0);
 __decorate([
@@ -35,7 +38,10 @@ __decorate([
 ], PostReport.prototype, "userId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'userId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'userId',
+        foreignKeyConstraintName: 'FK_community_post_reports_user',
+    }),
     __metadata("design:type", user_entity_1.User)
 ], PostReport.prototype, "user", void 0);
 __decorate([
@@ -52,6 +58,8 @@ __decorate([
 ], PostReport.prototype, "createdAt", void 0);
 exports.PostReport = PostReport = __decorate([
     (0, typeorm_1.Entity)('community_post_reports'),
-    (0, typeorm_1.Index)(['postId', 'userId'], { unique: true })
+    (0, typeorm_1.Index)('UQ_community_post_reports_post_user', ['postId', 'userId'], {
+        unique: true,
+    })
 ], PostReport);
 //# sourceMappingURL=post-report.entity.js.map

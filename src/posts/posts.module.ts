@@ -9,7 +9,9 @@ import { PostComment } from './entities/post-comment.entity';
 import { PostLike } from './entities/post-like.entity';
 import { PostReport } from './entities/post-report.entity';
 import { PostSave } from './entities/post-save.entity';
+import { PostVideoUploadSession } from './entities/post-video-upload-session.entity';
 import { PostStorageService } from './post-storage.service';
+import { PostVideoStorageService } from './post-video-storage.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 
@@ -21,6 +23,7 @@ import { PostsService } from './posts.service';
       PostSave,
       PostComment,
       PostReport,
+      PostVideoUploadSession,
       ProfileFollow,
       Job,
       User,
@@ -28,7 +31,7 @@ import { PostsService } from './posts.service';
     PagesModule,
   ],
   controllers: [PostsController],
-  providers: [PostsService, PostStorageService],
+  providers: [PostsService, PostStorageService, PostVideoStorageService],
   exports: [PostsService],
 })
 export class PostsModule {}

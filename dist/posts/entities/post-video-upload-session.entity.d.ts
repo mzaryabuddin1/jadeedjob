@@ -1,0 +1,29 @@
+import { User } from 'src/users/entities/user.entity';
+import { CommunityPost } from './community-post.entity';
+export type PostVideoUploadStatus = 'pending' | 'uploaded' | 'completed' | 'expired' | 'failed';
+export declare class PostVideoUploadSession {
+    id: number;
+    uploadId: string;
+    postId: number;
+    post: CommunityPost;
+    userId: number;
+    user: User;
+    replacement: boolean;
+    status: PostVideoUploadStatus;
+    uploadKey: string | null;
+    originalFileName: string;
+    contentType: string;
+    expectedFileSizeBytes: number | null;
+    clientDurationSeconds: number | null;
+    uploadedFileName: string | null;
+    localFilePath: string | null;
+    publicUrl: string | null;
+    uploadedFileSizeBytes: number | null;
+    uploadedDurationSeconds: number | null;
+    uploadedContentType: string | null;
+    expiresAt: Date;
+    completedAt: Date | null;
+    errorMessage: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+}

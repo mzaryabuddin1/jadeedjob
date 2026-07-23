@@ -13,10 +13,12 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
-  UsePipes,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { randomUUID } from 'crypto';
 import Joi from 'joi';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import {
@@ -24,6 +26,14 @@ import {
   POST_IMAGE_FIELD,
   POST_IMAGE_MAX_BYTES,
 } from './post-storage.service';
+import {
+  ensurePostVideoDirectory,
+  getPostVideoTmpDir,
+  isAllowedPostVideoFileName,
+  isAllowedPostVideoMimeType,
+  POST_VIDEO_FILE_FIELD,
+  POST_VIDEO_MAX_BYTES,
+} from './post-video-storage.service';
 import { PostsService } from './posts.service';
 
 const publisherFields = {
@@ -39,7 +49,11 @@ const createPostSchema = Joi.object({
   ...publisherFields,
   body: Joi.string().trim().max(2000).allow('', null).optional(),
   linkedJobId: Joi.alternatives()
-    .try(Joi.number().integer().positive(), Joi.string().allow(''))
+    .try(
+      Joi.number().integer().positive(),
+      Joi.string().allow(''),
+      Joi.valid(null),
+    )
     .optional(),
   allowComments: Joi.boolean().default(true),
 });
@@ -47,10 +61,46 @@ const createPostSchema = Joi.object({
 const updatePostSchema = Joi.object({
   body: Joi.string().trim().max(2000).allow('', null).optional(),
   linkedJobId: Joi.alternatives()
-    .try(Joi.number().integer().positive(), Joi.string().allow(''))
+    .try(
+      Joi.number().integer().positive(),
+      Joi.string().allow(''),
+      Joi.valid(null),
+    )
     .optional(),
   allowComments: Joi.boolean().optional(),
   removeImage: Joi.boolean().optional(),
+  removeMedia: Joi.boolean().optional(),
+});
+
+const videoMediaSchema = Joi.object({
+  fileName: Joi.string().trim().max(255).required(),
+  contentType: Joi.string().trim().max(100).required(),
+  fileSizeBytes: Joi.number()
+    .integer()
+    .positive()
+    .max(POST_VIDEO_MAX_BYTES)
+    .optional(),
+  durationSeconds: Joi.number().positive().optional(),
+}).required();
+
+const createVideoPostSchema = Joi.object({
+  ...publisherFields,
+  body: Joi.string().trim().max(2000).allow('', null).optional(),
+  linkedJobId: Joi.alternatives()
+    .try(
+      Joi.number().integer().positive(),
+      Joi.string().allow(''),
+      Joi.valid(null),
+    )
+    .optional(),
+  allowComments: Joi.boolean().default(true),
+  media: videoMediaSchema,
+});
+
+const replaceVideoSchema = Joi.object({ media: videoMediaSchema });
+
+const completeVideoUploadSchema = Joi.object({
+  uploadId: Joi.string().guid({ version: 'uuidv4' }).required(),
 });
 
 const feedQuerySchema = Joi.object({
@@ -64,11 +114,16 @@ const commentSchema = Joi.object({
   text: Joi.string().trim().min(1).max(500).required(),
 });
 
+const commentsQuerySchema = Joi.object({
+  cursor: Joi.string().optional(),
+  limit: Joi.number().integer().min(1).max(50).default(20),
+});
+
 const reportSchema = Joi.object({
   reason: Joi.string()
     .trim()
     .valid('spam', 'harassment', 'misleading', 'inappropriate', 'other')
-    .default('other'),
+    .required(),
   details: Joi.string().trim().max(1000).allow('', null).optional(),
 });
 
@@ -78,8 +133,37 @@ const imageInterceptor = FileInterceptor(POST_IMAGE_FIELD, {
     if (!isAllowedPostImageMetadata(file.mimetype, file.originalname)) {
       callback(
         new BadRequestException(
-          'Post image must be JPEG, PNG, WebP, or HEIC',
+          'Post image must be JPEG, PNG, WebP, HEIC, or HEIF',
         ) as any,
+        false,
+      );
+      return;
+    }
+    callback(null, true);
+  },
+});
+
+const videoInterceptor = FileInterceptor(POST_VIDEO_FILE_FIELD, {
+  storage: diskStorage({
+    destination: (_req, _file, callback) => {
+      const uploadDir = getPostVideoTmpDir();
+      ensurePostVideoDirectory(uploadDir);
+      callback(null, uploadDir);
+    },
+    filename: (_req, file, callback) => {
+      const extension =
+        extname(file.originalname || '').toLowerCase() || '.mp4';
+      callback(null, `${Date.now()}-${randomUUID()}${extension}`);
+    },
+  }),
+  limits: { fileSize: POST_VIDEO_MAX_BYTES },
+  fileFilter: (_req, file, callback) => {
+    if (
+      !isAllowedPostVideoMimeType(file.mimetype) ||
+      !isAllowedPostVideoFileName(file.originalname)
+    ) {
+      callback(
+        new BadRequestException('Use an MP4, MOV, or M4V video') as any,
         false,
       );
       return;
@@ -94,9 +178,58 @@ export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Get()
-  @UsePipes(new JoiValidationPipe(feedQuerySchema))
-  getFeed(@Query() query: any, @Req() req: any) {
+  getFeed(
+    @Query(new JoiValidationPipe(feedQuerySchema)) query: any,
+    @Req() req: any,
+  ) {
     return this.postsService.getFeed(query, req.user.id);
+  }
+
+  @Post('video-uploads')
+  createVideoUpload(
+    @Body(new JoiValidationPipe(createVideoPostSchema)) body: any,
+    @Req() req: any,
+  ) {
+    return this.postsService.createVideoUpload(body, req.user.id);
+  }
+
+  @Post(':id/video-uploads')
+  replaceVideoUpload(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new JoiValidationPipe(replaceVideoSchema)) body: any,
+    @Req() req: any,
+  ) {
+    return this.postsService.createVideoReplacement(
+      id,
+      body.media,
+      req.user.id,
+    );
+  }
+
+  @Post(':id/video-upload')
+  @UseInterceptors(videoInterceptor)
+  uploadVideo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('uploadId') uploadId: string,
+    @UploadedFile() video: Express.Multer.File,
+    @Req() req: any,
+  ) {
+    if (!uploadId) throw new BadRequestException('uploadId is required');
+    return this.postsService.uploadVideo(id, req.user.id, uploadId, video);
+  }
+
+  @Post(':id/complete-video-upload')
+  completeVideoUpload(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new JoiValidationPipe(completeVideoUploadSchema))
+    body: { uploadId: string },
+    @Req() req: any,
+  ) {
+    return this.postsService.completeVideoUpload(
+      id,
+      req.user.id,
+      body.uploadId,
+    );
   }
 
   @Get(':id')
@@ -106,9 +239,8 @@ export class PostsController {
 
   @Post()
   @UseInterceptors(imageInterceptor)
-  @UsePipes(new JoiValidationPipe(createPostSchema))
   create(
-    @Body() body: any,
+    @Body(new JoiValidationPipe(createPostSchema)) body: any,
     @UploadedFile() image: Express.Multer.File,
     @Req() req: any,
   ) {
@@ -117,10 +249,9 @@ export class PostsController {
 
   @Patch(':id')
   @UseInterceptors(imageInterceptor)
-  @UsePipes(new JoiValidationPipe(updatePostSchema))
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: any,
+    @Body(new JoiValidationPipe(updatePostSchema)) body: any,
     @UploadedFile() image: Express.Multer.File,
     @Req() req: any,
   ) {
@@ -160,40 +291,32 @@ export class PostsController {
   @Get(':id/comments')
   getComments(
     @Param('id', ParseIntPipe) id: number,
-    @Query('cursor') cursor: string,
-    @Query('limit') limit: number,
+    @Query(new JoiValidationPipe(commentsQuerySchema)) query: any,
     @Req() req: any,
   ) {
     return this.postsService.getComments(
       id,
       req.user.id,
-      cursor,
-      Number(limit),
+      query.cursor,
+      query.limit,
     );
   }
 
   @Post(':id/comments')
-  @UsePipes(new JoiValidationPipe(commentSchema))
   addComment(
     @Param('id', ParseIntPipe) id: number,
-    @Body('text') text: string,
+    @Body(new JoiValidationPipe(commentSchema)) body: any,
     @Req() req: any,
   ) {
-    return this.postsService.addComment(id, req.user.id, text);
+    return this.postsService.addComment(id, req.user.id, body.text);
   }
 
   @Post(':id/report')
-  @UsePipes(new JoiValidationPipe(reportSchema))
   report(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: any,
+    @Body(new JoiValidationPipe(reportSchema)) body: any,
     @Req() req: any,
   ) {
-    return this.postsService.report(
-      id,
-      req.user.id,
-      body.reason,
-      body.details,
-    );
+    return this.postsService.report(id, req.user.id, body.reason, body.details);
   }
 }

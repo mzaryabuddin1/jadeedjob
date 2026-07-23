@@ -26,7 +26,10 @@ __decorate([
 ], PostComment.prototype, "postId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => community_post_entity_1.CommunityPost, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'postId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'postId',
+        foreignKeyConstraintName: 'FK_community_post_comments_post',
+    }),
     __metadata("design:type", community_post_entity_1.CommunityPost)
 ], PostComment.prototype, "post", void 0);
 __decorate([
@@ -35,7 +38,10 @@ __decorate([
 ], PostComment.prototype, "userId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, { eager: true, onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'userId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'userId',
+        foreignKeyConstraintName: 'FK_community_post_comments_user',
+    }),
     __metadata("design:type", user_entity_1.User)
 ], PostComment.prototype, "user", void 0);
 __decorate([
@@ -48,6 +54,6 @@ __decorate([
 ], PostComment.prototype, "createdAt", void 0);
 exports.PostComment = PostComment = __decorate([
     (0, typeorm_1.Entity)('community_post_comments'),
-    (0, typeorm_1.Index)(['postId', 'createdAt'])
+    (0, typeorm_1.Index)('IDX_community_post_comments_post_created', ['postId', 'createdAt'])
 ], PostComment);
 //# sourceMappingURL=post-comment.entity.js.map

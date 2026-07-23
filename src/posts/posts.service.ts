@@ -3,11 +3,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
-import { normalizeCompanyPermissions } from 'src/pages/company-permissions';
 import { PagesService } from 'src/pages/pages.service';
 import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
 import {
@@ -24,6 +26,13 @@ import { PostLike } from './entities/post-like.entity';
 import { PostReport } from './entities/post-report.entity';
 import { PostSave } from './entities/post-save.entity';
 import { PostStorageService } from './post-storage.service';
+import { PostVideoUploadSession } from './entities/post-video-upload-session.entity';
+import {
+  isAllowedPostVideoFileName,
+  isAllowedPostVideoMimeType,
+  POST_VIDEO_MAX_BYTES,
+  PostVideoStorageService,
+} from './post-video-storage.service';
 
 type PostFeedQuery = {
   cursor?: string;
@@ -39,6 +48,18 @@ type PostMutationBody = {
   linkedJobId?: number | string | null;
   allowComments?: boolean | string;
   removeImage?: boolean | string;
+  removeMedia?: boolean | string;
+};
+
+type PostVideoMediaInput = {
+  fileName: string;
+  contentType: string;
+  fileSizeBytes?: number;
+  durationSeconds?: number;
+};
+
+type CreateVideoPostBody = PostMutationBody & {
+  media: PostVideoMediaInput;
 };
 
 type FeedCursor =
@@ -46,7 +67,9 @@ type FeedCursor =
   | { mode: 'profile'; createdAt: string; id: number };
 
 @Injectable()
-export class PostsService {
+export class PostsService implements OnModuleInit, OnModuleDestroy {
+  private cleanupTimer?: NodeJS.Timeout;
+
   constructor(
     @InjectRepository(CommunityPost)
     private readonly postRepo: Repository<CommunityPost>,
@@ -64,9 +87,27 @@ export class PostsService {
     private readonly jobRepo: Repository<Job>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(PostVideoUploadSession)
+    private readonly videoUploadRepo: Repository<PostVideoUploadSession>,
     private readonly pagesService: PagesService,
     private readonly storage: PostStorageService,
+    private readonly videoStorage: PostVideoStorageService,
   ) {}
+
+  onModuleInit() {
+    this.cleanupExpiredVideoUploads().catch(() => undefined);
+    this.cleanupTimer = setInterval(
+      () => {
+        this.cleanupExpiredVideoUploads().catch(() => undefined);
+      },
+      60 * 60 * 1000,
+    );
+    this.cleanupTimer.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+  }
 
   async getFeed(query: PostFeedQuery, viewerId: number) {
     const limit = Math.min(30, Math.max(1, Number(query.limit) || 10));
@@ -75,6 +116,9 @@ export class PostsService {
     const qb = this.createViewableQuery();
 
     if (profileFiltered) {
+      if (cursor && cursor.mode !== 'profile') {
+        throw new BadRequestException('Post cursor does not match this feed');
+      }
       this.applyPublisherFilter(
         qb,
         query.publisherType as PostPublisherType,
@@ -115,6 +159,10 @@ export class PostsService {
               })
             : null,
       };
+    }
+
+    if (cursor && cursor.mode !== 'feed') {
+      throw new BadRequestException('Post cursor does not match this feed');
     }
 
     const scoreSql = `(UNIX_TIMESTAMP(post.createdAt) + CASE WHEN ${this.publisherFollowExistsSql(
@@ -163,10 +211,219 @@ export class PostsService {
   }
 
   async getPost(postId: number, viewerId: number) {
-    return this.formatPost(
-      await this.getViewablePostOrThrow(postId),
-      viewerId,
+    return this.formatPost(await this.getViewablePostOrThrow(postId), viewerId);
+  }
+
+  async createVideoUpload(data: CreateVideoPostBody, userId: number) {
+    await this.cleanupExpiredVideoUploads();
+    this.validateVideoMetadata(data.media);
+    const publisher = await this.resolvePublisher(
+      data.publisherType,
+      data.publisherId,
+      userId,
     );
+    const linkedJob = await this.validateLinkedJob(
+      data.linkedJobId,
+      publisher.type,
+      publisher.companyId,
+    );
+    const post = await this.postRepo.save(
+      this.postRepo.create({
+        creatorId: userId,
+        publisherType: publisher.type,
+        publisherCompanyId: publisher.companyId,
+        body: this.normalizeBody(data.body),
+        linkedJobId: linkedJob?.id ?? null,
+        allowComments: this.parseBoolean(data.allowComments, true),
+        mediaType: 'video',
+        mediaStatus: 'upload_pending',
+        videoContentType: data.media.contentType,
+        videoFileSizeBytes: data.media.fileSizeBytes ?? null,
+        videoDurationSeconds: data.media.durationSeconds
+          ? Math.ceil(Number(data.media.durationSeconds))
+          : null,
+      }),
+    );
+
+    const session = await this.createVideoUploadSession(
+      post,
+      data.media,
+      userId,
+      false,
+    );
+    return {
+      post: await this.formatPost(
+        await this.getPostByIdOrThrow(post.id),
+        userId,
+      ),
+      upload: this.videoStorage.getUploadInstructions(post, session),
+    };
+  }
+
+  async createVideoReplacement(
+    postId: number,
+    media: PostVideoMediaInput,
+    userId: number,
+  ) {
+    await this.cleanupExpiredVideoUploads();
+    this.validateVideoMetadata(media);
+    const post = await this.getPostByIdOrThrow(postId);
+    await this.assertCanManage(post, userId);
+    const session = await this.createVideoUploadSession(
+      post,
+      media,
+      userId,
+      true,
+    );
+    return {
+      post: await this.formatPost(post, userId),
+      upload: this.videoStorage.getUploadInstructions(post, session),
+    };
+  }
+
+  async uploadVideo(
+    postId: number,
+    userId: number,
+    uploadId: string,
+    file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No video file provided');
+    const { post, session } = await this.getOwnedVideoUploadSession(
+      postId,
+      userId,
+      uploadId,
+    );
+    if (session.status !== 'pending') {
+      await this.videoStorage.deleteLocalFile(file.path);
+      throw new BadRequestException('Upload session is not accepting files');
+    }
+    if (this.isExpired(session.expiresAt)) {
+      await this.videoStorage.deleteLocalFile(file.path);
+      await this.expireVideoUploadSession(session);
+      throw new BadRequestException('Upload session has expired');
+    }
+
+    this.validateUploadedVideo(file);
+    let stored: Awaited<
+      ReturnType<PostVideoStorageService['commitUpload']>
+    > | null = null;
+    try {
+      stored = await this.videoStorage.commitUpload(post, session, file);
+      const inspection = await this.videoStorage.inspectVideo(
+        stored.localFilePath,
+      );
+      await this.videoUploadRepo.save({
+        ...session,
+        status: 'uploaded',
+        uploadKey: stored.storageKey,
+        uploadedFileName: stored.fileName,
+        localFilePath: stored.localFilePath,
+        publicUrl: stored.publicUrl,
+        uploadedFileSizeBytes: file.size,
+        uploadedDurationSeconds: inspection.durationSeconds,
+        uploadedContentType: file.mimetype,
+      });
+    } catch (error) {
+      await this.videoStorage.deleteLocalFile(file.path);
+      await this.videoStorage.deleteLocalFile(stored?.localFilePath);
+      await this.videoUploadRepo.save({
+        ...session,
+        status: 'failed',
+        errorMessage:
+          error instanceof Error ? error.message : 'Video upload failed',
+      });
+      if (!session.replacement) {
+        await this.postRepo.update(post.id, { mediaStatus: 'failed' });
+      }
+      throw error;
+    }
+
+    if (!stored) throw new BadRequestException('Video upload failed');
+
+    return {
+      uploadId: session.uploadId,
+      postId: String(post.id),
+      status: 'uploaded',
+      fileName: stored.fileName,
+      fileSizeBytes: file.size,
+      contentType: file.mimetype,
+    };
+  }
+
+  async completeVideoUpload(postId: number, userId: number, uploadId: string) {
+    const { post, session } = await this.getOwnedVideoUploadSession(
+      postId,
+      userId,
+      uploadId,
+    );
+    if (session.status === 'completed') {
+      return this.formatPost(await this.getPostByIdOrThrow(postId), userId);
+    }
+    if (session.status !== 'uploaded' || !session.localFilePath) {
+      throw new BadRequestException('Upload has not completed');
+    }
+    if (this.isExpired(session.expiresAt)) {
+      await this.expireVideoUploadSession(session);
+      throw new BadRequestException('Upload session has expired');
+    }
+
+    await this.assertCanManage(post, userId);
+    await this.validateLinkedJob(
+      post.linkedJobId,
+      this.getPublisherType(post),
+      post.publisherCompanyId,
+    );
+
+    const thumbnail = await this.videoStorage.createThumbnail(
+      post.id,
+      session.localFilePath,
+    );
+    const oldImageKey = post.imageStorageKey;
+    const oldVideoKey = post.videoStorageKey;
+    const oldThumbnailKey = post.videoThumbnailStorageKey;
+
+    try {
+      await this.postRepo.save({
+        ...post,
+        mediaType: 'video',
+        mediaStatus: 'published',
+        imageUrl: null,
+        imageStorageKey: null,
+        videoUrl: session.publicUrl,
+        videoStorageKey: session.uploadKey,
+        videoThumbnailUrl: thumbnail.publicUrl,
+        videoThumbnailStorageKey: thumbnail.storageKey,
+        videoContentType:
+          session.uploadedContentType || session.contentType || null,
+        videoFileSizeBytes:
+          session.uploadedFileSizeBytes ??
+          session.expectedFileSizeBytes ??
+          null,
+        videoDurationSeconds:
+          session.uploadedDurationSeconds ??
+          session.clientDurationSeconds ??
+          null,
+      });
+      await this.videoUploadRepo.save({
+        ...session,
+        status: 'completed',
+        completedAt: new Date(),
+      });
+    } catch (error) {
+      await this.videoStorage.remove(thumbnail.storageKey);
+      throw error;
+    }
+
+    await Promise.all([
+      this.storage.remove(oldImageKey),
+      oldVideoKey !== session.uploadKey
+        ? this.videoStorage.remove(oldVideoKey)
+        : Promise.resolve(),
+      oldThumbnailKey !== thumbnail.storageKey
+        ? this.videoStorage.remove(oldThumbnailKey)
+        : Promise.resolve(),
+    ]);
+    return this.formatPost(await this.getPostByIdOrThrow(postId), userId);
   }
 
   async createPost(
@@ -198,6 +455,8 @@ export class PostsService {
         body,
         linkedJobId: linkedJob?.id ?? null,
         allowComments: this.parseBoolean(data.allowComments, true),
+        mediaType: image ? 'image' : 'none',
+        mediaStatus: 'published',
       }),
     );
 
@@ -226,16 +485,24 @@ export class PostsService {
     await this.assertCanManage(post, userId);
 
     const removeImage = this.parseBoolean(data.removeImage, false);
-    if (image && removeImage) {
+    const removeMedia = this.parseBoolean(data.removeMedia, false);
+    if (image && (removeImage || removeMedia)) {
       throw new BadRequestException(
-        'Choose a replacement image or remove the current image, not both',
+        'Choose replacement media or remove the current media, not both',
       );
     }
 
     const hasBody = data.body !== undefined;
     const hasLinkedJob = data.linkedJobId !== undefined;
     const hasComments = data.allowComments !== undefined;
-    if (!hasBody && !hasLinkedJob && !hasComments && !removeImage && !image) {
+    if (
+      !hasBody &&
+      !hasLinkedJob &&
+      !hasComments &&
+      !removeImage &&
+      !removeMedia &&
+      !image
+    ) {
       throw new BadRequestException('No post changes were provided');
     }
 
@@ -253,9 +520,17 @@ export class PostsService {
     }
 
     const oldStorageKey = post.imageStorageKey;
-    if (removeImage) {
+    const oldVideoStorageKey = post.videoStorageKey;
+    const oldVideoThumbnailStorageKey = post.videoThumbnailStorageKey;
+    if (removeImage || removeMedia) {
       post.imageUrl = null;
       post.imageStorageKey = null;
+      if (!post.videoUrl) post.mediaType = 'none';
+    }
+    if (removeMedia) {
+      this.clearVideoMedia(post);
+      post.mediaType = 'none';
+      post.mediaStatus = 'published';
     }
 
     let newStorageKey: string | null = null;
@@ -264,11 +539,14 @@ export class PostsService {
       newStorageKey = stored.storageKey;
       post.imageUrl = stored.publicUrl;
       post.imageStorageKey = stored.storageKey;
+      this.clearVideoMedia(post);
+      post.mediaType = 'image';
+      post.mediaStatus = 'published';
     }
 
-    if (!post.body && !post.imageUrl) {
+    if (!post.body && !post.imageUrl && !post.videoUrl) {
       if (newStorageKey) await this.storage.remove(newStorageKey);
-      throw new BadRequestException('A post needs text or an image');
+      throw new BadRequestException('A post needs text, a photo, or a video');
     }
 
     try {
@@ -278,8 +556,20 @@ export class PostsService {
       throw error;
     }
 
-    if ((removeImage || image) && oldStorageKey !== post.imageStorageKey) {
+    if (
+      (removeImage || removeMedia || image) &&
+      oldStorageKey !== post.imageStorageKey
+    ) {
       await this.storage.remove(oldStorageKey);
+    }
+    if ((removeMedia || image) && oldVideoStorageKey !== post.videoStorageKey) {
+      await this.videoStorage.remove(oldVideoStorageKey);
+    }
+    if (
+      (removeMedia || image) &&
+      oldVideoThumbnailStorageKey !== post.videoThumbnailStorageKey
+    ) {
+      await this.videoStorage.remove(oldVideoThumbnailStorageKey);
     }
 
     return this.formatPost(await this.getPostByIdOrThrow(postId), userId);
@@ -290,7 +580,11 @@ export class PostsService {
     await this.assertCanManage(post, userId);
     post.deletedAt = new Date();
     await this.postRepo.save(post);
-    await this.storage.remove(post.imageStorageKey);
+    await Promise.all([
+      this.storage.remove(post.imageStorageKey),
+      this.videoStorage.remove(post.videoStorageKey),
+      this.videoStorage.remove(post.videoThumbnailStorageKey),
+    ]);
     return { id: String(post.id), deleted: true };
   }
 
@@ -302,7 +596,7 @@ export class PostsService {
       .values({ postId, userId })
       .orIgnore()
       .execute();
-    if (result.identifiers.length) {
+    if (this.wasInserted(result)) {
       await this.postRepo.increment({ id: postId }, 'likesCount', 1);
     }
     return this.getPost(postId, userId);
@@ -323,7 +617,7 @@ export class PostsService {
       .values({ postId, userId })
       .orIgnore()
       .execute();
-    if (result.identifiers.length) {
+    if (this.wasInserted(result)) {
       await this.postRepo.increment({ id: postId }, 'savesCount', 1);
     }
     return this.getPost(postId, userId);
@@ -418,8 +712,10 @@ export class PostsService {
     const existing = await this.reportRepo.findOne({
       where: { postId, userId },
     });
+    if (existing) {
+      throw new BadRequestException('Post already reported');
+    }
     const report = this.reportRepo.create({
-      ...(existing || {}),
       postId,
       userId,
       reason: reason.trim() || 'other',
@@ -438,6 +734,9 @@ export class PostsService {
       .leftJoinAndSelect('linkedJob.page', 'linkedJobPage')
       .leftJoinAndSelect('linkedJob.creator', 'linkedJobCreator')
       .where('post.deletedAt IS NULL')
+      .andWhere('post.mediaStatus = :publishedMediaStatus', {
+        publishedMediaStatus: 'published',
+      })
       .andWhere('creator.isBanned = :publisherBanned', {
         publisherBanned: false,
       })
@@ -528,14 +827,7 @@ export class PostsService {
       where: { id: jobId },
       relations: ['page', 'creator'],
     });
-    const active = Boolean(
-      job?.isActive && (!job.status || job.status === 'active'),
-    );
-    const companyViewable =
-      job?.postingMode !== 'company' ||
-      !job.pageId ||
-      job.page?.verificationStatus === 'approved';
-    if (!job || !active || !companyViewable) {
+    if (!job || !this.isLinkedJobPublic(job)) {
       throw new BadRequestException('Linked job is not publicly available');
     }
     if (
@@ -550,16 +842,21 @@ export class PostsService {
   }
 
   private async assertCanManage(post: CommunityPost, userId: number) {
-    if (post.creatorId === userId) return;
-    if (this.getPublisherType(post) !== 'company' || !post.publisherCompanyId) {
+    if (this.getPublisherType(post) === 'user') {
+      if (post.creatorId === userId) return;
       throw new ForbiddenException('You cannot manage this post');
     }
 
-    const access = await this.pagesService.getCompanyAccess(
+    if (!post.publisherCompanyId) {
+      throw new ForbiddenException('You cannot manage this post');
+    }
+
+    const access = await this.pagesService.assertCompanyCanPublish(
       post.publisherCompanyId,
       userId,
-      'publishContent',
     );
+    if (post.creatorId === userId) return;
+
     const role = access.member.role;
     if (role !== 'owner' && role !== 'admin') {
       throw new ForbiddenException('You cannot manage this post');
@@ -580,10 +877,14 @@ export class PostsService {
       .filter((item) => item.type === 'company')
       .map((item) => item.id);
 
-    const [likes, saves, userFollows, companyFollows, manageableCompanies] =
+    const [likes, saves, userFollows, companyFollows, companyAccess] =
       await Promise.all([
-        this.likeRepo.find({ where: { postId: In(postIds), userId: viewerId } }),
-        this.saveRepo.find({ where: { postId: In(postIds), userId: viewerId } }),
+        this.likeRepo.find({
+          where: { postId: In(postIds), userId: viewerId },
+        }),
+        this.saveRepo.find({
+          where: { postId: In(postIds), userId: viewerId },
+        }),
         userPublisherIds.length
           ? this.followRepo.find({
               where: {
@@ -602,10 +903,7 @@ export class PostsService {
               },
             })
           : Promise.resolve([]),
-        this.pagesService.getManageablePublishingCompanyIds(
-          viewerId,
-          companyPublisherIds,
-        ),
+        this.getCompanyPublishingAccess(viewerId, companyPublisherIds),
       ]);
 
     const likedIds = new Set(likes.map((like) => like.postId));
@@ -615,7 +913,6 @@ export class PostsService {
         (follow) => `${follow.profileType}:${follow.profileId}`,
       ),
     );
-    const manageableCompanyIds = new Set(manageableCompanies);
 
     return posts.map((post) => ({
       ...this.formatPostBase(post),
@@ -626,10 +923,12 @@ export class PostsService {
           `${this.getPublisherType(post)}:${this.getPublisherId(post)}`,
         ),
         isOwner: post.creatorId === viewerId,
-        canManage:
-          post.creatorId === viewerId ||
-          (this.getPublisherType(post) === 'company' &&
-            manageableCompanyIds.has(Number(post.publisherCompanyId))),
+        canManage: this.canManageFromAccess(
+          post,
+          viewerId,
+          companyAccess.publishable,
+          companyAccess.manageable,
+        ),
       },
     }));
   }
@@ -666,7 +965,9 @@ export class PostsService {
       publisher: this.formatPublisher(post),
       body: post.body,
       imageUrl: post.imageUrl,
-      ...(post.linkedJob
+      media: this.formatMedia(post),
+      mediaStatus: post.mediaStatus,
+      ...(post.linkedJob && this.isLinkedJobPublic(post.linkedJob)
         ? { linkedJob: this.formatLinkedJob(post.linkedJob) }
         : {}),
       stats: {
@@ -679,6 +980,23 @@ export class PostsService {
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     };
+  }
+
+  private formatMedia(post: CommunityPost) {
+    if (post.mediaType === 'video' && post.videoUrl) {
+      return {
+        type: 'video' as const,
+        url: post.videoUrl,
+        thumbnailUrl: post.videoThumbnailUrl,
+        ...(post.videoDurationSeconds
+          ? { durationSeconds: Number(post.videoDurationSeconds) }
+          : {}),
+      };
+    }
+    if (post.imageUrl) {
+      return { type: 'image' as const, url: post.imageUrl };
+    }
+    return null;
   }
 
   private formatPublisher(post: CommunityPost) {
@@ -723,26 +1041,72 @@ export class PostsService {
   }
 
   private async canManage(post: CommunityPost, viewerId: number) {
-    if (post.creatorId === viewerId) return true;
-    if (this.getPublisherType(post) !== 'company' || !post.publisherCompanyId) {
-      return false;
-    }
     try {
-      const access = await this.pagesService.getCompanyAccess(
-        post.publisherCompanyId,
-        viewerId,
-      );
-      const permissions = normalizeCompanyPermissions(
-        access.member.role,
-        access.member.permissions,
-      );
-      return (
-        (access.member.role === 'owner' || access.member.role === 'admin') &&
-        permissions.publishContent
-      );
+      await this.assertCanManage(post, viewerId);
+      return true;
     } catch {
       return false;
     }
+  }
+
+  private async getCompanyPublishingAccess(
+    viewerId: number,
+    companyIds: number[],
+  ) {
+    const publishable = new Set<number>();
+    const manageable = new Set<number>();
+    const ids = Array.from(new Set(companyIds.filter(Boolean)));
+
+    await Promise.all(
+      ids.map(async (companyId) => {
+        try {
+          const access = await this.pagesService.assertCompanyCanPublish(
+            companyId,
+            viewerId,
+          );
+          publishable.add(companyId);
+          if (
+            access.member.role === 'owner' ||
+            access.member.role === 'admin'
+          ) {
+            manageable.add(companyId);
+          }
+        } catch {
+          // Lack of publishing access is represented by canManage=false.
+        }
+      }),
+    );
+
+    return { publishable, manageable };
+  }
+
+  private canManageFromAccess(
+    post: CommunityPost,
+    viewerId: number,
+    publishable: Set<number>,
+    manageable: Set<number>,
+  ) {
+    if (this.getPublisherType(post) === 'user') {
+      return post.creatorId === viewerId;
+    }
+
+    const companyId = Number(post.publisherCompanyId);
+    return (
+      (post.creatorId === viewerId && publishable.has(companyId)) ||
+      manageable.has(companyId)
+    );
+  }
+
+  private isLinkedJobPublic(job?: Job | null) {
+    if (!job || !job.isActive || (job.status && job.status !== 'active')) {
+      return false;
+    }
+
+    if (job.postingMode === 'company' || job.pageId) {
+      return Boolean(job.pageId && job.page?.verificationStatus === 'approved');
+    }
+
+    return !job.creator?.isBanned;
   }
 
   private getPublisherType(post: CommunityPost): PostPublisherType {
@@ -767,10 +1131,125 @@ export class PostsService {
     )`;
   }
 
+  private async createVideoUploadSession(
+    post: CommunityPost,
+    media: PostVideoMediaInput,
+    userId: number,
+    replacement: boolean,
+  ) {
+    return this.videoUploadRepo.save(
+      this.videoUploadRepo.create({
+        uploadId: randomUUID(),
+        postId: post.id,
+        userId,
+        replacement,
+        status: 'pending',
+        uploadKey: this.videoStorage.createUploadKey(
+          post.id,
+          media.fileName,
+          media.contentType,
+        ),
+        originalFileName: media.fileName,
+        contentType: media.contentType,
+        expectedFileSizeBytes: media.fileSizeBytes ?? null,
+        clientDurationSeconds: media.durationSeconds
+          ? Math.ceil(Number(media.durationSeconds))
+          : null,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      }),
+    );
+  }
+
+  private validateVideoMetadata(media: PostVideoMediaInput) {
+    if (!isAllowedPostVideoMimeType(media.contentType)) {
+      throw new BadRequestException('Use an MP4, MOV, or M4V video');
+    }
+    if (!isAllowedPostVideoFileName(media.fileName)) {
+      throw new BadRequestException('Use an MP4, MOV, or M4V video');
+    }
+    if (
+      media.fileSizeBytes &&
+      Number(media.fileSizeBytes) > POST_VIDEO_MAX_BYTES
+    ) {
+      throw new BadRequestException('Video must be 100 MB or smaller');
+    }
+  }
+
+  private validateUploadedVideo(file: Express.Multer.File) {
+    if (
+      !isAllowedPostVideoMimeType(file.mimetype) ||
+      !isAllowedPostVideoFileName(file.originalname)
+    ) {
+      throw new BadRequestException('Use an MP4, MOV, or M4V video');
+    }
+    if (file.size > POST_VIDEO_MAX_BYTES) {
+      throw new BadRequestException('Video must be 100 MB or smaller');
+    }
+  }
+
+  private async getOwnedVideoUploadSession(
+    postId: number,
+    userId: number,
+    uploadId: string,
+  ) {
+    const post = await this.getPostByIdOrThrow(postId);
+    await this.assertCanManage(post, userId);
+    const session = await this.videoUploadRepo.findOne({
+      where: { postId, userId, uploadId },
+    });
+    if (!session) throw new NotFoundException('Upload session not found');
+    return { post, session };
+  }
+
+  private isExpired(value: Date) {
+    return new Date(value).getTime() <= Date.now();
+  }
+
+  private async expireVideoUploadSession(session: PostVideoUploadSession) {
+    await this.videoStorage.deleteLocalFile(session.localFilePath);
+    await this.videoUploadRepo.save({
+      ...session,
+      status: 'expired',
+      errorMessage: 'Upload session expired',
+    });
+    if (!session.replacement) {
+      await this.postRepo.update(
+        { id: session.postId, mediaStatus: 'upload_pending' },
+        { mediaStatus: 'failed' },
+      );
+    }
+  }
+
+  async cleanupExpiredVideoUploads() {
+    const sessions = await this.videoUploadRepo
+      .createQueryBuilder('session')
+      .where('session.expiresAt < :now', { now: new Date() })
+      .andWhere('session.status IN (:...statuses)', {
+        statuses: ['pending', 'uploaded'],
+      })
+      .take(50)
+      .getMany();
+    for (const session of sessions) {
+      await this.expireVideoUploadSession(session);
+    }
+  }
+
+  private clearVideoMedia(post: CommunityPost) {
+    post.videoUrl = null;
+    post.videoStorageKey = null;
+    post.videoThumbnailUrl = null;
+    post.videoThumbnailStorageKey = null;
+    post.videoContentType = null;
+    post.videoFileSizeBytes = null;
+    post.videoDurationSeconds = null;
+  }
+
   private normalizeBody(value?: string | null) {
     const body = typeof value === 'string' ? value.trim() : '';
     if (body.length > 2000) {
-      throw new BadRequestException('Post text must be 2,000 characters or less');
+      throw new BadRequestException(
+        'Post text must be 2,000 characters or less',
+      );
     }
     return body || null;
   }
@@ -794,6 +1273,13 @@ export class PostsService {
       .execute();
   }
 
+  private wasInserted(result: { raw?: any; identifiers?: any[] }) {
+    if (typeof result.raw?.affectedRows === 'number') {
+      return result.raw.affectedRows > 0;
+    }
+    return Boolean(result.identifiers?.length);
+  }
+
   private encodeCursor(cursor: FeedCursor) {
     return Buffer.from(JSON.stringify(cursor)).toString('base64url');
   }
@@ -804,14 +1290,26 @@ export class PostsService {
       const cursor = JSON.parse(
         Buffer.from(value, 'base64url').toString('utf8'),
       );
-      if (cursor?.mode === 'feed' && Number.isFinite(Number(cursor.score))) {
-        return { mode: 'feed', score: Number(cursor.score), id: Number(cursor.id) };
+      const id = Number(cursor?.id);
+      if (
+        cursor?.mode === 'feed' &&
+        Number.isFinite(Number(cursor.score)) &&
+        Number.isInteger(id) &&
+        id > 0
+      ) {
+        return { mode: 'feed', score: Number(cursor.score), id };
       }
-      if (cursor?.mode === 'profile' && cursor.createdAt) {
+      const createdAt = new Date(cursor?.createdAt);
+      if (
+        cursor?.mode === 'profile' &&
+        !Number.isNaN(createdAt.getTime()) &&
+        Number.isInteger(id) &&
+        id > 0
+      ) {
         return {
           mode: 'profile',
-          createdAt: String(cursor.createdAt),
-          id: Number(cursor.id),
+          createdAt: createdAt.toISOString(),
+          id,
         };
       }
     } catch {
@@ -822,7 +1320,10 @@ export class PostsService {
 
   private encodeSimpleCursor(value: { id: number; createdAt: Date }) {
     return Buffer.from(
-      JSON.stringify({ id: value.id, createdAt: value.createdAt.toISOString() }),
+      JSON.stringify({
+        id: value.id,
+        createdAt: value.createdAt.toISOString(),
+      }),
     ).toString('base64url');
   }
 
@@ -832,8 +1333,16 @@ export class PostsService {
       const cursor = JSON.parse(
         Buffer.from(value, 'base64url').toString('utf8'),
       );
-      if (!cursor?.createdAt || !Number(cursor.id)) throw new Error();
-      return { createdAt: String(cursor.createdAt), id: Number(cursor.id) };
+      const id = Number(cursor?.id);
+      const createdAt = new Date(cursor?.createdAt);
+      if (
+        Number.isNaN(createdAt.getTime()) ||
+        !Number.isInteger(id) ||
+        id <= 0
+      ) {
+        throw new Error();
+      }
+      return { createdAt: createdAt.toISOString(), id };
     } catch {
       throw new BadRequestException('Invalid comments cursor');
     }

@@ -82,6 +82,34 @@ System administrators can review companies through
 `PATCH /admin/companies/:companyId/verification`. New and existing companies
 remain `pending` until explicitly approved.
 
+## Community Posts migration
+
+Apply the idempotent Community Posts SQL migration before deploying the Posts
+API. This command uses the configured `DB_*` environment variables and is not
+run automatically during application startup:
+
+```bash
+npm run migrate:community-posts
+```
+
+Production deployments should disable TypeORM `synchronize` and record this
+migration in the deployment process.
+
+## Community post video migration
+
+Apply the Community post video migration after the base Community Posts
+migration:
+
+```bash
+npm run migrate:community-post-videos
+```
+
+The Posts service requires `ffprobe` and `ffmpeg` in `PATH` to validate videos
+and generate JPEG posters. Set `FFPROBE_PATH` and `FFMPEG_PATH` when the
+binaries are installed elsewhere. Videos and posters default to
+`uploads/community-post-videos`; override that location with
+`POST_VIDEO_UPLOAD_DIR` when production storage is mounted separately.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

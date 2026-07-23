@@ -13,11 +13,26 @@ import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { User } from 'src/users/entities/user.entity';
 
 export type PostPublisherType = 'user' | 'company';
+export type PostMediaType = 'none' | 'image' | 'video';
+export type PostMediaStatus = 'published' | 'upload_pending' | 'failed';
 
 @Entity('community_posts')
-@Index(['deletedAt', 'createdAt'])
-@Index(['publisherType', 'creatorId', 'createdAt'])
-@Index(['publisherType', 'publisherCompanyId', 'createdAt'])
+@Index('IDX_community_posts_deleted_created', ['deletedAt', 'createdAt'])
+@Index('IDX_community_posts_user_created', [
+  'publisherType',
+  'creatorId',
+  'createdAt',
+])
+@Index('IDX_community_posts_company_created', [
+  'publisherType',
+  'publisherCompanyId',
+  'createdAt',
+])
+@Index('IDX_community_posts_media_status_created', [
+  'mediaStatus',
+  'deletedAt',
+  'createdAt',
+])
 export class CommunityPost {
   @PrimaryGeneratedColumn()
   id: number;
@@ -26,7 +41,10 @@ export class CommunityPost {
   creatorId: number;
 
   @ManyToOne(() => User, { eager: true, onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'creatorId' })
+  @JoinColumn({
+    name: 'creatorId',
+    foreignKeyConstraintName: 'FK_community_posts_creator',
+  })
   creator: User;
 
   @Column({ type: 'enum', enum: ['user', 'company'], default: 'user' })
@@ -36,7 +54,10 @@ export class CommunityPost {
   publisherCompanyId: number | null;
 
   @ManyToOne(() => CompanyPage, { nullable: true, onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'publisherCompanyId' })
+  @JoinColumn({
+    name: 'publisherCompanyId',
+    foreignKeyConstraintName: 'FK_community_posts_company',
+  })
   publisherCompany: CompanyPage | null;
 
   @Column({ type: 'text', nullable: true })
@@ -48,11 +69,49 @@ export class CommunityPost {
   @Column({ nullable: true, length: 500 })
   imageStorageKey: string | null;
 
+  @Column({
+    type: 'enum',
+    enum: ['none', 'image', 'video'],
+    default: 'none',
+  })
+  mediaType: PostMediaType;
+
+  @Column({
+    type: 'enum',
+    enum: ['published', 'upload_pending', 'failed'],
+    default: 'published',
+  })
+  mediaStatus: PostMediaStatus;
+
+  @Column({ nullable: true, length: 2000 })
+  videoUrl: string | null;
+
+  @Column({ nullable: true, length: 500 })
+  videoStorageKey: string | null;
+
+  @Column({ nullable: true, length: 2000 })
+  videoThumbnailUrl: string | null;
+
+  @Column({ nullable: true, length: 500 })
+  videoThumbnailStorageKey: string | null;
+
+  @Column({ nullable: true, length: 100 })
+  videoContentType: string | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  videoFileSizeBytes: number | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  videoDurationSeconds: number | null;
+
   @Column({ nullable: true })
   linkedJobId: number | null;
 
   @ManyToOne(() => Job, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'linkedJobId' })
+  @JoinColumn({
+    name: 'linkedJobId',
+    foreignKeyConstraintName: 'FK_community_posts_job',
+  })
   linkedJob: Job | null;
 
   @Column({ default: true })

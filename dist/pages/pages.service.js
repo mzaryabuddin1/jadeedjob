@@ -771,6 +771,8 @@ let PagesService = class PagesService {
             relations: ['members'],
         });
         return pages.flatMap((page) => {
+            if (page.verificationStatus !== 'approved')
+                return [];
             const member = this.memberForUser(page, userId);
             if (!member || member.hasAccess === false)
                 return [];

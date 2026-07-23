@@ -2,6 +2,8 @@ import { Job } from 'src/job/entities/job.entity';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { User } from 'src/users/entities/user.entity';
 export type PostPublisherType = 'user' | 'company';
+export type PostMediaType = 'none' | 'image' | 'video';
+export type PostMediaStatus = 'published' | 'upload_pending' | 'failed';
 export declare class CommunityPost {
     id: number;
     creatorId: number;
@@ -12,6 +14,15 @@ export declare class CommunityPost {
     body: string | null;
     imageUrl: string | null;
     imageStorageKey: string | null;
+    mediaType: PostMediaType;
+    mediaStatus: PostMediaStatus;
+    videoUrl: string | null;
+    videoStorageKey: string | null;
+    videoThumbnailUrl: string | null;
+    videoThumbnailStorageKey: string | null;
+    videoContentType: string | null;
+    videoFileSizeBytes: number | null;
+    videoDurationSeconds: number | null;
     linkedJobId: number | null;
     linkedJob: Job | null;
     allowComments: boolean;

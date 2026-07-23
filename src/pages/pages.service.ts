@@ -993,6 +993,7 @@ export class PagesService {
     });
 
     return pages.flatMap((page) => {
+      if (page.verificationStatus !== 'approved') return [];
       const member = this.memberForUser(page, userId);
       if (!member || member.hasAccess === false) return [];
       const permissions = this.normalizePermissions(

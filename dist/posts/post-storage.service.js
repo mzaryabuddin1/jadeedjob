@@ -14,39 +14,40 @@ const promises_1 = require("fs/promises");
 const path_1 = require("path");
 exports.POST_IMAGE_FIELD = 'image';
 exports.POST_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set([
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-    'image/heic',
-    'image/heif',
-]);
-const ALLOWED_EXTENSIONS = new Set([
-    '.jpg',
-    '.jpeg',
-    '.png',
-    '.webp',
-    '.heic',
-    '.heif',
-]);
+const MIME_FORMATS = {
+    'image/jpeg': 'jpeg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heif',
+    'image/heif': 'heif',
+};
+const EXTENSION_FORMATS = {
+    '.jpg': 'jpeg',
+    '.jpeg': 'jpeg',
+    '.png': 'png',
+    '.webp': 'webp',
+    '.heic': 'heif',
+    '.heif': 'heif',
+};
 const getPostUploadRoot = () => process.env.POST_IMAGE_UPLOAD_DIR ||
     (0, path_1.join)(process.cwd(), 'uploads', 'community-posts');
 exports.getPostUploadRoot = getPostUploadRoot;
 const isAllowedPostImage = (file) => {
-    return Boolean(file &&
-        (0, exports.isAllowedPostImageMetadata)(file.mimetype, file.originalname) &&
-        hasAllowedSignature(file.buffer));
+    if (!file || !(0, exports.isAllowedPostImageMetadata)(file.mimetype, file.originalname)) {
+        return false;
+    }
+    return detectImageFormat(file.buffer) === MIME_FORMATS[file.mimetype];
 };
 exports.isAllowedPostImage = isAllowedPostImage;
 const isAllowedPostImageMetadata = (mimeType, fileName) => {
-    if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType))
-        return false;
-    return ALLOWED_EXTENSIONS.has((0, path_1.extname)(fileName || '').toLowerCase());
+    const mimeFormat = mimeType ? MIME_FORMATS[mimeType] : undefined;
+    const extensionFormat = EXTENSION_FORMATS[(0, path_1.extname)(fileName || '').toLowerCase()];
+    return Boolean(mimeFormat && mimeFormat === extensionFormat);
 };
 exports.isAllowedPostImageMetadata = isAllowedPostImageMetadata;
-const hasAllowedSignature = (buffer) => {
+const detectImageFormat = (buffer) => {
     if (!buffer || buffer.length < 12)
-        return false;
+        return null;
     const jpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
     const png = buffer.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
     const webp = buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
@@ -54,11 +55,19 @@ const hasAllowedSignature = (buffer) => {
     const heifBrand = buffer.subarray(4, 12).toString('ascii');
     const heif = heifBrand.startsWith('ftyp') &&
         ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(buffer.subarray(8, 12).toString('ascii'));
-    return jpeg || png || webp || heif;
+    if (jpeg)
+        return 'jpeg';
+    if (png)
+        return 'png';
+    if (webp)
+        return 'webp';
+    if (heif)
+        return 'heif';
+    return null;
 };
 const getExtension = (file) => {
     const extension = (0, path_1.extname)(file.originalname || '').toLowerCase();
-    if (ALLOWED_EXTENSIONS.has(extension))
+    if (EXTENSION_FORMATS[extension])
         return extension;
     if (file.mimetype === 'image/png')
         return '.png';
@@ -76,7 +85,7 @@ let PostStorageService = class PostStorageService {
             throw new common_1.BadRequestException('Post image must be 8 MB or smaller');
         }
         if (!(0, exports.isAllowedPostImage)(file)) {
-            throw new common_1.BadRequestException('Post image must be JPEG, PNG, WebP, or HEIC');
+            throw new common_1.BadRequestException('Post image must be JPEG, PNG, WebP, HEIC, or HEIF');
         }
         const root = (0, exports.getPostUploadRoot)();
         if (!(0, fs_1.existsSync)(root))

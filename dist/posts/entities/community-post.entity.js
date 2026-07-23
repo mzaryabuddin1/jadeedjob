@@ -27,7 +27,10 @@ __decorate([
 ], CommunityPost.prototype, "creatorId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, { eager: true, onDelete: 'RESTRICT' }),
-    (0, typeorm_1.JoinColumn)({ name: 'creatorId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'creatorId',
+        foreignKeyConstraintName: 'FK_community_posts_creator',
+    }),
     __metadata("design:type", user_entity_1.User)
 ], CommunityPost.prototype, "creator", void 0);
 __decorate([
@@ -40,7 +43,10 @@ __decorate([
 ], CommunityPost.prototype, "publisherCompanyId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => company_page_entity_1.CompanyPage, { nullable: true, onDelete: 'RESTRICT' }),
-    (0, typeorm_1.JoinColumn)({ name: 'publisherCompanyId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'publisherCompanyId',
+        foreignKeyConstraintName: 'FK_community_posts_company',
+    }),
     __metadata("design:type", company_page_entity_1.CompanyPage)
 ], CommunityPost.prototype, "publisherCompany", void 0);
 __decorate([
@@ -56,12 +62,59 @@ __decorate([
     __metadata("design:type", String)
 ], CommunityPost.prototype, "imageStorageKey", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['none', 'image', 'video'],
+        default: 'none',
+    }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "mediaType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['published', 'upload_pending', 'failed'],
+        default: 'published',
+    }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "mediaStatus", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 2000 }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 500 }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoStorageKey", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 2000 }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoThumbnailUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 500 }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoThumbnailStorageKey", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 100 }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoContentType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', unsigned: true, nullable: true }),
+    __metadata("design:type", Number)
+], CommunityPost.prototype, "videoFileSizeBytes", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', unsigned: true, nullable: true }),
+    __metadata("design:type", Number)
+], CommunityPost.prototype, "videoDurationSeconds", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", Number)
 ], CommunityPost.prototype, "linkedJobId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => job_entity_1.Job, { nullable: true, onDelete: 'SET NULL' }),
-    (0, typeorm_1.JoinColumn)({ name: 'linkedJobId' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'linkedJobId',
+        foreignKeyConstraintName: 'FK_community_posts_job',
+    }),
     __metadata("design:type", job_entity_1.Job)
 ], CommunityPost.prototype, "linkedJob", void 0);
 __decorate([
@@ -98,8 +151,21 @@ __decorate([
 ], CommunityPost.prototype, "updatedAt", void 0);
 exports.CommunityPost = CommunityPost = __decorate([
     (0, typeorm_1.Entity)('community_posts'),
-    (0, typeorm_1.Index)(['deletedAt', 'createdAt']),
-    (0, typeorm_1.Index)(['publisherType', 'creatorId', 'createdAt']),
-    (0, typeorm_1.Index)(['publisherType', 'publisherCompanyId', 'createdAt'])
+    (0, typeorm_1.Index)('IDX_community_posts_deleted_created', ['deletedAt', 'createdAt']),
+    (0, typeorm_1.Index)('IDX_community_posts_user_created', [
+        'publisherType',
+        'creatorId',
+        'createdAt',
+    ]),
+    (0, typeorm_1.Index)('IDX_community_posts_company_created', [
+        'publisherType',
+        'publisherCompanyId',
+        'createdAt',
+    ]),
+    (0, typeorm_1.Index)('IDX_community_posts_media_status_created', [
+        'mediaStatus',
+        'deletedAt',
+        'createdAt',
+    ])
 ], CommunityPost);
 //# sourceMappingURL=community-post.entity.js.map

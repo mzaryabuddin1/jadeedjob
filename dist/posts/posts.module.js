@@ -18,7 +18,9 @@ const post_comment_entity_1 = require("./entities/post-comment.entity");
 const post_like_entity_1 = require("./entities/post-like.entity");
 const post_report_entity_1 = require("./entities/post-report.entity");
 const post_save_entity_1 = require("./entities/post-save.entity");
+const post_video_upload_session_entity_1 = require("./entities/post-video-upload-session.entity");
 const post_storage_service_1 = require("./post-storage.service");
+const post_video_storage_service_1 = require("./post-video-storage.service");
 const posts_controller_1 = require("./posts.controller");
 const posts_service_1 = require("./posts.service");
 let PostsModule = class PostsModule {
@@ -33,6 +35,7 @@ exports.PostsModule = PostsModule = __decorate([
                 post_save_entity_1.PostSave,
                 post_comment_entity_1.PostComment,
                 post_report_entity_1.PostReport,
+                post_video_upload_session_entity_1.PostVideoUploadSession,
                 profile_follow_entity_1.ProfileFollow,
                 job_entity_1.Job,
                 user_entity_1.User,
@@ -40,7 +43,7 @@ exports.PostsModule = PostsModule = __decorate([
             pages_module_1.PagesModule,
         ],
         controllers: [posts_controller_1.PostsController],
-        providers: [posts_service_1.PostsService, post_storage_service_1.PostStorageService],
+        providers: [posts_service_1.PostsService, post_storage_service_1.PostStorageService, post_video_storage_service_1.PostVideoStorageService],
         exports: [posts_service_1.PostsService],
     })
 ], PostsModule);

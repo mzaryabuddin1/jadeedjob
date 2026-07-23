@@ -7,49 +7,52 @@ import { extname, join } from 'path';
 export const POST_IMAGE_FIELD = 'image';
 export const POST_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-  'image/heif',
-]);
+type PostImageFormat = 'jpeg' | 'png' | 'webp' | 'heif';
 
-const ALLOWED_EXTENSIONS = new Set([
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.webp',
-  '.heic',
-  '.heif',
-]);
+const MIME_FORMATS: Record<string, PostImageFormat> = {
+  'image/jpeg': 'jpeg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heif',
+  'image/heif': 'heif',
+};
+
+const EXTENSION_FORMATS: Record<string, PostImageFormat> = {
+  '.jpg': 'jpeg',
+  '.jpeg': 'jpeg',
+  '.png': 'png',
+  '.webp': 'webp',
+  '.heic': 'heif',
+  '.heif': 'heif',
+};
 
 export const getPostUploadRoot = () =>
   process.env.POST_IMAGE_UPLOAD_DIR ||
   join(process.cwd(), 'uploads', 'community-posts');
 
 export const isAllowedPostImage = (file?: Express.Multer.File) => {
-  return Boolean(
-    file &&
-      isAllowedPostImageMetadata(file.mimetype, file.originalname) &&
-      hasAllowedSignature(file.buffer),
-  );
+  if (!file || !isAllowedPostImageMetadata(file.mimetype, file.originalname)) {
+    return false;
+  }
+
+  return detectImageFormat(file.buffer) === MIME_FORMATS[file.mimetype];
 };
 
 export const isAllowedPostImageMetadata = (
   mimeType?: string,
   fileName?: string,
 ) => {
-  if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) return false;
-  return ALLOWED_EXTENSIONS.has(extname(fileName || '').toLowerCase());
+  const mimeFormat = mimeType ? MIME_FORMATS[mimeType] : undefined;
+  const extensionFormat =
+    EXTENSION_FORMATS[extname(fileName || '').toLowerCase()];
+  return Boolean(mimeFormat && mimeFormat === extensionFormat);
 };
 
-const hasAllowedSignature = (buffer?: Buffer) => {
-  if (!buffer || buffer.length < 12) return false;
+const detectImageFormat = (buffer?: Buffer): PostImageFormat | null => {
+  if (!buffer || buffer.length < 12) return null;
 
   const jpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-  const png =
-    buffer.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
+  const png = buffer.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
   const webp =
     buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
     buffer.subarray(8, 12).toString('ascii') === 'WEBP';
@@ -60,12 +63,16 @@ const hasAllowedSignature = (buffer?: Buffer) => {
       buffer.subarray(8, 12).toString('ascii'),
     );
 
-  return jpeg || png || webp || heif;
+  if (jpeg) return 'jpeg';
+  if (png) return 'png';
+  if (webp) return 'webp';
+  if (heif) return 'heif';
+  return null;
 };
 
 const getExtension = (file: Express.Multer.File) => {
   const extension = extname(file.originalname || '').toLowerCase();
-  if (ALLOWED_EXTENSIONS.has(extension)) return extension;
+  if (EXTENSION_FORMATS[extension]) return extension;
   if (file.mimetype === 'image/png') return '.png';
   if (file.mimetype === 'image/webp') return '.webp';
   if (file.mimetype === 'image/heic') return '.heic';
@@ -81,7 +88,7 @@ export class PostStorageService {
     }
     if (!isAllowedPostImage(file)) {
       throw new BadRequestException(
-        'Post image must be JPEG, PNG, WebP, or HEIC',
+        'Post image must be JPEG, PNG, WebP, HEIC, or HEIF',
       );
     }
 
