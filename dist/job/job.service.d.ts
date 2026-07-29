@@ -7,6 +7,7 @@ import { CompanyBranch } from 'src/pages/entities/company-branch.entity';
 import { PageMember } from 'src/pages/entities/page-member.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 type JobStatus = 'draft' | 'active' | 'closed';
 export declare class JobService {
     private jobRepo;
@@ -17,7 +18,8 @@ export declare class JobService {
     private jobApplicationRepo;
     private firebaseService;
     private notificationsService;
-    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, branchRepo: Repository<CompanyBranch>, memberRepo: Repository<PageMember>, jobApplicationRepo: Repository<JobApplication>, firebaseService: FirebaseService, notificationsService: NotificationsService);
+    private moderationService;
+    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, branchRepo: Repository<CompanyBranch>, memberRepo: Repository<PageMember>, jobApplicationRepo: Repository<JobApplication>, firebaseService: FirebaseService, notificationsService: NotificationsService, moderationService: ModerationService);
     private assertCompanyPermission;
     private normalizeCompanyAndBranch;
     private assertJobUpdateAccess;
@@ -98,7 +100,7 @@ export declare class JobService {
         pageId?: number;
         branchId?: number;
     }>;
-    findNearbyJobs(query: any): Promise<{
+    findNearbyJobs(query: any, userId?: number): Promise<{
         data: any;
         total: number;
         totalPages: number;

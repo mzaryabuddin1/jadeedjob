@@ -174,6 +174,26 @@ __decorate([
     __metadata("design:type", Number)
 ], CompanyPage.prototype, "company_rating", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'float', default: 0 }),
+    __metadata("design:type", Number)
+], CompanyPage.prototype, "ratingAverage", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], CompanyPage.prototype, "ratingCount", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 36 }),
+    __metadata("design:type", String)
+], CompanyPage.prototype, "logoAssetId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 36 }),
+    __metadata("design:type", String)
+], CompanyPage.prototype, "verificationDocumentAssetId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 80 }),
+    __metadata("design:type", String)
+], CompanyPage.prototype, "verificationProofType", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
         enum: ['pending', 'approved', 'needs_changes', 'rejected', 'suspended'],

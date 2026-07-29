@@ -5,6 +5,7 @@ export declare class SupportTicketAttachment {
     ticket: SupportTicket;
     fileName: string;
     fileUrl: string;
+    assetId: string;
     contentType: string;
     createdAt: Date;
 }

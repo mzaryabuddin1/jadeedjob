@@ -10,18 +10,30 @@ exports.AuthSessionModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const user_entity_1 = require("../users/entities/user.entity");
+const auth_session_entity_1 = require("./entities/auth-session.entity");
 const auth_session_service_1 = require("./auth-session.service");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
 const system_admin_guard_1 = require("./system-admin.guard");
+const optional_jwt_auth_guard_1 = require("./optional-jwt-auth.guard");
 let AuthSessionModule = class AuthSessionModule {
 };
 exports.AuthSessionModule = AuthSessionModule;
 exports.AuthSessionModule = AuthSessionModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([user_entity_1.User])],
-        providers: [auth_session_service_1.AuthSessionService, jwt_auth_guard_1.JwtAuthGuard, system_admin_guard_1.SystemAdminGuard],
-        exports: [auth_session_service_1.AuthSessionService, jwt_auth_guard_1.JwtAuthGuard, system_admin_guard_1.SystemAdminGuard],
+        imports: [typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, auth_session_entity_1.AuthSession])],
+        providers: [
+            auth_session_service_1.AuthSessionService,
+            jwt_auth_guard_1.JwtAuthGuard,
+            optional_jwt_auth_guard_1.OptionalJwtAuthGuard,
+            system_admin_guard_1.SystemAdminGuard,
+        ],
+        exports: [
+            auth_session_service_1.AuthSessionService,
+            jwt_auth_guard_1.JwtAuthGuard,
+            optional_jwt_auth_guard_1.OptionalJwtAuthGuard,
+            system_admin_guard_1.SystemAdminGuard,
+        ],
     })
 ], AuthSessionModule);
 //# sourceMappingURL=auth-session.module.js.map

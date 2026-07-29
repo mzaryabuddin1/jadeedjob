@@ -34,6 +34,8 @@ import {
   formatCompanyPublisher,
   formatUserPublisher,
 } from 'src/profiles/profile-format.util';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 
 type CreateReelPayload = {
   caption: string;
@@ -97,6 +99,8 @@ export class ReelsService implements OnModuleInit {
     private readonly profilesService: ProfilesService,
 
     private readonly storage: ReelStorageService,
+    private readonly moderationService: ModerationService,
+    private readonly objectStorageService: ObjectStorageService,
   ) {}
 
   onModuleInit() {
@@ -303,6 +307,11 @@ export class ReelsService implements OnModuleInit {
           OR publisherCompany.verificationStatus = 'approved'
         )`,
       );
+      qb.andWhere('creator.isBanned = :creatorBanned', {
+        creatorBanned: false,
+      });
+      qb.andWhere('creator.deletedAt IS NULL');
+      await this.applyBlockedPublisherFilters(qb, userId);
 
       if (feed === 'following') {
         qb.andWhere(this.publisherFollowExistsSql('reel'), { userId });
@@ -416,7 +425,9 @@ export class ReelsService implements OnModuleInit {
     const pageItems = hasMore ? comments.slice(0, safeLimit) : comments;
 
     return {
-      data: pageItems.map((comment) => this.formatComment(comment)),
+      data: await Promise.all(
+        pageItems.map((comment) => this.formatComment(comment)),
+      ),
       nextCursor: hasMore ? this.encodeCursor(pageItems[pageItems.length - 1]) : null,
     };
   }
@@ -641,6 +652,19 @@ export class ReelsService implements OnModuleInit {
     if (reel.visibility === 'draft' && reel.creatorId !== userId) {
       throw new NotFoundException('Reel not found');
     }
+    if (
+      reel.creatorId !== userId &&
+      (reel.creator?.isBanned || reel.creator?.deletedAt)
+    ) {
+      throw new NotFoundException('Reel not found');
+    }
+    if (reel.creatorId !== userId) {
+      await this.moderationService.assertInteractionAllowed(
+        userId,
+        this.getPublisherType(reel),
+        this.getPublisherId(reel),
+      );
+    }
 
     if (
       this.getPublisherType(reel) === 'company' &&
@@ -733,13 +757,18 @@ export class ReelsService implements OnModuleInit {
       ),
     );
 
-    return reels.map((reel) =>
-      this.formatReelSync(
-        reel,
-        viewerId,
-        likedIds,
-        savedIds,
-        followedPublisherKeys,
+    return Promise.all(
+      reels.map(async (reel) =>
+        this.withPublisherAsset(
+          this.formatReelSync(
+            reel,
+            viewerId,
+            likedIds,
+            savedIds,
+            followedPublisherKeys,
+          ),
+          reel,
+        ),
       ),
     );
   }
@@ -747,10 +776,12 @@ export class ReelsService implements OnModuleInit {
   async getReelAudio(reelId: number, viewerId: number) {
     const reel = await this.getViewableReelOrThrow(reelId, viewerId);
     const audioTitle = reel.audioTitle || 'Original audio';
-    const usageCount = await this.createViewablePublishedQuery(viewerId)
+    const usageQuery = this.createViewablePublishedQuery(viewerId);
+    await this.applyBlockedPublisherFilters(usageQuery, viewerId);
+    const usageCount = await usageQuery
       .andWhere('reel.audioTitle = :audioTitle', { audioTitle })
       .getCount();
-    const publisher = this.formatPublisher(reel);
+    const publisher = await this.publisherWithAsset(reel);
 
     return {
       audioId: encodeURIComponent(audioTitle),
@@ -767,7 +798,9 @@ export class ReelsService implements OnModuleInit {
     const limit = Math.min(50, Math.max(1, Number(query.limit) || 20));
     const page = Math.max(1, Number(query.page) || 1);
 
-    const [reels, total] = await this.createViewablePublishedQuery(viewerId)
+    const qb = this.createViewablePublishedQuery(viewerId);
+    await this.applyBlockedPublisherFilters(qb, viewerId);
+    const [reels, total] = await qb
       .leftJoinAndSelect('reel.linkedJob', 'linkedJob')
       .andWhere('reel.audioTitle = :audioTitle', { audioTitle })
       .orderBy('reel.publishedAt', 'DESC')
@@ -800,16 +833,19 @@ export class ReelsService implements OnModuleInit {
       }),
     ]);
 
-    return this.formatReelSync(
-      reel,
-      viewerId,
-      new Set(like ? [reel.id] : []),
-      new Set(save ? [reel.id] : []),
-      new Set(
-        follow
-          ? [this.publisherKey(follow.profileType, follow.profileId)]
-          : [],
+    return this.withPublisherAsset(
+      this.formatReelSync(
+        reel,
+        viewerId,
+        new Set(like ? [reel.id] : []),
+        new Set(save ? [reel.id] : []),
+        new Set(
+          follow
+            ? [this.publisherKey(follow.profileType, follow.profileId)]
+            : [],
+        ),
       ),
+      reel,
     );
   }
 
@@ -858,7 +894,7 @@ export class ReelsService implements OnModuleInit {
     };
   }
 
-  private formatComment(comment: ReelComment | null) {
+  private async formatComment(comment: ReelComment | null) {
     if (!comment) {
       return null;
     }
@@ -866,20 +902,42 @@ export class ReelsService implements OnModuleInit {
     return {
       id: String(comment.id),
       reelId: String(comment.reelId),
-      author: this.formatAuthor(comment.user),
+      author: await this.formatAuthor(comment.user),
       text: comment.text,
       createdAt: comment.createdAt,
     };
   }
 
-  private formatAuthor(user?: User) {
+  private async formatAuthor(user?: User) {
     const author = formatUserPublisher(user);
     return {
       ...author,
       avatarUri:
-        author.avatarUri ||
+        (user?.profilePhotoAssetId
+          ? await this.storageAssetUrl(user.profilePhotoAssetId)
+          : author.avatarUri) ||
         `https://i.pravatar.cc/160?u=jadeed-${user?.id || 'anonymous'}`,
     };
+  }
+
+  private async publisherWithAsset(reel: Reel) {
+    const publisher = this.formatPublisher(reel);
+    const assetId =
+      this.getPublisherType(reel) === 'company'
+        ? reel.publisherCompany?.logoAssetId
+        : reel.creator?.profilePhotoAssetId;
+    return assetId
+      ? { ...publisher, avatarUri: await this.storageAssetUrl(assetId) }
+      : publisher;
+  }
+
+  private async withPublisherAsset(result: any, reel: Reel) {
+    const publisher = await this.publisherWithAsset(reel);
+    return { ...result, publisher, author: publisher };
+  }
+
+  private async storageAssetUrl(assetId: string) {
+    return this.objectStorageService.getUrl(assetId);
   }
 
   private async resolvePublisher(
@@ -1007,6 +1065,10 @@ export class ReelsService implements OnModuleInit {
       .andWhere('reel.status = :publishedStatus', {
         publishedStatus: 'published',
       })
+      .andWhere('creator.isBanned = :creatorBanned', {
+        creatorBanned: false,
+      })
+      .andWhere('creator.deletedAt IS NULL')
       .andWhere(
         `(
           COALESCE(reel.publisherType, 'user') = 'user'
@@ -1034,6 +1096,26 @@ export class ReelsService implements OnModuleInit {
       );
 
     return qb as SelectQueryBuilder<Reel>;
+  }
+
+  private async applyBlockedPublisherFilters(
+    qb: SelectQueryBuilder<Reel>,
+    viewerId: number,
+  ) {
+    const blocked = await this.moderationService.blockedTargets(viewerId);
+    if (blocked.userIds.length) {
+      qb.andWhere(
+        "(COALESCE(reel.publisherType, 'user') != 'user' OR reel.creatorId NOT IN (:...blockedReelUserIds))",
+        { blockedReelUserIds: blocked.userIds },
+      );
+    }
+    if (blocked.companyIds.length) {
+      qb.andWhere(
+        "(reel.publisherType != 'company' OR reel.publisherCompanyId NOT IN (:...blockedReelCompanyIds))",
+        { blockedReelCompanyIds: blocked.companyIds },
+      );
+    }
+    return qb;
   }
 
   private getUploadExpiry() {

@@ -1,16 +1,23 @@
-import { FilesService } from 'src/files/files.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 import { ChatService } from './chat.service';
 export declare class ChatsController {
     private readonly chatService;
-    private readonly filesService;
-    constructor(chatService: ChatService, filesService: FilesService);
-    list(req: any, page?: number, limit?: number): Promise<{
+    private readonly storageService;
+    constructor(chatService: ChatService, storageService: ObjectStorageService);
+    list(req: any, query: {
+        page: number;
+        limit: number;
+    }): Promise<{
         data: {
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
+            type: "application" | "inquiry" | "invitation";
             jobId: number;
             applicationId: number;
             participant: {
                 id: number;
+                type: string;
                 name: string;
                 avatarUrl: string;
             };
@@ -19,10 +26,16 @@ export declare class ChatsController {
                 title: string;
                 companyName: string;
             };
+            invitation: {
+                id: any;
+                status: any;
+            };
             lastMessage: {
                 id: number;
-                chatId: number;
+                chatId: string;
+                conversationId: string;
                 jobApplicationId: number;
+                clientMessageId: string;
                 senderId: number;
                 senderName: string;
                 senderAvatar: string;
@@ -37,16 +50,41 @@ export declare class ChatsController {
                 readAt: Date;
             };
             unreadCount: number;
+            readOnly: boolean;
+            readOnlyReason: string;
         }[];
         total: number;
         totalPages: number;
         currentPage: number;
     }>;
-    getMessages(chatId: number, page: number, limit: number, req: any): Promise<{
+    createContext(req: any, idempotencyKey: string, body: {
+        action: 'invite' | 'inquiry';
+        profileType: 'user' | 'company';
+        profileId: string | number;
+        jobId: string | number;
+        clientRequestId: string;
+    }): Promise<{
+        chatId: string;
+        conversationId: string;
+        jobId: string;
+        jobTitle: string;
+        participantId: string;
+        invitation: {
+            id: string;
+            status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+        };
+    }>;
+    getMessages(chatId: string, query: {
+        before?: string;
+        page: number;
+        limit: number;
+    }, req: any): Promise<{
         data: {
             id: number;
-            chatId: number;
+            chatId: string;
+            conversationId: string;
             jobApplicationId: number;
+            clientMessageId: string;
             senderId: number;
             senderName: string;
             senderAvatar: string;
@@ -60,14 +98,19 @@ export declare class ChatsController {
             createdAt: Date;
             readAt: Date;
         }[];
+        nextBefore: string;
         total: number;
         totalPages: number;
         currentPage: number;
+        readOnly: boolean;
+        readOnlyReason: string;
     }>;
-    sendMessage(chatId: number, body: any, req: any): Promise<{
+    sendMessage(chatId: string, body: any, req: any): Promise<{
         id: number;
-        chatId: number;
+        chatId: string;
+        conversationId: string;
         jobApplicationId: number;
+        clientMessageId: string;
         senderId: number;
         senderName: string;
         senderAvatar: string;
@@ -81,15 +124,20 @@ export declare class ChatsController {
         createdAt: Date;
         readAt: Date;
     }>;
-    uploadAttachment(chatId: number, file: Express.Multer.File, req: any): Promise<{
+    uploadAttachment(chatId: string, file: Express.Multer.File, req: any): Promise<{
         message: string;
         attachment: {
+            assetId: string;
             fileName: string;
             fileUrl: string;
             contentType: string;
+            sizeBytes: number;
         };
     }>;
-    markRead(chatId: number, req: any): Promise<{
-        message: string;
+    markRead(chatId: string, req: any): Promise<{
+        chatId: string;
+        conversationId: string;
+        lastReadMessageId: number;
+        readAt: Date;
     }>;
 }

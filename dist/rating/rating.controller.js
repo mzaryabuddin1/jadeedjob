@@ -28,6 +28,9 @@ let RatingController = class RatingController {
     async rate(body, req) {
         return this.ratingService.rateUser(req.user.id, body.jobApplicationId, body.stars, body.comment ?? '');
     }
+    getMine(applicationId, req) {
+        return this.ratingService.getMine(applicationId, req.user.id);
+    }
 };
 exports.RatingController = RatingController;
 __decorate([
@@ -43,6 +46,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], RatingController.prototype, "rate", null);
+__decorate([
+    (0, common_1.Get)('application/:applicationId/mine'),
+    __param(0, (0, common_1.Param)('applicationId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", void 0)
+], RatingController.prototype, "getMine", null);
 exports.RatingController = RatingController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('ratings'),

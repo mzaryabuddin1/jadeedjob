@@ -5,6 +5,9 @@ import {
   UseGuards,
   Req,
   UsePipes,
+  Get,
+  Param,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { RatingService } from './rating.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -33,5 +36,13 @@ export class RatingController {
       body.stars,
       body.comment ?? '',
     );
+  }
+
+  @Get('application/:applicationId/mine')
+  getMine(
+    @Param('applicationId', ParseIntPipe) applicationId: number,
+    @Req() req: any,
+  ) {
+    return this.ratingService.getMine(applicationId, req.user.id);
   }
 }

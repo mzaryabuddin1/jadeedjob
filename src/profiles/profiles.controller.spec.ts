@@ -1,13 +1,11 @@
-import {
-  INestApplication,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { INestApplication, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AuthSessionService } from 'src/auth/auth-session.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { ProfilesController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 
 describe('ProfilesController', () => {
   let app: INestApplication;
@@ -24,6 +22,11 @@ describe('ProfilesController', () => {
       }
       return { id: 7 };
     }),
+  };
+  const moderationService = {
+    listBlocked: jest.fn(),
+    block: jest.fn(),
+    unblock: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -45,6 +48,7 @@ describe('ProfilesController', () => {
         JwtAuthGuard,
         { provide: ProfilesService, useValue: profilesService },
         { provide: AuthSessionService, useValue: authSessionService },
+        { provide: ModerationService, useValue: moderationService },
       ],
     }).compile();
 
@@ -62,12 +66,15 @@ describe('ProfilesController', () => {
       .set('Authorization', 'Bearer valid-token')
       .expect(200);
 
-    expect(profilesService.searchProfiles).toHaveBeenCalledWith({
-      profileType: 'user',
-      q: 'Aarav',
-      page: 1,
-      limit: 20,
-    });
+    expect(profilesService.searchProfiles).toHaveBeenCalledWith(
+      {
+        profileType: 'user',
+        q: 'Aarav',
+        page: 1,
+        limit: 20,
+      },
+      7,
+    );
     expect(profilesService.getProfile).not.toHaveBeenCalled();
   });
 
@@ -98,12 +105,15 @@ describe('ProfilesController', () => {
       .set('Authorization', 'Bearer valid-token')
       .expect(200);
 
-    expect(profilesService.searchProfiles).toHaveBeenCalledWith({
-      profileType: 'company',
-      q: 'build',
-      page: 2,
-      limit: 30,
-    });
+    expect(profilesService.searchProfiles).toHaveBeenCalledWith(
+      {
+        profileType: 'company',
+        q: 'build',
+        page: 2,
+        limit: 30,
+      },
+      7,
+    );
   });
 
   it('keeps the existing profile detail route functional', async () => {

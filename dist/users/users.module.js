@@ -15,12 +15,12 @@ const education_entity_1 = require("./entities/education.entity");
 const certification_entity_1 = require("./entities/certification.entity");
 const users_service_1 = require("./users.service");
 const users_controller_1 = require("./users.controller");
+const admin_user_controller_1 = require("./admin-user.controller");
 const auth_module_1 = require("../auth/auth.module");
 const firebase_module_1 = require("../firebase/firebase.module");
 const filter_entity_1 = require("../filter/entities/filter.entity");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
-const files_module_1 = require("../files/files.module");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -38,9 +38,8 @@ exports.UsersModule = UsersModule = __decorate([
             ]),
             (0, common_1.forwardRef)(() => auth_module_1.AuthModule),
             firebase_module_1.FirebaseModule,
-            files_module_1.FilesModule,
         ],
-        controllers: [users_controller_1.UsersController],
+        controllers: [users_controller_1.UsersController, admin_user_controller_1.AdminUserController],
         providers: [users_service_1.UsersService],
         exports: [users_service_1.UsersService, typeorm_1.TypeOrmModule],
     })

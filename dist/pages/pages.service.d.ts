@@ -4,12 +4,26 @@ import { PageMember } from './entities/page-member.entity';
 import { User } from 'src/users/entities/user.entity';
 import { CompanyBranch } from './entities/company-branch.entity';
 import { CompanyPermissionKey, CompanyPermissions } from './company-permissions';
+import { CompanyAccessRequest } from './entities/company-access-request.entity';
+import { CompanyVerificationReview } from './entities/company-verification-review.entity';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { AuthService } from 'src/auth/auth.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 export declare class PagesService {
     private readonly pageRepo;
     private readonly memberRepo;
     private readonly userRepo;
     private readonly branchRepo;
-    constructor(pageRepo: Repository<CompanyPage>, memberRepo: Repository<PageMember>, userRepo: Repository<User>, branchRepo: Repository<CompanyBranch>);
+    private readonly accessRequestRepo;
+    private readonly verificationReviewRepo;
+    private readonly storageService;
+    private readonly notificationsService;
+    private readonly authService;
+    private readonly idempotencyService;
+    private readonly moderationService;
+    constructor(pageRepo: Repository<CompanyPage>, memberRepo: Repository<PageMember>, userRepo: Repository<User>, branchRepo: Repository<CompanyBranch>, accessRequestRepo: Repository<CompanyAccessRequest>, verificationReviewRepo: Repository<CompanyVerificationReview>, storageService: ObjectStorageService, notificationsService: NotificationsService, authService: AuthService, idempotencyService: IdempotencyService, moderationService: ModerationService);
     getDefaultPermissions(role: 'owner' | 'admin' | 'editor'): CompanyPermissions;
     normalizePermissions(role: 'owner' | 'admin' | 'editor', permissions?: Partial<CompanyPermissions> | null): CompanyPermissions;
     private memberForUser;
@@ -173,6 +187,384 @@ export declare class PagesService {
             role: "admin" | "editor";
         };
     }>;
+    createEmployerCompany(userId: number, data: any, logoFile?: Express.Multer.File, verificationFile?: Express.Multer.File, idempotencyKey?: string): Promise<{
+        message: string;
+        company: {
+            logoUrl: string;
+            id: number;
+            name: string;
+            companyName: string;
+            username: string;
+            businessName: string;
+            description: string;
+            website: string;
+            email: string;
+            phone: string;
+            industry: string;
+            country: string;
+            state: string;
+            city: string;
+            address_line1: string;
+            address_line2: string;
+            socials: {
+                linkedin: string;
+                facebook: string;
+                instagram: string;
+                twitter: string;
+                youtube: string;
+            };
+            branches: {
+                id: number;
+                label: string;
+                address: string;
+                lat: number;
+                lng: number;
+                location: {
+                    lat: number;
+                    lng: number;
+                };
+            }[];
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verifiedAt: Date;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    searchEmployerCompanies(userId: number, query: {
+        q: string;
+        page: number;
+        limit: number;
+    }): Promise<{
+        data: {
+            id: number;
+            companyName: string;
+            username: string;
+            industry: string;
+            location: string;
+            logoUrl: string;
+            verified: boolean;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    requestCompanyAccess(companyId: number, userId: number, data: {
+        message?: string;
+        requestedRole?: 'admin' | 'editor';
+        clientRequestId?: string;
+    }): Promise<{
+        request: {
+            id: number;
+            companyId: number;
+            userId: number;
+            user: {
+                id: number;
+                name: string;
+                avatarUrl: string;
+            };
+            requestedRole: "admin" | "editor";
+            message: string;
+            status: "pending" | "approved" | "rejected" | "cancelled";
+            reviewReason: string;
+            reviewedAt: Date;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    getCompanyAccessRequests(companyId: number, userId: number, query: {
+        status?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<{
+        data: {
+            id: number;
+            companyId: number;
+            userId: number;
+            user: {
+                id: number;
+                name: string;
+                avatarUrl: string;
+            };
+            requestedRole: "admin" | "editor";
+            message: string;
+            status: "pending" | "approved" | "rejected" | "cancelled";
+            reviewReason: string;
+            reviewedAt: Date;
+            createdAt: Date;
+            updatedAt: Date;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    reviewCompanyAccessRequest(requestId: number, reviewerId: number, data: {
+        action: 'approve' | 'reject';
+        role?: 'admin' | 'editor';
+        permissions?: Partial<CompanyPermissions>;
+        reason?: string;
+    }): Promise<{
+        message: string;
+        request: {
+            id: number;
+            companyId: number;
+            userId: number;
+            user: {
+                id: number;
+                name: string;
+                avatarUrl: string;
+            };
+            requestedRole: "admin" | "editor";
+            message: string;
+            status: "pending" | "approved" | "rejected" | "cancelled";
+            reviewReason: string;
+            reviewedAt: Date;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    resubmitCompanyVerification(companyId: number, userId: number, data: {
+        verificationProofType: string;
+        message?: string;
+    }, verificationFile?: Express.Multer.File): Promise<{
+        message: string;
+        company: {
+            logoUrl: string;
+            id: number;
+            name: string;
+            companyName: string;
+            username: string;
+            businessName: string;
+            description: string;
+            website: string;
+            email: string;
+            phone: string;
+            industry: string;
+            country: string;
+            state: string;
+            city: string;
+            address_line1: string;
+            address_line2: string;
+            socials: {
+                linkedin: string;
+                facebook: string;
+                instagram: string;
+                twitter: string;
+                youtube: string;
+            };
+            branches: {
+                id: number;
+                label: string;
+                address: string;
+                lat: number;
+                lng: number;
+                location: {
+                    lat: number;
+                    lng: number;
+                };
+            }[];
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verifiedAt: Date;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    transferCompanyOwnership(companyId: number, ownerId: number, newOwnerUserId: number, currentPassword: string): Promise<{
+        message: string;
+        companyId: number;
+        previousOwnerUserId: number;
+        ownerUserId: number;
+    }>;
+    getAdminCompanyReviews(query: {
+        status?: string;
+        q?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<{
+        data: ({
+            id: number;
+            companyName: string;
+            username: string;
+            industry: string;
+            location: string;
+            logoUrl: string;
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verificationProofType: string;
+            verificationDocumentUrl: string;
+            owner: {
+                id: number;
+                name: string;
+                phone: string;
+            };
+            verifiedAt: Date;
+            verifiedByAdminId: number;
+            createdAt: Date;
+            updatedAt: Date;
+        } | {
+            businessName: string;
+            description: string;
+            officialEmail: string;
+            officialPhone: string;
+            website: string;
+            address: {
+                line1: string;
+                line2: string;
+                city: string;
+                state: string;
+                country: string;
+                postalCode: string;
+            };
+            registration: {
+                number: string;
+                taxId: string;
+                authority: string;
+            };
+            representative: {
+                name: string;
+                designation: string;
+                email: string;
+                phone: string;
+            };
+            team: {
+                id: number;
+                companyId: number;
+                userId: number;
+                name: string;
+                phone: string;
+                avatarUrl: string;
+                roleType: import("./company-permissions").CompanyMemberRole;
+                roleLabel: string;
+                hasAccess: boolean;
+                permissions: CompanyPermissions;
+            }[];
+            branches: {
+                id: number;
+                label: string;
+                address: string;
+                lat: number;
+                lng: number;
+                location: {
+                    lat: number;
+                    lng: number;
+                };
+            }[];
+            id: number;
+            companyName: string;
+            username: string;
+            industry: string;
+            location: string;
+            logoUrl: string;
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verificationProofType: string;
+            verificationDocumentUrl: string;
+            owner: {
+                id: number;
+                name: string;
+                phone: string;
+            };
+            verifiedAt: Date;
+            verifiedByAdminId: number;
+            createdAt: Date;
+            updatedAt: Date;
+        })[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    getAdminCompanyReview(companyId: number): Promise<{
+        company: {
+            id: number;
+            companyName: string;
+            username: string;
+            industry: string;
+            location: string;
+            logoUrl: string;
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verificationProofType: string;
+            verificationDocumentUrl: string;
+            owner: {
+                id: number;
+                name: string;
+                phone: string;
+            };
+            verifiedAt: Date;
+            verifiedByAdminId: number;
+            createdAt: Date;
+            updatedAt: Date;
+        } | {
+            businessName: string;
+            description: string;
+            officialEmail: string;
+            officialPhone: string;
+            website: string;
+            address: {
+                line1: string;
+                line2: string;
+                city: string;
+                state: string;
+                country: string;
+                postalCode: string;
+            };
+            registration: {
+                number: string;
+                taxId: string;
+                authority: string;
+            };
+            representative: {
+                name: string;
+                designation: string;
+                email: string;
+                phone: string;
+            };
+            team: {
+                id: number;
+                companyId: number;
+                userId: number;
+                name: string;
+                phone: string;
+                avatarUrl: string;
+                roleType: import("./company-permissions").CompanyMemberRole;
+                roleLabel: string;
+                hasAccess: boolean;
+                permissions: CompanyPermissions;
+            }[];
+            branches: {
+                id: number;
+                label: string;
+                address: string;
+                lat: number;
+                lng: number;
+                location: {
+                    lat: number;
+                    lng: number;
+                };
+            }[];
+            id: number;
+            companyName: string;
+            username: string;
+            industry: string;
+            location: string;
+            logoUrl: string;
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verificationProofType: string;
+            verificationDocumentUrl: string;
+            owner: {
+                id: number;
+                name: string;
+                phone: string;
+            };
+            verifiedAt: Date;
+            verifiedByAdminId: number;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        verificationHistory: CompanyVerificationReview[];
+    }>;
     getEmployerAccounts(userId: number): Promise<{
         data: {
             id: string;
@@ -226,12 +618,12 @@ export declare class PagesService {
             canPublish: boolean;
             canPostJobs: boolean;
             jobPostingDisabledReason: string;
+            logoUrl: string;
             id: number;
             name: string;
             companyName: string;
             username: string;
             businessName: string;
-            logoUrl: string;
             description: string;
             website: string;
             email: string;
@@ -270,12 +662,12 @@ export declare class PagesService {
     updateEmployerCompany(companyId: number, userId: number, data: any): Promise<{
         message: string;
         data: {
+            logoUrl: string;
             id: number;
             name: string;
             companyName: string;
             username: string;
             businessName: string;
-            logoUrl: string;
             description: string;
             website: string;
             email: string;
@@ -453,6 +845,11 @@ export declare class PagesService {
             verifiedByAdminId: number;
         };
     }>;
+    private generateUsername;
+    private companyLogoUrl;
+    private formatCompanyWithAssets;
+    private formatAccessRequest;
+    private formatAdminCompany;
     private mapEmployerCompanyPatch;
     private mapCompanyPatch;
 }

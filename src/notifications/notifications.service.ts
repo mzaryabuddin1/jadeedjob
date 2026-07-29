@@ -7,6 +7,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
 import { User } from 'src/users/entities/user.entity';
+import {
+  NotificationCategory,
+  PushService,
+} from 'src/push/push.service';
 
 type CreateNotificationInput = {
   userId: number;
@@ -24,6 +28,8 @@ export class NotificationsService {
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+
+    private readonly pushService: PushService,
   ) {}
 
   private format(notification: Notification) {
@@ -46,6 +52,22 @@ export class NotificationsService {
       }),
     );
 
+    await this.pushService
+      .sendToUser(
+        input.userId,
+        this.categoryForType(input.type),
+        input.title,
+        input.message,
+        input.data || {},
+      )
+      .catch((error) =>
+        console.error('Push delivery failed', {
+          userId: input.userId,
+          type: input.type,
+          error: (error as Error).message,
+        }),
+      );
+
     return this.format(notification);
   }
 
@@ -58,6 +80,20 @@ export class NotificationsService {
           ...input,
           data: input.data || {},
         }),
+      ),
+    );
+
+    await Promise.all(
+      inputs.map((input) =>
+        this.pushService
+          .sendToUser(
+            input.userId,
+            this.categoryForType(input.type),
+            input.title,
+            input.message,
+            input.data || {},
+          )
+          .catch(() => undefined),
       ),
     );
 
@@ -146,5 +182,16 @@ export class NotificationsService {
     );
 
     return { message: 'Notifications marked as read' };
+  }
+
+  private categoryForType(type: string): NotificationCategory {
+    if (type.includes('chat') || type.includes('message')) return 'messages';
+    if (type.includes('application')) return 'applications';
+    if (type.includes('job')) return 'jobs';
+    if (type.includes('support')) return 'support';
+    if (type.includes('company') || type.includes('access')) return 'company';
+    if (type.includes('reel') || type.includes('video')) return 'videos';
+    if (type.includes('security') || type.includes('password')) return 'security';
+    return 'community';
   }
 }

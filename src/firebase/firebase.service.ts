@@ -11,11 +11,34 @@ export class FirebaseService {
   // ────────────────────────────────────────────────
   // EXISTING: Send to specific tokens
   // ────────────────────────────────────────────────
-  async sendNotification(tokens: string[], title: string, body: string) {
-    return this.firebaseApp.messaging().sendEachForMulticast({
+  async sendNotification(
+    tokens: string[],
+    title: string,
+    body: string,
+    data: Record<string, string> = {},
+  ) {
+    const response = await this.firebaseApp.messaging().sendEachForMulticast({
       tokens,
       notification: { title, body },
+      data,
     });
+    const invalidTokens = response.responses
+      .map((item, index) => ({ item, token: tokens[index] }))
+      .filter(
+        ({ item }) =>
+          !item.success &&
+          [
+            'messaging/registration-token-not-registered',
+            'messaging/invalid-registration-token',
+          ].includes((item.error as any)?.code),
+      )
+      .map(({ token }) => token);
+
+    return {
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      invalidTokens,
+    };
   }
 
   // ────────────────────────────────────────────────
@@ -84,13 +107,13 @@ export class FirebaseService {
     });
   }
 
- async sendTestToToken(token: string) {
-  return this.firebaseApp.messaging().send({
-    token,
-    notification: {
-      title: "🔥 Test Notification",
-      body: "Your browser is receiving push notifications!",
-    },
-  });
-}
+  async sendTestToToken(token: string) {
+    return this.sendNotification(
+      [token],
+      'JobsLoot test notification',
+      'Push delivery is configured.',
+      { type: 'security_test' },
+    );
+  }
+
 }

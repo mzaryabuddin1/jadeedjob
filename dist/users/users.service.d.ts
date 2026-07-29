@@ -2,12 +2,18 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { Filter } from 'src/filter/entities/filter.entity';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { AuthSessionService } from 'src/auth/auth-session.service';
+import { PushService } from 'src/push/push.service';
 type ProfileUpdateData = Record<string, any>;
 export declare class UsersService {
     private readonly userRepo;
     private readonly filterRepo;
     private firebaseService;
-    constructor(userRepo: Repository<User>, filterRepo: Repository<Filter>, firebaseService: FirebaseService);
+    private readonly storageService;
+    private readonly authSessionService;
+    private readonly pushService;
+    constructor(userRepo: Repository<User>, filterRepo: Repository<Filter>, firebaseService: FirebaseService, storageService: ObjectStorageService, authSessionService: AuthSessionService, pushService: PushService);
     private normalizeFilterPreferenceIds;
     private hasInvalidFilterPreferenceIds;
     private findFiltersInPreferenceOrder;
@@ -24,10 +30,20 @@ export declare class UsersService {
         verificationRequirements: import("./profile-verification.util").VerificationRequirements;
     }>;
     updateUser(id: number, data: any): Promise<User>;
+    setUserBan(userId: number, adminId: number, banned: boolean, reason?: string): Promise<{
+        message: string;
+        user: {
+            id: number;
+            isBanned: boolean;
+        };
+    }>;
     updateMyProfile(id: number, data: ProfileUpdateData): Promise<any>;
-    updateProfileDocument(userId: number, type: 'id_front' | 'id_back' | 'address_proof' | 'profile_photo', fileUrl: string): Promise<{
-        user: any;
-        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+    uploadProfileDocument(userId: number, type: 'id_front' | 'id_back' | 'address_proof' | 'profile_photo', file: Express.Multer.File): Promise<{
+        fileUrl: string;
+        profile: {
+            user: any;
+            verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+        };
     }>;
     findUsersByIds(ids: number[]): Promise<User[]>;
     getUserPreference(userId: number): Promise<{

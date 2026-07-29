@@ -18,6 +18,13 @@ import {
   normalizeCompanyPermissions,
 } from './company-permissions';
 import { buildUserHandle } from 'src/profiles/profile-format.util';
+import { CompanyAccessRequest } from './entities/company-access-request.entity';
+import { CompanyVerificationReview } from './entities/company-verification-review.entity';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { AuthService } from 'src/auth/auth.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 
 const COMPANY_MUTABLE_FIELDS = [
   'company_name',
@@ -39,13 +46,11 @@ const COMPANY_MUTABLE_FIELDS = [
   'business_registration_number',
   'tax_identification_number',
   'registration_authority',
-  'business_license_document',
   'company_type',
   'representative_name',
   'representative_designation',
   'representative_email',
   'representative_phone',
-  'id_proof_document',
   'linkedin_page_url',
   'facebook_page_url',
   'instagram_page_url',
@@ -72,6 +77,18 @@ export class PagesService {
 
     @InjectRepository(CompanyBranch)
     private readonly branchRepo: Repository<CompanyBranch>,
+
+    @InjectRepository(CompanyAccessRequest)
+    private readonly accessRequestRepo: Repository<CompanyAccessRequest>,
+
+    @InjectRepository(CompanyVerificationReview)
+    private readonly verificationReviewRepo: Repository<CompanyVerificationReview>,
+
+    private readonly storageService: ObjectStorageService,
+    private readonly notificationsService: NotificationsService,
+    private readonly authService: AuthService,
+    private readonly idempotencyService: IdempotencyService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   getDefaultPermissions(role: 'owner' | 'admin' | 'editor') {
@@ -590,6 +607,534 @@ export class PagesService {
     };
   }
 
+  async createEmployerCompany(
+    userId: number,
+    data: any,
+    logoFile?: Express.Multer.File,
+    verificationFile?: Express.Multer.File,
+    idempotencyKey?: string,
+  ) {
+    if (!verificationFile) {
+      throw new BadRequestException('verificationDocument is required');
+    }
+    return this.idempotencyService.execute(
+      userId,
+      'employer_company_create',
+      idempotencyKey,
+      {
+        ...data,
+        logo: logoFile
+          ? {
+              name: logoFile.originalname,
+              size: logoFile.size,
+              type: logoFile.mimetype,
+            }
+          : null,
+        verificationDocument: {
+          name: verificationFile.originalname,
+          size: verificationFile.size,
+          type: verificationFile.mimetype,
+        },
+      },
+      async () => {
+        const stored: Array<{ id: string }> = [];
+        try {
+          const logo = logoFile
+            ? await this.storageService.store({
+                ownerUserId: userId,
+                purpose: 'company-logos',
+                file: logoFile,
+                allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+                maxBytes: 5 * 1024 * 1024,
+                visibility: 'private',
+              })
+            : null;
+          if (logo) stored.push(logo);
+          const evidence = await this.storageService.store({
+            ownerUserId: userId,
+            purpose: 'company-verification',
+            file: verificationFile,
+            allowedTypes: [
+              'image/jpeg',
+              'image/png',
+              'image/webp',
+              'application/pdf',
+            ],
+            maxBytes: 10 * 1024 * 1024,
+            visibility: 'private',
+          });
+          stored.push(evidence);
+
+          const page = await this.pageRepo.manager.transaction(
+            async (manager) => {
+              const username = await this.generateUsername(
+                data.company_name,
+                data.username,
+                manager.getRepository(CompanyPage),
+              );
+              const created = await manager.getRepository(CompanyPage).save(
+                manager.getRepository(CompanyPage).create({
+                  ...this.mapCompanyPatch(data),
+                  username,
+                  ownerId: userId,
+                  logoAssetId: logo?.id || null,
+                  verificationDocumentAssetId: evidence.id,
+                  verificationProofType: data.verificationProofType,
+                  verificationStatus: 'pending',
+                  verificationReason: null,
+                }),
+              );
+              await manager.getRepository(PageMember).save(
+                manager.getRepository(PageMember).create({
+                  pageId: created.id,
+                  userId,
+                  role: 'owner',
+                  hasAccess: true,
+                  permissions: FULL_COMPANY_PERMISSIONS,
+                }),
+              );
+              await manager.getRepository(CompanyVerificationReview).save(
+                manager.getRepository(CompanyVerificationReview).create({
+                  companyId: created.id,
+                  actorUserId: userId,
+                  previousStatus: null,
+                  nextStatus: 'pending',
+                  reason: 'Initial verification submission',
+                  submissionSnapshot: {
+                    verificationDocumentAssetId: evidence.id,
+                    verificationProofType: data.verificationProofType,
+                  },
+                }),
+              );
+              return created;
+            },
+          );
+          return {
+            message: 'Company submitted for verification',
+            company: await this.formatCompanyWithAssets(page),
+          };
+        } catch (error) {
+          await Promise.all(
+            stored.map((asset) =>
+              this.storageService.remove(asset.id).catch(() => undefined),
+            ),
+          );
+          throw error;
+        }
+      },
+    );
+  }
+
+  async searchEmployerCompanies(
+    userId: number,
+    query: { q: string; page: number; limit: number },
+  ) {
+    const currentPage = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(30, Math.max(1, Number(query.limit) || 20));
+    const term = String(query.q || '').trim().toLowerCase();
+    const escaped = term.replace(/[\\%_]/g, (value) => `\\${value}`);
+    const blocked = await this.moderationService.blockedTargets(userId);
+    const qb = this.pageRepo
+      .createQueryBuilder('page')
+      .where('page.verificationStatus = :approved', { approved: 'approved' })
+      .andWhere(
+        '(LOWER(page.company_name) LIKE :search OR LOWER(page.username) LIKE :search OR LOWER(page.industry_type) LIKE :search)',
+        { search: `%${escaped}%` },
+      );
+    if (blocked.companyIds.length) {
+      qb.andWhere('page.id NOT IN (:...blockedCompanyIds)', {
+        blockedCompanyIds: blocked.companyIds,
+      });
+    }
+    qb.orderBy(
+      'CASE WHEN LOWER(page.company_name) = :exact OR LOWER(page.username) = :exact THEN 0 WHEN LOWER(page.company_name) LIKE :prefix OR LOWER(page.username) LIKE :prefix THEN 1 ELSE 2 END',
+      'ASC',
+    )
+      .addOrderBy('page.company_name', 'ASC')
+      .addOrderBy('page.id', 'ASC')
+      .setParameters({ exact: term, prefix: `${escaped}%` })
+      .skip((currentPage - 1) * limit)
+      .take(limit);
+    const [pages, total] = await qb.getManyAndCount();
+    return {
+      data: await Promise.all(
+        pages.map(async (page) => ({
+          id: page.id,
+          companyName: page.company_name,
+          username: page.username,
+          industry: page.industry_type || null,
+          location: [page.city, page.state, page.country]
+            .filter(Boolean)
+            .join(', ') || null,
+          logoUrl: await this.companyLogoUrl(page),
+          verified: true,
+        })),
+      ),
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage,
+    };
+  }
+
+  async requestCompanyAccess(
+    companyId: number,
+    userId: number,
+    data: {
+      message?: string;
+      requestedRole?: 'admin' | 'editor';
+      clientRequestId?: string;
+    },
+  ) {
+    return this.idempotencyService.execute(
+      userId,
+      'company_access_request',
+      data.clientRequestId,
+      { companyId, ...data },
+      async () => {
+        const company = await this.pageRepo.findOne({
+          where: { id: companyId, verificationStatus: 'approved' },
+          relations: ['members'],
+        });
+        if (!company) throw new NotFoundException('Company not found');
+        await this.moderationService.assertInteractionAllowed(
+          userId,
+          'company',
+          companyId,
+        );
+        if (
+          company.ownerId === userId ||
+          company.members.some(
+            (member) => member.userId === userId && member.hasAccess !== false,
+          )
+        ) {
+          throw new BadRequestException('You already have company access');
+        }
+        const existing = await this.accessRequestRepo.findOne({
+          where: { companyId, userId, status: 'pending' },
+        });
+        if (existing) {
+          throw new BadRequestException('A pending access request already exists');
+        }
+        const request = await this.accessRequestRepo.save(
+          this.accessRequestRepo.create({
+            companyId,
+            userId,
+            message: String(data.message || '').trim() || null,
+            requestedRole: data.requestedRole || 'editor',
+            clientRequestId:
+              String(data.clientRequestId || '').trim() || null,
+          }),
+        );
+        await this.notificationsService.create({
+          userId: company.ownerId,
+          type: 'company_access_request',
+          title: 'Company access requested',
+          message: 'A user requested access to your company.',
+          data: { companyId, companyAccessRequestId: request.id },
+        });
+        return {
+          request: this.formatAccessRequest(request),
+        };
+      },
+    );
+  }
+
+  async getCompanyAccessRequests(
+    companyId: number,
+    userId: number,
+    query: { status?: string; page?: number; limit?: number },
+  ) {
+    await this.getCompanyAccess(companyId, userId, 'manageTeam');
+    const currentPage = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const [requests, total] = await this.accessRequestRepo.findAndCount({
+      where:
+        !query.status || query.status === 'all'
+          ? { companyId }
+          : ({ companyId, status: query.status } as any),
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+      skip: (currentPage - 1) * limit,
+      take: limit,
+    });
+    return {
+      data: requests.map((request) => this.formatAccessRequest(request)),
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage,
+    };
+  }
+
+  async reviewCompanyAccessRequest(
+    requestId: number,
+    reviewerId: number,
+    data: {
+      action: 'approve' | 'reject';
+      role?: 'admin' | 'editor';
+      permissions?: Partial<CompanyPermissions>;
+      reason?: string;
+    },
+  ) {
+    const result = await this.accessRequestRepo.manager.transaction(
+      async (manager) => {
+        const request = await manager
+          .getRepository(CompanyAccessRequest)
+          .findOne({
+            where: { id: requestId },
+            relations: ['company', 'user'],
+            lock: { mode: 'pessimistic_write' },
+          });
+        if (!request) throw new NotFoundException('Access request not found');
+        await this.getCompanyAccess(request.companyId, reviewerId, 'manageTeam');
+        if (request.status !== 'pending') {
+          throw new BadRequestException('Access request is no longer pending');
+        }
+        request.status = data.action === 'approve' ? 'approved' : 'rejected';
+        request.reviewReason = String(data.reason || '').trim() || null;
+        request.reviewedByUserId = reviewerId;
+        request.reviewedAt = new Date();
+        if (data.action === 'approve') {
+          const role = data.role || request.requestedRole || 'editor';
+          let member = await manager.getRepository(PageMember).findOne({
+            where: { pageId: request.companyId, userId: request.userId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!member) {
+            member = manager.getRepository(PageMember).create({
+              pageId: request.companyId,
+              userId: request.userId,
+            });
+          }
+          member.role = role;
+          member.hasAccess = true;
+          member.permissions = this.normalizePermissions(
+            role,
+            data.permissions,
+          );
+          await manager.save(member);
+        }
+        return manager.save(request);
+      },
+    );
+    await this.notificationsService.create({
+      userId: result.userId,
+      type: 'company_access_status',
+      title: 'Company access updated',
+      message: `Your company access request was ${result.status}.`,
+      data: {
+        companyId: result.companyId,
+        companyAccessRequestId: result.id,
+      },
+    });
+    return {
+      message: `Access request ${result.status}`,
+      request: this.formatAccessRequest(result),
+    };
+  }
+
+  async resubmitCompanyVerification(
+    companyId: number,
+    userId: number,
+    data: { verificationProofType: string; message?: string },
+    verificationFile?: Express.Multer.File,
+  ) {
+    if (!verificationFile) {
+      throw new BadRequestException('verificationDocument is required');
+    }
+    const { page } = await this.getCompanyAccess(
+      companyId,
+      userId,
+      'manageTeam',
+    );
+    if (page.verificationStatus === 'suspended') {
+      throw new ForbiddenException('Suspended companies cannot resubmit verification');
+    }
+    const asset = await this.storageService.store({
+      ownerUserId: userId,
+      purpose: 'company-verification',
+      file: verificationFile,
+      allowedTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'application/pdf',
+      ],
+      maxBytes: 10 * 1024 * 1024,
+      visibility: 'private',
+      metadata: { companyId },
+    });
+    const previousAssetId = page.verificationDocumentAssetId;
+    try {
+      await this.pageRepo.manager.transaction(async (manager) => {
+        await manager.getRepository(CompanyVerificationReview).save(
+          manager.getRepository(CompanyVerificationReview).create({
+            companyId,
+            actorUserId: userId,
+            previousStatus: page.verificationStatus,
+            nextStatus: 'pending',
+            reason: String(data.message || '').trim() || 'Verification resubmitted',
+            submissionSnapshot: {
+              verificationDocumentAssetId: asset.id,
+              verificationProofType: data.verificationProofType,
+            },
+          }),
+        );
+        page.verificationStatus = 'pending';
+        page.verificationReason = null;
+        page.verifiedAt = null;
+        page.verifiedByAdminId = null;
+        page.verificationDocumentAssetId = asset.id;
+        page.verificationProofType = data.verificationProofType;
+        await manager.save(page);
+      });
+    } catch (error) {
+      await this.storageService.remove(asset);
+      throw error;
+    }
+    if (previousAssetId) {
+      await this.storageService.remove(previousAssetId).catch(() => undefined);
+    }
+    return {
+      message: 'Company verification resubmitted successfully',
+      company: await this.formatCompanyWithAssets(page),
+    };
+  }
+
+  async transferCompanyOwnership(
+    companyId: number,
+    ownerId: number,
+    newOwnerUserId: number,
+    currentPassword: string,
+  ) {
+    if (ownerId === newOwnerUserId) {
+      throw new BadRequestException('The selected user is already the owner');
+    }
+    await this.authService.validateUserByIdAndPassword(
+      ownerId,
+      currentPassword,
+    );
+    const page = await this.pageRepo.manager.transaction(async (manager) => {
+      const company = await manager.getRepository(CompanyPage).findOne({
+        where: { id: companyId },
+        relations: ['members'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!company) throw new NotFoundException('Company not found');
+      if (company.ownerId !== ownerId) {
+        throw new ForbiddenException('Only the company owner can transfer ownership');
+      }
+      const nextOwner = await manager.getRepository(User).findOne({
+        where: { id: newOwnerUserId, isBanned: false },
+      });
+      if (!nextOwner || nextOwner.deletedAt || nextOwner.deletionScheduledAt) {
+        throw new BadRequestException('The new owner is not eligible');
+      }
+      let oldMember = company.members.find(
+        (member) => member.userId === ownerId,
+      );
+      if (!oldMember) {
+        oldMember = manager.getRepository(PageMember).create({
+          pageId: companyId,
+          userId: ownerId,
+        });
+      }
+      oldMember.role = 'admin';
+      oldMember.hasAccess = true;
+      oldMember.permissions = this.normalizePermissions('admin');
+
+      let nextMember = company.members.find(
+        (member) => member.userId === newOwnerUserId,
+      );
+      if (!nextMember) {
+        nextMember = manager.getRepository(PageMember).create({
+          pageId: companyId,
+          userId: newOwnerUserId,
+        });
+      }
+      nextMember.role = 'owner';
+      nextMember.hasAccess = true;
+      nextMember.permissions = FULL_COMPANY_PERMISSIONS;
+      company.ownerId = newOwnerUserId;
+      await manager.save([oldMember, nextMember]);
+      return manager.save(company);
+    });
+    await Promise.all([
+      this.notificationsService.create({
+        userId: newOwnerUserId,
+        type: 'company_ownership',
+        title: 'Company ownership transferred',
+        message: `You are now the owner of ${page.company_name}.`,
+        data: { companyId },
+      }),
+      this.notificationsService.create({
+        userId: ownerId,
+        type: 'company_ownership',
+        title: 'Company ownership transferred',
+        message: `${page.company_name} ownership was transferred successfully.`,
+        data: { companyId },
+      }),
+    ]);
+    return {
+      message: 'Company ownership transferred successfully',
+      companyId,
+      previousOwnerUserId: ownerId,
+      ownerUserId: newOwnerUserId,
+    };
+  }
+
+  async getAdminCompanyReviews(query: {
+    status?: string;
+    q?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const currentPage = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const qb = this.pageRepo
+      .createQueryBuilder('page')
+      .leftJoinAndSelect('page.owner', 'owner');
+    if (query.status && query.status !== 'all') {
+      qb.andWhere('page.verificationStatus = :status', {
+        status: query.status,
+      });
+    }
+    if (query.q) {
+      qb.andWhere(
+        '(page.company_name LIKE :search OR page.username LIKE :search OR page.business_registration_number LIKE :search)',
+        { search: `%${String(query.q).trim().replace(/[\\%_]/g, '\\$&')}%` },
+      );
+    }
+    qb.orderBy('page.updatedAt', 'DESC')
+      .addOrderBy('page.id', 'DESC')
+      .skip((currentPage - 1) * limit)
+      .take(limit);
+    const [pages, total] = await qb.getManyAndCount();
+    return {
+      data: await Promise.all(
+        pages.map((page) => this.formatAdminCompany(page, false)),
+      ),
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage,
+    };
+  }
+
+  async getAdminCompanyReview(companyId: number) {
+    const page = await this.pageRepo.findOne({
+      where: { id: companyId },
+      relations: ['owner', 'members', 'members.user', 'branches'],
+    });
+    if (!page) throw new NotFoundException('Company not found');
+    const history = await this.verificationReviewRepo.find({
+      where: { companyId },
+      order: { createdAt: 'DESC' },
+    });
+    return {
+      company: await this.formatAdminCompany(page, true),
+      verificationHistory: history,
+    };
+  }
+
   async getEmployerAccounts(userId: number) {
     const pages = await this.pageRepo
       .createQueryBuilder('page')
@@ -617,7 +1162,7 @@ export class PagesService {
       jobPostingDisabledReason: null,
     };
 
-    const companyAccounts = pages.map((page) => {
+    const companyAccounts = await Promise.all(pages.map(async (page) => {
       const member = this.memberForUser(page, userId);
       const role = member?.role || 'owner';
       const branch = page.branches?.[0] || null;
@@ -648,7 +1193,7 @@ export class PagesService {
               lng: branch.lng,
             }
           : null,
-        logoUrl: page.company_logo || null,
+        logoUrl: await this.companyLogoUrl(page),
         postingMode: 'company',
         permissions,
         verificationStatus: page.verificationStatus || 'pending',
@@ -660,7 +1205,7 @@ export class PagesService {
         canPostJobs: !jobPostingDisabledReason,
         jobPostingDisabledReason,
       };
-    });
+    }));
 
     return { data: [individual, ...companyAccounts] };
   }
@@ -692,7 +1237,7 @@ export class PagesService {
 
     return {
       data: {
-        ...this.formatCompany(page),
+        ...(await this.formatCompanyWithAssets(page)),
         myRole: member.role,
         myPermissions: permissions,
         canPublish:
@@ -722,7 +1267,7 @@ export class PagesService {
 
     return {
       message: 'Company updated successfully',
-      data: this.formatCompany(page),
+      data: await this.formatCompanyWithAssets(page),
     };
   }
 
@@ -1016,11 +1561,36 @@ export class PagesService {
     const page = await this.pageRepo.findOne({ where: { id: companyId } });
     if (!page) throw new NotFoundException('Company not found');
 
-    page.verificationStatus = status;
-    page.verificationReason = reason?.trim() || null;
-    page.verifiedAt = status === 'approved' ? new Date() : null;
-    page.verifiedByAdminId = status === 'approved' ? adminId : null;
-    const saved = await this.pageRepo.save(page);
+    const previousStatus = page.verificationStatus;
+    const saved = await this.pageRepo.manager.transaction(async (manager) => {
+      page.verificationStatus = status;
+      page.verificationReason = reason?.trim() || null;
+      page.verifiedAt = status === 'approved' ? new Date() : null;
+      page.verifiedByAdminId = status === 'approved' ? adminId : null;
+      const updated = await manager.save(page);
+      await manager.getRepository(CompanyVerificationReview).save(
+        manager.getRepository(CompanyVerificationReview).create({
+          companyId,
+          actorUserId: adminId,
+          previousStatus,
+          nextStatus: status,
+          reason: reason?.trim() || null,
+          submissionSnapshot: {
+            verificationDocumentAssetId:
+              page.verificationDocumentAssetId || null,
+            verificationProofType: page.verificationProofType || null,
+          },
+        }),
+      );
+      return updated;
+    });
+    await this.notificationsService.create({
+      userId: page.ownerId,
+      type: 'company_verification',
+      title: 'Company verification updated',
+      message: `Company verification is now ${status}.`,
+      data: { companyId },
+    });
 
     return {
       message: 'Company verification updated successfully',
@@ -1031,6 +1601,137 @@ export class PagesService {
         verifiedAt: saved.verifiedAt || null,
         verifiedByAdminId: saved.verifiedByAdminId || null,
       },
+    };
+  }
+
+  private async generateUsername(
+    companyName: string,
+    requested: string | undefined,
+    repository = this.pageRepo,
+  ) {
+    const base = String(requested || companyName || 'company')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^[.-]+|[.-]+$/g, '')
+      .slice(0, 90) || 'company';
+    if (requested && !/^[a-z0-9.-]+$/.test(base)) {
+      throw new BadRequestException('Invalid company username');
+    }
+    for (let counter = 0; counter < 1000; counter += 1) {
+      const candidate = counter ? `${base}-${counter}` : base;
+      if (!(await repository.findOne({ where: { username: candidate } }))) {
+        return candidate;
+      }
+    }
+    throw new BadRequestException('Unable to generate a company username');
+  }
+
+  private async companyLogoUrl(page: CompanyPage) {
+    if (page.logoAssetId) {
+      return this.storageService.getUrl(page.logoAssetId);
+    }
+    return page.company_logo || null;
+  }
+
+  private async formatCompanyWithAssets(page: CompanyPage) {
+    return {
+      ...this.formatCompany(page),
+      logoUrl: await this.companyLogoUrl(page),
+    };
+  }
+
+  private formatAccessRequest(request: CompanyAccessRequest) {
+    const user = request.user;
+    return {
+      id: request.id,
+      companyId: request.companyId,
+      userId: request.userId,
+      user: user
+        ? {
+            id: user.id,
+            name:
+              user.full_name ||
+              [user.firstName, user.lastName].filter(Boolean).join(' '),
+            avatarUrl: user.profile_photo || null,
+          }
+        : undefined,
+      requestedRole: request.requestedRole,
+      message: request.message || '',
+      status: request.status,
+      reviewReason: request.reviewReason || null,
+      reviewedAt: request.reviewedAt || null,
+      createdAt: request.createdAt,
+      updatedAt: request.updatedAt,
+    };
+  }
+
+  private async formatAdminCompany(page: CompanyPage, detailed: boolean) {
+    const base = {
+      id: page.id,
+      companyName: page.company_name,
+      username: page.username,
+      industry: page.industry_type || null,
+      location:
+        [page.city, page.state, page.country].filter(Boolean).join(', ') ||
+        null,
+      logoUrl: await this.companyLogoUrl(page),
+      verificationStatus: page.verificationStatus,
+      verificationReason: page.verificationReason || null,
+      verificationProofType: page.verificationProofType || null,
+      verificationDocumentUrl: page.verificationDocumentAssetId
+        ? await this.storageService.getUrl(page.verificationDocumentAssetId)
+        : null,
+      owner: page.owner
+        ? {
+            id: page.owner.id,
+            name:
+              page.owner.full_name ||
+              [page.owner.firstName, page.owner.lastName]
+                .filter(Boolean)
+                .join(' '),
+            phone: page.owner.phone,
+          }
+        : null,
+      verifiedAt: page.verifiedAt || null,
+      verifiedByAdminId: page.verifiedByAdminId || null,
+      createdAt: page.createdAt,
+      updatedAt: page.updatedAt,
+    };
+    if (!detailed) return base;
+    return {
+      ...base,
+      businessName: page.business_name,
+      description: page.company_description,
+      officialEmail: page.official_email,
+      officialPhone: page.official_phone,
+      website: page.website_url,
+      address: {
+        line1: page.address_line1,
+        line2: page.address_line2,
+        city: page.city,
+        state: page.state,
+        country: page.country,
+        postalCode: page.postal_code,
+      },
+      registration: {
+        number: page.business_registration_number,
+        taxId: page.tax_identification_number,
+        authority: page.registration_authority,
+      },
+      representative: {
+        name: page.representative_name,
+        designation: page.representative_designation,
+        email: page.representative_email,
+        phone: page.representative_phone,
+      },
+      team: (page.members || []).map((member) =>
+        this.formatMember(member, page),
+      ),
+      branches: (page.branches || []).map((branch) =>
+        this.formatBranch(branch),
+      ),
     };
   }
 

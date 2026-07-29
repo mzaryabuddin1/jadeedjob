@@ -26,6 +26,8 @@ export declare class User {
     tokenVersion: number;
     systemRole: 'user' | 'admin';
     isBanned: boolean;
+    deletionScheduledAt: Date;
+    deletedAt: Date;
     full_name: string;
     father_name: string;
     gender: string;
@@ -33,12 +35,16 @@ export declare class User {
     nationality: string;
     marital_status: string;
     profile_photo: string;
+    profilePhotoAssetId: string;
     national_id_number: string;
     passport_number: string;
     id_expiry_date: Date;
     id_document_front: string;
+    idDocumentFrontAssetId: string;
     id_document_back: string;
+    idDocumentBackAssetId: string;
     address_proof_document: string;
+    addressProofAssetId: string;
     alternate_phone: string;
     address_line1: string;
     address_line2: string;

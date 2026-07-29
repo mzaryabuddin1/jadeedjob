@@ -22,6 +22,7 @@ import Joi from 'joi';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { ReelsService } from './reels.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 import {
   ensureDirectorySync,
   getReelMaxFileSizeBytes,
@@ -30,6 +31,7 @@ import {
   isAllowedReelMimeType,
   REEL_VIDEO_FILE_FIELD,
 } from './reel-storage.service';
+import { Throttle } from '@nestjs/throttler';
 
 const createReelSchema = Joi.object({
   caption: Joi.string().trim().min(5).max(300).required(),
@@ -83,7 +85,8 @@ const uploadInterceptor = FileInterceptor(REEL_VIDEO_FILE_FIELD, {
       callback(null, uploadDir);
     },
     filename: (_req, file, callback) => {
-      const extension = extname(file.originalname || '').toLowerCase() || '.mp4';
+      const extension =
+        extname(file.originalname || '').toLowerCase() || '.mp4';
       callback(null, `${Date.now()}-${randomUUID()}${extension}`);
     },
   }),
@@ -91,8 +94,14 @@ const uploadInterceptor = FileInterceptor(REEL_VIDEO_FILE_FIELD, {
     fileSize: getReelMaxFileSizeBytes(),
   },
   fileFilter: (_req, file, callback) => {
-    if (!isAllowedReelMimeType(file.mimetype) || !isAllowedReelFileName(file.originalname)) {
-      callback(new BadRequestException('Unsupported reel video file') as any, false);
+    if (
+      !isAllowedReelMimeType(file.mimetype) ||
+      !isAllowedReelFileName(file.originalname)
+    ) {
+      callback(
+        new BadRequestException('Unsupported reel video file') as any,
+        false,
+      );
       return;
     }
 
@@ -103,15 +112,20 @@ const uploadInterceptor = FileInterceptor(REEL_VIDEO_FILE_FIELD, {
 @UseGuards(JwtAuthGuard)
 @Controller('reels')
 export class ReelsController {
-  constructor(private readonly reelsService: ReelsService) {}
+  constructor(
+    private readonly reelsService: ReelsService,
+    private readonly moderationService: ModerationService,
+  ) {}
 
   @Post()
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   @UsePipes(new JoiValidationPipe(createReelSchema))
   create(@Body() body: any, @Req() req: any) {
     return this.reelsService.createReel(body, req.user.id);
   }
 
   @Post(':id/upload')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   @UseInterceptors(uploadInterceptor)
   upload(
     @Param('id', ParseIntPipe) id: number,
@@ -190,7 +204,12 @@ export class ReelsController {
     @Query('limit') limit: number,
     @Req() req: any,
   ) {
-    return this.reelsService.getComments(id, req.user.id, cursor, Number(limit));
+    return this.reelsService.getComments(
+      id,
+      req.user.id,
+      cursor,
+      Number(limit),
+    );
   }
 
   @Post(':id/comments')
@@ -206,6 +225,26 @@ export class ReelsController {
   @Post(':id/share')
   share(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     return this.reelsService.registerShare(id, req.user.id);
+  }
+
+  @Post(':id/report')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  report(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          reason: Joi.string()
+            .valid('spam', 'unsafe', 'false_information', 'other')
+            .required(),
+          details: Joi.string().trim().max(1000).allow('', null).optional(),
+        }),
+      ),
+    )
+    body: any,
+    @Req() req: any,
+  ) {
+    return this.moderationService.reportReel(id, req.user.id, body);
   }
 
   @Post('creators/:creatorId/follow')

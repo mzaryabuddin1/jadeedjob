@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { SupportTicketAttachment } from './support-ticket-attachment.entity';
+import { SupportTicketMessage } from './support-ticket-message.entity';
 
 export type SupportTicketKind = 'feedback' | 'complaint';
 export type SupportTicketCategory =
@@ -44,6 +45,9 @@ export class SupportTicket {
   })
   category: SupportTicketCategory;
 
+  @Column({ nullable: true })
+  subject: string;
+
   @Column({ type: 'text' })
   message: string;
 
@@ -63,6 +67,9 @@ export class SupportTicket {
     cascade: true,
   })
   uploadedAttachments: SupportTicketAttachment[];
+
+  @OneToMany(() => SupportTicketMessage, (message) => message.ticket)
+  messages: SupportTicketMessage[];
 
   @CreateDateColumn()
   createdAt: Date;

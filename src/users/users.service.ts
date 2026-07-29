@@ -20,6 +20,9 @@ import {
   computeUserIsVerified,
 } from './profile-verification.util';
 import { generateReferralCode } from './referral-code.util';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { AuthSessionService } from 'src/auth/auth-session.service';
+import { PushService } from 'src/push/push.service';
 
 type ProfileUpdateData = Record<string, any>;
 
@@ -33,6 +36,9 @@ export class UsersService {
     private readonly filterRepo: Repository<Filter>,
 
     private firebaseService: FirebaseService, // 👈 add this
+    private readonly storageService: ObjectStorageService,
+    private readonly authSessionService: AuthSessionService,
+    private readonly pushService: PushService,
   ) {}
 
   private normalizeFilterPreferenceIds(preferences: unknown): number[] {
@@ -76,6 +82,10 @@ export class UsersService {
       'admin_notes',
       'verified_by_admin_id',
       'systemRole',
+      'profilePhotoAssetId',
+      'idDocumentFrontAssetId',
+      'idDocumentBackAssetId',
+      'addressProofAssetId',
     ]) {
       delete publicUser[field];
     }
@@ -126,9 +136,24 @@ export class UsersService {
     return user;
   }
 
-  private buildProfileResponse(user: User) {
+  private async buildProfileResponse(user: User) {
+    const publicUser = this.toPublicUser(user);
+    const assetFields = [
+      ['profilePhotoAssetId', 'profile_photo'],
+      ['idDocumentFrontAssetId', 'id_document_front'],
+      ['idDocumentBackAssetId', 'id_document_back'],
+      ['addressProofAssetId', 'address_proof_document'],
+    ] as const;
+    await Promise.all(
+      assetFields.map(async ([assetField, outputField]) => {
+        const assetId = (user as any)[assetField];
+        if (assetId) {
+          publicUser[outputField] = await this.storageService.getUrl(assetId);
+        }
+      }),
+    );
     return {
-      user: this.toPublicUser(user),
+      user: publicUser,
       verificationRequirements: buildVerificationRequirements(user),
     };
   }
@@ -198,6 +223,35 @@ export class UsersService {
     Object.assign(user, data);
 
     return this.userRepo.save(user);
+  }
+
+  async setUserBan(
+    userId: number,
+    adminId: number,
+    banned: boolean,
+    reason?: string,
+  ) {
+    if (userId === adminId && banned) {
+      throw new BadRequestException('Administrators cannot ban themselves');
+    }
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    user.isBanned = banned;
+    user.admin_notes = String(reason || '').trim() || user.admin_notes;
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+    await this.userRepo.save(user);
+    await this.authSessionService.revokeAllForUser(
+      userId,
+      banned ? 'account_banned' : 'account_unbanned',
+    );
+    if (banned) await this.pushService.removeAllForUser(userId);
+    return {
+      message: banned ? 'User banned successfully' : 'User unbanned successfully',
+      user: {
+        id: user.id,
+        isBanned: user.isBanned,
+      },
+    };
   }
 
   async updateMyProfile(id: number, data: ProfileUpdateData) {
@@ -361,26 +415,72 @@ export class UsersService {
     return this.toPublicUser(await this.normalizeProfileSystemFields(updatedUser));
   }
 
-  async updateProfileDocument(
+  async uploadProfileDocument(
     userId: number,
     type: 'id_front' | 'id_back' | 'address_proof' | 'profile_photo',
-    fileUrl: string,
+    file: Express.Multer.File,
   ) {
     const fieldByType = {
-      id_front: 'id_document_front',
-      id_back: 'id_document_back',
-      address_proof: 'address_proof_document',
-      profile_photo: 'profile_photo',
+      id_front: {
+        field: 'id_document_front',
+        assetField: 'idDocumentFrontAssetId',
+      },
+      id_back: {
+        field: 'id_document_back',
+        assetField: 'idDocumentBackAssetId',
+      },
+      address_proof: {
+        field: 'address_proof_document',
+        assetField: 'addressProofAssetId',
+      },
+      profile_photo: {
+        field: 'profile_photo',
+        assetField: 'profilePhotoAssetId',
+      },
     } as const;
 
-    const field = fieldByType[type];
-    if (!field) throw new BadRequestException('Invalid document type');
-
-    await this.updateMyProfile(userId, {
-      [field]: fileUrl,
+    const mapping = fieldByType[type];
+    if (!mapping) throw new BadRequestException('Invalid document type');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const asset = await this.storageService.store({
+      ownerUserId: userId,
+      purpose:
+        type === 'profile_photo' ? 'profile-photos' : 'profile-documents',
+      file,
+      allowedTypes:
+        type === 'profile_photo'
+          ? ['image/jpeg', 'image/png', 'image/webp']
+          : ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+      maxBytes: 5 * 1024 * 1024,
+      visibility: 'private',
+      metadata: { type },
     });
-
-    return this.getMyProfileResponse(userId);
+    const oldAssetId = (user as any)[mapping.assetField];
+    try {
+      await this.userRepo.manager.transaction(async (manager) => {
+        (user as any)[mapping.assetField] = asset.id;
+        (user as any)[mapping.field] = `asset:${asset.id}`;
+        if (type !== 'profile_photo') {
+          user.kyc_status = 'pending';
+          user.verification_date = null;
+          user.verified_by_admin_id = null;
+          user.rejection_reason = null;
+          user.isVerified = computeUserIsVerified(user);
+        }
+        await manager.save(user);
+      });
+    } catch (error) {
+      await this.storageService.remove(asset);
+      throw error;
+    }
+    if (oldAssetId) {
+      await this.storageService.remove(oldAssetId).catch(() => undefined);
+    }
+    return {
+      fileUrl: await this.storageService.getUrl(asset),
+      profile: await this.getMyProfileResponse(userId),
+    };
   }
 
   async findUsersByIds(ids: number[]) {

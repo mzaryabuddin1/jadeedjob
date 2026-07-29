@@ -1,6 +1,7 @@
 import { Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
 import { User } from 'src/users/entities/user.entity';
+import { PushService } from 'src/push/push.service';
 type CreateNotificationInput = {
     userId: number;
     type: string;
@@ -11,7 +12,8 @@ type CreateNotificationInput = {
 export declare class NotificationsService {
     private readonly notificationRepo;
     private readonly userRepo;
-    constructor(notificationRepo: Repository<Notification>, userRepo: Repository<User>);
+    private readonly pushService;
+    constructor(notificationRepo: Repository<Notification>, userRepo: Repository<User>, pushService: PushService);
     private format;
     create(input: CreateNotificationInput): Promise<{
         id: number;
@@ -69,5 +71,6 @@ export declare class NotificationsService {
     markAllRead(userId: number): Promise<{
         message: string;
     }>;
+    private categoryForType;
 }
 export {};

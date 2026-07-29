@@ -30,8 +30,10 @@ const post_save_entity_1 = require("./entities/post-save.entity");
 const post_storage_service_1 = require("./post-storage.service");
 const post_video_upload_session_entity_1 = require("./entities/post-video-upload-session.entity");
 const post_video_storage_service_1 = require("./post-video-storage.service");
+const moderation_service_1 = require("../moderation/moderation.service");
+const object_storage_service_1 = require("../storage/object-storage.service");
 let PostsService = class PostsService {
-    constructor(postRepo, likeRepo, saveRepo, commentRepo, reportRepo, followRepo, jobRepo, userRepo, videoUploadRepo, pagesService, storage, videoStorage) {
+    constructor(postRepo, likeRepo, saveRepo, commentRepo, reportRepo, followRepo, jobRepo, userRepo, videoUploadRepo, pagesService, storage, videoStorage, moderationService, objectStorageService) {
         this.postRepo = postRepo;
         this.likeRepo = likeRepo;
         this.saveRepo = saveRepo;
@@ -44,6 +46,8 @@ let PostsService = class PostsService {
         this.pagesService = pagesService;
         this.storage = storage;
         this.videoStorage = videoStorage;
+        this.moderationService = moderationService;
+        this.objectStorageService = objectStorageService;
     }
     onModuleInit() {
         this.cleanupExpiredVideoUploads().catch(() => undefined);
@@ -60,7 +64,14 @@ let PostsService = class PostsService {
         const limit = Math.min(30, Math.max(1, Number(query.limit) || 10));
         const profileFiltered = Boolean(query.publisherType && query.publisherId);
         const cursor = this.decodeCursor(query.cursor);
+        if (query.feed === 'mine') {
+            if (profileFiltered) {
+                throw new common_1.BadRequestException('feed=mine cannot be combined with publisher filters');
+            }
+            return this.getManageableFeed(viewerId, cursor, limit);
+        }
         const qb = this.createViewableQuery();
+        await this.applyBlockedPublisherFilters(qb, viewerId);
         if (profileFiltered) {
             if (cursor && cursor.mode !== 'profile') {
                 throw new common_1.BadRequestException('Post cursor does not match this feed');
@@ -127,8 +138,71 @@ let PostsService = class PostsService {
                 : null,
         };
     }
+    async searchPosts(query, viewerId) {
+        const q = String(query.q || '').trim().toLowerCase();
+        if (q.length < 2 || q.length > 80) {
+            throw new common_1.BadRequestException('Search query must be between 2 and 80 characters');
+        }
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(30, Math.max(1, Number(query.limit) || 20));
+        const patterns = this.getSearchPatterns(q);
+        const userDisplayName = `COALESCE(
+      NULLIF(TRIM(creator.full_name), ''),
+      TRIM(CONCAT_WS(' ', creator.firstName, creator.lastName))
+    )`;
+        const publisherDisplayName = `CASE
+      WHEN post.publisherType = 'company'
+        THEN COALESCE(publisherCompany.company_name, '')
+      ELSE ${userDisplayName}
+    END`;
+        const linkedJobCreatorName = `COALESCE(
+      NULLIF(TRIM(linkedJobCreator.full_name), ''),
+      TRIM(CONCAT_WS(' ', linkedJobCreator.firstName, linkedJobCreator.lastName))
+    )`;
+        const linkedJobCompanyName = `COALESCE(
+      linkedJobPage.company_name,
+      ${linkedJobCreatorName},
+      ''
+    )`;
+        const searchable = `(
+      LOWER(COALESCE(post.body, '')) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(${publisherDisplayName}) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(COALESCE(publisherCompany.username, '')) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(COALESCE(linkedJob.title, '')) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(${linkedJobCompanyName}) LIKE :containsQuery ESCAPE '!'
+    )`;
+        const rank = `CASE
+      WHEN LOWER(TRIM(COALESCE(post.body, ''))) = :exactQuery
+        OR LOWER(${publisherDisplayName}) = :exactQuery
+        OR LOWER(COALESCE(publisherCompany.username, '')) = :exactQuery
+        OR LOWER(COALESCE(linkedJob.title, '')) = :exactQuery
+        OR LOWER(${linkedJobCompanyName}) = :exactQuery THEN 0
+      WHEN LOWER(TRIM(COALESCE(post.body, ''))) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(${publisherDisplayName}) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(COALESCE(publisherCompany.username, '')) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(COALESCE(linkedJob.title, '')) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(${linkedJobCompanyName}) LIKE :prefixQuery ESCAPE '!' THEN 1
+      ELSE 2
+    END`;
+        const qb = this.createViewableQuery();
+        await this.applyBlockedPublisherFilters(qb, viewerId);
+        qb.andWhere(searchable, patterns)
+            .addSelect(rank, 'searchRank')
+            .orderBy('searchRank', 'ASC')
+            .addOrderBy('post.createdAt', 'DESC')
+            .addOrderBy('post.id', 'DESC')
+            .skip((page - 1) * limit)
+            .take(limit);
+        const [posts, total] = await qb.getManyAndCount();
+        return {
+            data: await this.formatPosts(posts, viewerId),
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: page,
+        };
+    }
     async getPost(postId, viewerId) {
-        return this.formatPost(await this.getViewablePostOrThrow(postId), viewerId);
+        return this.formatPost(await this.getViewablePostOrThrow(postId, viewerId), viewerId);
     }
     async createVideoUpload(data, userId) {
         await this.cleanupExpiredVideoUploads();
@@ -401,7 +475,7 @@ let PostsService = class PostsService {
         return { id: String(post.id), deleted: true };
     }
     async like(postId, userId) {
-        await this.getViewablePostOrThrow(postId);
+        await this.getViewablePostOrThrow(postId, userId);
         const result = await this.likeRepo
             .createQueryBuilder()
             .insert()
@@ -414,14 +488,14 @@ let PostsService = class PostsService {
         return this.getPost(postId, userId);
     }
     async unlike(postId, userId) {
-        await this.getViewablePostOrThrow(postId);
+        await this.getViewablePostOrThrow(postId, userId);
         const result = await this.likeRepo.delete({ postId, userId });
         if (result.affected)
             await this.decrementCounter(postId, 'likesCount');
         return this.getPost(postId, userId);
     }
     async save(postId, userId) {
-        await this.getViewablePostOrThrow(postId);
+        await this.getViewablePostOrThrow(postId, userId);
         const result = await this.saveRepo
             .createQueryBuilder()
             .insert()
@@ -434,19 +508,19 @@ let PostsService = class PostsService {
         return this.getPost(postId, userId);
     }
     async unsave(postId, userId) {
-        await this.getViewablePostOrThrow(postId);
+        await this.getViewablePostOrThrow(postId, userId);
         const result = await this.saveRepo.delete({ postId, userId });
         if (result.affected)
             await this.decrementCounter(postId, 'savesCount');
         return this.getPost(postId, userId);
     }
     async share(postId, userId) {
-        await this.getViewablePostOrThrow(postId);
+        await this.getViewablePostOrThrow(postId, userId);
         await this.postRepo.increment({ id: postId }, 'sharesCount', 1);
         return this.getPost(postId, userId);
     }
     async getComments(postId, viewerId, cursor, limit = 20) {
-        await this.getViewablePostOrThrow(postId);
+        await this.getViewablePostOrThrow(postId, viewerId);
         const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
         const decoded = this.decodeSimpleCursor(cursor);
         const qb = this.commentRepo
@@ -468,14 +542,14 @@ let PostsService = class PostsService {
         const hasMore = comments.length > safeLimit;
         const pageItems = hasMore ? comments.slice(0, safeLimit) : comments;
         return {
-            data: pageItems.map((comment) => this.formatComment(comment)),
+            data: await Promise.all(pageItems.map((comment) => this.formatComment(comment))),
             nextCursor: hasMore && pageItems.length
                 ? this.encodeSimpleCursor(pageItems[pageItems.length - 1])
                 : null,
         };
     }
     async addComment(postId, userId, text) {
-        const post = await this.getViewablePostOrThrow(postId);
+        const post = await this.getViewablePostOrThrow(postId, userId);
         if (!post.allowComments) {
             throw new common_1.BadRequestException('Comments are disabled for this post');
         }
@@ -487,7 +561,7 @@ let PostsService = class PostsService {
         }));
     }
     async report(postId, userId, reason = 'other', details) {
-        const post = await this.getViewablePostOrThrow(postId);
+        const post = await this.getViewablePostOrThrow(postId, userId);
         if (post.creatorId === userId) {
             throw new common_1.BadRequestException('You cannot report your own post');
         }
@@ -505,6 +579,69 @@ let PostsService = class PostsService {
         });
         await this.reportRepo.save(report);
         return { reported: true };
+    }
+    async getManageableFeed(viewerId, cursor, limit) {
+        if (cursor && cursor.mode !== 'mine') {
+            throw new common_1.BadRequestException('Post cursor does not match this feed');
+        }
+        const accounts = await this.pagesService.getEmployerAccounts(viewerId);
+        const companyAccounts = accounts.data.filter((account) => account.companyId && account.canPublish);
+        const publishableIds = companyAccounts.map((account) => Number(account.companyId));
+        const manageableIds = companyAccounts
+            .filter((account) => account.roleType === 'owner' || account.roleType === 'admin')
+            .map((account) => Number(account.companyId));
+        const qb = this.postRepo
+            .createQueryBuilder('post')
+            .leftJoinAndSelect('post.creator', 'creator')
+            .leftJoinAndSelect('post.publisherCompany', 'publisherCompany')
+            .leftJoinAndSelect('post.linkedJob', 'linkedJob')
+            .leftJoinAndSelect('linkedJob.page', 'linkedJobPage')
+            .leftJoinAndSelect('linkedJob.creator', 'linkedJobCreator')
+            .where('post.deletedAt IS NULL')
+            .andWhere(new typeorm_2.Brackets((where) => {
+            where.where("post.publisherType = 'user' AND post.creatorId = :viewerId", { viewerId });
+            if (publishableIds.length) {
+                where.orWhere("post.publisherType = 'company' AND post.creatorId = :viewerId AND post.publisherCompanyId IN (:...publishableIds)", { viewerId, publishableIds });
+            }
+            if (manageableIds.length) {
+                where.orWhere("post.publisherType = 'company' AND post.publisherCompanyId IN (:...manageableIds)", { manageableIds });
+            }
+        }));
+        if (cursor?.mode === 'mine') {
+            qb.andWhere(new typeorm_2.Brackets((where) => {
+                where.where('post.createdAt < :createdAt', {
+                    createdAt: cursor.createdAt,
+                });
+                where.orWhere('post.createdAt = :createdAt AND post.id < :cursorId', { createdAt: cursor.createdAt, cursorId: cursor.id });
+            }));
+        }
+        const posts = await qb
+            .orderBy('post.createdAt', 'DESC')
+            .addOrderBy('post.id', 'DESC')
+            .take(limit + 1)
+            .getMany();
+        const hasMore = posts.length > limit;
+        const pageItems = hasMore ? posts.slice(0, limit) : posts;
+        return {
+            data: await this.formatPosts(pageItems, viewerId),
+            nextCursor: hasMore && pageItems.length
+                ? this.encodeCursor({
+                    mode: 'mine',
+                    createdAt: pageItems[pageItems.length - 1].createdAt.toISOString(),
+                    id: pageItems[pageItems.length - 1].id,
+                })
+                : null,
+        };
+    }
+    async applyBlockedPublisherFilters(qb, viewerId) {
+        const blocked = await this.moderationService.blockedTargets(viewerId);
+        if (blocked.userIds.length) {
+            qb.andWhere("(post.publisherType != 'user' OR post.creatorId NOT IN (:...blockedPostUserIds))", { blockedPostUserIds: blocked.userIds });
+        }
+        if (blocked.companyIds.length) {
+            qb.andWhere("(post.publisherType != 'company' OR post.publisherCompanyId NOT IN (:...blockedPostCompanyIds))", { blockedPostCompanyIds: blocked.companyIds });
+        }
+        return qb;
     }
     createViewableQuery() {
         return this.postRepo
@@ -542,8 +679,11 @@ let PostsService = class PostsService {
             publisherType: 'user',
         }).andWhere('post.creatorId = :publisherId', { publisherId: id });
     }
-    async getViewablePostOrThrow(postId) {
-        const post = await this.createViewableQuery()
+    async getViewablePostOrThrow(postId, viewerId) {
+        const qb = this.createViewableQuery();
+        if (viewerId)
+            await this.applyBlockedPublisherFilters(qb, viewerId);
+        const post = await qb
             .andWhere('post.id = :postId', { postId })
             .getOne();
         if (!post)
@@ -664,7 +804,7 @@ let PostsService = class PostsService {
         const likedIds = new Set(likes.map((like) => like.postId));
         const savedIds = new Set(saves.map((save) => save.postId));
         const followed = new Set([...userFollows, ...companyFollows].map((follow) => `${follow.profileType}:${follow.profileId}`));
-        return posts.map((post) => ({
+        return Promise.all(posts.map(async (post) => this.withPublisherAsset({
             ...this.formatPostBase(post),
             viewerState: {
                 liked: likedIds.has(post.id),
@@ -673,7 +813,7 @@ let PostsService = class PostsService {
                 isOwner: post.creatorId === viewerId,
                 canManage: this.canManageFromAccess(post, viewerId, companyAccess.publishable, companyAccess.manageable),
             },
-        }));
+        }, post)));
     }
     async formatPost(post, viewerId) {
         const [like, save, follow, canManage] = await Promise.all([
@@ -688,7 +828,7 @@ let PostsService = class PostsService {
             }),
             this.canManage(post, viewerId),
         ]);
-        return {
+        return this.withPublisherAsset({
             ...this.formatPostBase(post),
             viewerState: {
                 liked: Boolean(like),
@@ -697,7 +837,7 @@ let PostsService = class PostsService {
                 isOwner: post.creatorId === viewerId,
                 canManage,
             },
-        };
+        }, post);
     }
     formatPostBase(post) {
         return {
@@ -764,15 +904,36 @@ let PostsService = class PostsService {
             currency: job.currency || 'PKR',
         };
     }
-    formatComment(comment) {
+    async formatComment(comment) {
         if (!comment)
             return null;
+        const author = (0, profile_format_util_1.formatUserPublisher)(comment.user);
         return {
             id: String(comment.id),
             postId: String(comment.postId),
-            author: (0, profile_format_util_1.formatUserPublisher)(comment.user),
+            author: {
+                ...author,
+                avatarUri: comment.user?.profilePhotoAssetId
+                    ? await this.objectStorageService.getUrl(comment.user.profilePhotoAssetId)
+                    : author.avatarUri,
+            },
             text: comment.text,
             createdAt: comment.createdAt,
+        };
+    }
+    async withPublisherAsset(result, post) {
+        const publisher = this.formatPublisher(post);
+        const assetId = this.getPublisherType(post) === 'company'
+            ? post.publisherCompany?.logoAssetId
+            : post.creator?.profilePhotoAssetId;
+        return {
+            ...result,
+            publisher: assetId
+                ? {
+                    ...publisher,
+                    avatarUri: await this.objectStorageService.getUrl(assetId),
+                }
+                : publisher,
         };
     }
     async canManage(post, viewerId) {
@@ -938,6 +1099,17 @@ let PostsService = class PostsService {
             return false;
         return fallback;
     }
+    getSearchPatterns(q) {
+        const escaped = q
+            .replace(/!/g, '!!')
+            .replace(/%/g, '!%')
+            .replace(/_/g, '!_');
+        return {
+            exactQuery: q,
+            prefixQuery: `${escaped}%`,
+            containsQuery: `%${escaped}%`,
+        };
+    }
     async decrementCounter(postId, field) {
         await this.postRepo
             .createQueryBuilder()
@@ -968,12 +1140,12 @@ let PostsService = class PostsService {
                 return { mode: 'feed', score: Number(cursor.score), id };
             }
             const createdAt = new Date(cursor?.createdAt);
-            if (cursor?.mode === 'profile' &&
+            if ((cursor?.mode === 'profile' || cursor?.mode === 'mine') &&
                 !Number.isNaN(createdAt.getTime()) &&
                 Number.isInteger(id) &&
                 id > 0) {
                 return {
-                    mode: 'profile',
+                    mode: cursor.mode,
                     createdAt: createdAt.toISOString(),
                     id,
                 };
@@ -1032,6 +1204,8 @@ exports.PostsService = PostsService = __decorate([
         typeorm_2.Repository,
         pages_service_1.PagesService,
         post_storage_service_1.PostStorageService,
-        post_video_storage_service_1.PostVideoStorageService])
+        post_video_storage_service_1.PostVideoStorageService,
+        moderation_service_1.ModerationService,
+        object_storage_service_1.ObjectStorageService])
 ], PostsService);
 //# sourceMappingURL=posts.service.js.map

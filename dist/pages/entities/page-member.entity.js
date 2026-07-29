@@ -58,6 +58,7 @@ __decorate([
     __metadata("design:type", Date)
 ], PageMember.prototype, "createdAt", void 0);
 exports.PageMember = PageMember = __decorate([
-    (0, typeorm_1.Entity)('page_members')
+    (0, typeorm_1.Entity)('page_members'),
+    (0, typeorm_1.Unique)('UQ_page_members_page_user', ['pageId', 'userId'])
 ], PageMember);
 //# sourceMappingURL=page-member.entity.js.map

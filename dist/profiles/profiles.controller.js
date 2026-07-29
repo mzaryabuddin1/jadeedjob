@@ -21,6 +21,7 @@ const joi_1 = __importDefault(require("joi"));
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const profiles_service_1 = require("./profiles.service");
+const moderation_service_1 = require("../moderation/moderation.service");
 const profileSearchQuerySchema = joi_1.default.object({
     profileType: joi_1.default.string().valid('user', 'company').required(),
     q: joi_1.default.string().trim().min(2).max(80).required(),
@@ -28,11 +29,21 @@ const profileSearchQuerySchema = joi_1.default.object({
     limit: joi_1.default.number().integer().min(1).max(30).default(20),
 });
 let ProfilesController = class ProfilesController {
-    constructor(profilesService) {
+    constructor(profilesService, moderationService) {
         this.profilesService = profilesService;
+        this.moderationService = moderationService;
     }
-    searchProfiles(query) {
-        return this.profilesService.searchProfiles(query);
+    searchProfiles(query, req) {
+        return this.profilesService.searchProfiles(query, req.user.id);
+    }
+    getBlocked(req, page = 1, limit = 20) {
+        return this.moderationService.listBlocked(req.user.id, Number(page), Number(limit));
+    }
+    block(profileType, profileId, req) {
+        return this.moderationService.block(req.user.id, profileType, profileId);
+    }
+    unblock(profileType, profileId, req) {
+        return this.moderationService.unblock(req.user.id, profileType, profileId);
     }
     getProfile(profileType, profileId, req) {
         return this.profilesService.getProfile(profileType, profileId, req.user.id);
@@ -48,10 +59,38 @@ exports.ProfilesController = ProfilesController;
 __decorate([
     (0, common_1.Get)('search'),
     __param(0, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(profileSearchQuerySchema))),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], ProfilesController.prototype, "searchProfiles", null);
+__decorate([
+    (0, common_1.Get)('blocked'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", void 0)
+], ProfilesController.prototype, "getBlocked", null);
+__decorate([
+    (0, common_1.Post)(':profileType/:profileId/block'),
+    __param(0, (0, common_1.Param)('profileType')),
+    __param(1, (0, common_1.Param)('profileId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Object]),
+    __metadata("design:returntype", void 0)
+], ProfilesController.prototype, "block", null);
+__decorate([
+    (0, common_1.Delete)(':profileType/:profileId/block'),
+    __param(0, (0, common_1.Param)('profileType')),
+    __param(1, (0, common_1.Param)('profileId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Object]),
+    __metadata("design:returntype", void 0)
+], ProfilesController.prototype, "unblock", null);
 __decorate([
     (0, common_1.Get)(':profileType/:profileId'),
     __param(0, (0, common_1.Param)('profileType')),
@@ -82,6 +121,7 @@ __decorate([
 exports.ProfilesController = ProfilesController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('profiles'),
-    __metadata("design:paramtypes", [profiles_service_1.ProfilesService])
+    __metadata("design:paramtypes", [profiles_service_1.ProfilesService,
+        moderation_service_1.ModerationService])
 ], ProfilesController);
 //# sourceMappingURL=profiles.controller.js.map

@@ -1,10 +1,8 @@
 import { UsersService } from './users.service';
 import { Request } from 'express';
-import { FilesService } from 'src/files/files.service';
 export declare class UsersController {
     private readonly usersService;
-    private readonly filesService;
-    constructor(usersService: UsersService, filesService: FilesService);
+    constructor(usersService: UsersService);
     getMe(req: Request): Promise<{
         user: any;
         verificationRequirements: import("./profile-verification.util").VerificationRequirements;

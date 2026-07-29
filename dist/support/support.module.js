@@ -9,13 +9,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SupportModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const files_module_1 = require("../files/files.module");
 const notifications_module_1 = require("../notifications/notifications.module");
+const user_entity_1 = require("../users/entities/user.entity");
 const support_contact_message_entity_1 = require("./entities/support-contact-message.entity");
 const support_ticket_attachment_entity_1 = require("./entities/support-ticket-attachment.entity");
 const support_ticket_entity_1 = require("./entities/support-ticket.entity");
 const support_controller_1 = require("./support.controller");
 const support_service_1 = require("./support.service");
+const support_ticket_message_entity_1 = require("./entities/support-ticket-message.entity");
+const admin_support_controller_1 = require("./admin-support.controller");
 let SupportModule = class SupportModule {
 };
 exports.SupportModule = SupportModule;
@@ -26,11 +28,12 @@ exports.SupportModule = SupportModule = __decorate([
                 support_contact_message_entity_1.SupportContactMessage,
                 support_ticket_entity_1.SupportTicket,
                 support_ticket_attachment_entity_1.SupportTicketAttachment,
+                support_ticket_message_entity_1.SupportTicketMessage,
+                user_entity_1.User,
             ]),
-            files_module_1.FilesModule,
             notifications_module_1.NotificationsModule,
         ],
-        controllers: [support_controller_1.SupportController],
+        controllers: [support_controller_1.SupportController, admin_support_controller_1.AdminSupportController],
         providers: [support_service_1.SupportService],
     })
 ], SupportModule);

@@ -1,27 +1,66 @@
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
-import { User } from 'src/users/entities/user.entity';
-import { SendMessageDto } from './dto/send-message.dto';
-import { ChatMessage } from './entities/chat-message.entity';
-import { PageMember } from 'src/pages/entities/page-member.entity';
+import { ModerationService } from 'src/moderation/moderation.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { PageMember } from 'src/pages/entities/page-member.entity';
+import { User } from 'src/users/entities/user.entity';
+import { ChatConversation } from './entities/chat-conversation.entity';
+import { ChatMessage } from './entities/chat-message.entity';
+import { ChatParticipant } from './entities/chat-participant.entity';
+import { ChatReadState } from './entities/chat-read-state.entity';
+import { JobInvitation } from './entities/job-invitation.entity';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
+type MessageInput = {
+    content?: string;
+    text?: string;
+    mediaUrl?: string;
+    messageType?: 'text' | 'image' | 'video' | 'audio' | 'file';
+    attachments?: Array<{
+        fileUrl: string;
+        fileName?: string;
+        contentType?: string;
+    }>;
+    clientMessageId?: string;
+};
 export declare class ChatService {
     private readonly messageRepo;
+    private readonly conversationRepo;
+    private readonly participantRepo;
+    private readonly readRepo;
+    private readonly invitationRepo;
     private readonly appRepo;
     private readonly jobRepo;
     private readonly userRepo;
     private readonly pageMemberRepo;
+    private readonly companyRepo;
     private readonly notificationsService;
-    constructor(messageRepo: Repository<ChatMessage>, appRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, pageMemberRepo: Repository<PageMember>, notificationsService: NotificationsService);
-    userCanAccessApplication(userId: number, appId: number): Promise<boolean>;
+    private readonly moderationService;
+    private readonly idempotencyService;
+    private readonly objectStorageService;
+    constructor(messageRepo: Repository<ChatMessage>, conversationRepo: Repository<ChatConversation>, participantRepo: Repository<ChatParticipant>, readRepo: Repository<ChatReadState>, invitationRepo: Repository<JobInvitation>, appRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, pageMemberRepo: Repository<PageMember>, companyRepo: Repository<CompanyPage>, notificationsService: NotificationsService, moderationService: ModerationService, idempotencyService: IdempotencyService, objectStorageService: ObjectStorageService);
+    ensureApplicationConversation(applicationId: number, manager?: EntityManager): Promise<ChatConversation>;
+    resolveConversation(reference: string | number): Promise<ChatConversation>;
+    userCanAccessApplication(userId: number, applicationId: number): Promise<boolean>;
+    canWriteConversation(userId: number, reference: string | number): Promise<boolean>;
+    assertCanJoinConversation(userId: number, reference: string | number): Promise<ChatConversation>;
+    realtimeAudienceIds(reference: string | number): Promise<{
+        conversationId: string;
+        userIds: number[];
+    }>;
     listChats(userId: number, page?: number, limit?: number): Promise<{
         data: {
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
+            type: "application" | "inquiry" | "invitation";
             jobId: number;
             applicationId: number;
             participant: {
                 id: number;
+                type: string;
                 name: string;
                 avatarUrl: string;
             };
@@ -30,10 +69,16 @@ export declare class ChatService {
                 title: string;
                 companyName: string;
             };
+            invitation: {
+                id: any;
+                status: any;
+            };
             lastMessage: {
                 id: number;
-                chatId: number;
+                chatId: string;
+                conversationId: string;
                 jobApplicationId: number;
+                clientMessageId: string;
                 senderId: number;
                 senderName: string;
                 senderAvatar: string;
@@ -48,33 +93,20 @@ export declare class ChatService {
                 readAt: Date;
             };
             unreadCount: number;
+            readOnly: boolean;
+            readOnlyReason: string;
         }[];
         total: number;
         totalPages: number;
         currentPage: number;
     }>;
-    sendMessage(senderId: number, dto: SendMessageDto & any): Promise<{
-        id: number;
-        chatId: number;
-        jobApplicationId: number;
-        senderId: number;
-        senderName: string;
-        senderAvatar: string;
-        text: string;
-        attachments: {
-            fileUrl: string;
-            fileName?: string;
-            contentType?: string;
-        }[];
-        messageType: string;
-        createdAt: Date;
-        readAt: Date;
-    }>;
-    getMessages(jobApplicationId: number, userId: number, page?: number, limit?: number): Promise<{
+    getMessages(reference: string | number, userId: number, pageOrBefore?: number | string, limit?: number): Promise<{
         data: {
             id: number;
-            chatId: number;
+            chatId: string;
+            conversationId: string;
             jobApplicationId: number;
+            clientMessageId: string;
             senderId: number;
             senderName: string;
             senderAvatar: string;
@@ -88,18 +120,100 @@ export declare class ChatService {
             createdAt: Date;
             readAt: Date;
         }[];
+        nextBefore: string;
         total: number;
         totalPages: number;
         currentPage: number;
+        readOnly: boolean;
+        readOnlyReason: string;
     }>;
-    markRead(jobApplicationId: number, userId: number): Promise<{
-        message: string;
+    sendMessage(senderId: number, input: (MessageInput & {
+        conversationId: string | number;
+    }) | (MessageInput & {
+        jobApplicationId: number;
+    })): Promise<{
+        id: number;
+        chatId: string;
+        conversationId: string;
+        jobApplicationId: number;
+        clientMessageId: string;
+        senderId: number;
+        senderName: string;
+        senderAvatar: string;
+        text: string;
+        attachments: {
+            fileUrl: string;
+            fileName?: string;
+            contentType?: string;
+        }[];
+        messageType: string;
+        createdAt: Date;
+        readAt: Date;
     }>;
+    markRead(reference: string | number, userId: number): Promise<{
+        chatId: string;
+        conversationId: string;
+        lastReadMessageId: number;
+        readAt: Date;
+    }>;
+    getChatOptions(viewerId: number, profileType: string, profileId: number): Promise<{
+        unavailableReason?: string;
+        available: boolean;
+        action: string;
+        jobs: {
+            id: string;
+            title: string;
+        }[];
+    }>;
+    createContext(userId: number, input: {
+        action: 'invite' | 'inquiry';
+        profileType: 'user' | 'company';
+        profileId: string | number;
+        jobId: string | number;
+        clientRequestId: string;
+    }): Promise<{
+        chatId: string;
+        conversationId: string;
+        jobId: string;
+        jobTitle: string;
+        participantId: string;
+        invitation: {
+            id: string;
+            status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+        };
+    }>;
+    updateInvitation(invitationId: string, userId: number, action: 'accept' | 'decline' | 'cancel'): Promise<{
+        invitation: {
+            id: string;
+            status: "accepted" | "declined" | "cancelled";
+            respondedAt: Date;
+        };
+        chatId: string;
+        conversationId: string;
+        applicationId: number;
+    }>;
+    syncApplicationConversation(applicationId: number, status: string): Promise<void>;
     formatUploadedAttachment(file: Express.Multer.File, fileUrl: string): {
         fileName: string;
         fileUrl: string;
         contentType: string;
     };
-    private formatChatSummary;
+    private createContextInternal;
+    private acceptInvitationApplication;
+    private canAccess;
+    private assertCanMutate;
+    private isWritable;
+    private applicationWritable;
+    private conversationBlocked;
+    private companyPermission;
+    private companyChatIds;
+    private canManageJobForChat;
+    private findManagedActiveJobs;
+    private findContextConversation;
+    private recipientIds;
+    private formatConversationSummary;
     private formatMessage;
+    private contextResponse;
+    private userName;
 }
+export {};

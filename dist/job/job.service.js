@@ -25,6 +25,7 @@ const page_member_entity_1 = require("../pages/entities/page-member.entity");
 const job_application_entity_1 = require("../job-application/entities/job-application.entity");
 const notifications_service_1 = require("../notifications/notifications.service");
 const company_permissions_1 = require("../pages/company-permissions");
+const moderation_service_1 = require("../moderation/moderation.service");
 const JOB_SORT_COLUMNS = {
     createdAt: 'job.createdAt',
     updatedAt: 'job.updatedAt',
@@ -33,7 +34,7 @@ const JOB_SORT_COLUMNS = {
     status: 'job.status',
 };
 let JobService = class JobService {
-    constructor(jobRepo, userRepo, pageRepo, branchRepo, memberRepo, jobApplicationRepo, firebaseService, notificationsService) {
+    constructor(jobRepo, userRepo, pageRepo, branchRepo, memberRepo, jobApplicationRepo, firebaseService, notificationsService, moderationService) {
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
         this.pageRepo = pageRepo;
@@ -42,6 +43,7 @@ let JobService = class JobService {
         this.jobApplicationRepo = jobApplicationRepo;
         this.firebaseService = firebaseService;
         this.notificationsService = notificationsService;
+        this.moderationService = moderationService;
     }
     async assertCompanyPermission(pageId, userId, permission, requireApproval = false) {
         if (!pageId)
@@ -204,7 +206,7 @@ let JobService = class JobService {
         }
         return this.formatJob(savedJob);
     }
-    async findNearbyJobs(query) {
+    async findNearbyJobs(query, userId) {
         const { lat, lng, page = 1, limit = 10, search = '', sortBy, sortOrder = 'DESC', } = query;
         const currentPage = Number(page);
         const take = Math.min(100, Math.max(1, Number(limit) || 10));
@@ -239,6 +241,19 @@ let JobService = class JobService {
         const searchParams = search
             ? [`%${search}%`, `%${search}%`, `%${search}%`]
             : [];
+        const blocked = userId
+            ? await this.moderationService.blockedTargets(userId)
+            : { userIds: [], companyIds: [] };
+        const blockedUserClause = blocked.userIds.length
+            ? 'AND (j.pageId IS NOT NULL OR j.createdBy NOT IN (?))'
+            : '';
+        const blockedCompanyClause = blocked.companyIds.length
+            ? 'AND (j.pageId IS NULL OR j.pageId NOT IN (?))'
+            : '';
+        const visibilityParams = [
+            ...(blocked.userIds.length ? [blocked.userIds] : []),
+            ...(blocked.companyIds.length ? [blocked.companyIds] : []),
+        ];
         const jobs = await this.jobRepo.query(`
         SELECT
           j.*,
@@ -267,18 +282,27 @@ let JobService = class JobService {
         LEFT JOIN company_branches b ON b.id = j.branchId
         LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND u.isBanned = 0 AND u.deletedAt IS NULL
+          AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
+          ${blockedUserClause}
+          ${blockedCompanyClause}
           ${searchClause}
         ORDER BY j.location IS NULL ASC, ${orderBy} ${orderDirection}
         LIMIT ?
         OFFSET ?
-      `, [pointText, ...searchParams, take, offset]);
+      `, [pointText, ...visibilityParams, ...searchParams, take, offset]);
         const countResult = await this.jobRepo.query(`
         SELECT COUNT(*) AS total
         FROM jobs j
         LEFT JOIN pages p ON p.id = j.pageId
+        LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND u.isBanned = 0 AND u.deletedAt IS NULL
+          AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
+          ${blockedUserClause}
+          ${blockedCompanyClause}
           ${searchClause}
-      `, searchParams);
+      `, [...visibilityParams, ...searchParams]);
         const total = Number(countResult[0]?.total || 0);
         return {
             data: jobs.map((job) => this.formatRawJob(job)),
@@ -304,7 +328,7 @@ let JobService = class JobService {
             lng !== '' &&
             myjobs !== 'true' &&
             !requestedCompanyId) {
-            return this.findNearbyJobs(query);
+            return this.findNearbyJobs(query, userId);
         }
         if (requestedCompanyId && myjobs === 'true') {
             throw new common_1.BadRequestException('companyId cannot be combined with myjobs');
@@ -341,6 +365,20 @@ let JobService = class JobService {
         else {
             qb.andWhere('job.isActive = :active', { active: true });
             qb.andWhere("COALESCE(job.status, 'active') = 'active'");
+            qb.andWhere('creator.isBanned = :creatorBanned', {
+                creatorBanned: false,
+            });
+            qb.andWhere('creator.deletedAt IS NULL');
+            qb.andWhere('(job.pageId IS NULL OR page.verificationStatus = :approvedCompany)', { approvedCompany: 'approved' });
+            if (userId) {
+                const blocked = await this.moderationService.blockedTargets(userId);
+                if (blocked.userIds.length) {
+                    qb.andWhere('(job.pageId IS NOT NULL OR job.createdBy NOT IN (:...blockedUserIds))', { blockedUserIds: blocked.userIds });
+                }
+                if (blocked.companyIds.length) {
+                    qb.andWhere('(job.pageId IS NULL OR job.pageId NOT IN (:...blockedCompanyIds))', { blockedCompanyIds: blocked.companyIds });
+                }
+            }
         }
         if (filter)
             qb.andWhere('job.filterId = :filterId', { filterId: Number(filter) });
@@ -433,11 +471,29 @@ let JobService = class JobService {
         if (!job)
             throw new common_1.NotFoundException(`Job with ID ${id} not found`);
         const status = job.status || (job.isActive ? 'active' : 'closed');
-        if (status !== 'active' && job.createdBy !== userId && job.pageId) {
-            await this.assertCompanyPermission(job.pageId, Number(userId), 'viewApplicants');
+        let canManage = job.createdBy === userId;
+        if (job.pageId && userId) {
+            try {
+                await this.assertCompanyPermission(job.pageId, Number(userId), 'viewApplicants');
+                canManage = true;
+            }
+            catch {
+                canManage = false;
+            }
         }
-        else if (status !== 'active' && job.createdBy !== userId) {
+        if (!canManage && status !== 'active') {
             throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+        }
+        if (!canManage) {
+            if (job.creator?.isBanned ||
+                job.creator?.deletedAt ||
+                (job.pageId && job.page?.verificationStatus !== 'approved')) {
+                throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+            }
+            if (userId &&
+                (await this.moderationService.isInteractionBlocked(userId, job.pageId ? 'company' : 'user', job.pageId || job.createdBy))) {
+                throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+            }
         }
         return this.formatJob(job);
     }
@@ -644,6 +700,7 @@ exports.JobService = JobService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         firebase_service_1.FirebaseService,
-        notifications_service_1.NotificationsService])
+        notifications_service_1.NotificationsService,
+        moderation_service_1.ModerationService])
 ], JobService);
 //# sourceMappingURL=job.service.js.map

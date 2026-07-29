@@ -14,6 +14,8 @@ export declare class EmployerJobApplicationController {
             rating: number;
             ratingCount: number;
             status: string;
+            bidAmount: number;
+            bidCurrency: string;
             lastReview: {
                 stars: number;
                 comment: string;
@@ -28,7 +30,9 @@ export declare class EmployerJobApplicationController {
                 ratingAverage: number;
                 ratingCount: number;
             };
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
             createdAt: Date;
             updatedAt: Date;
         }[];
@@ -58,5 +62,18 @@ export declare class EmployerJobApplicationController {
         totalPages: number;
         currentPage: number;
     }>;
-    updateJobApplicationStatus(params: any, body: any, req: any): Promise<import("./entities/job-application.entity").JobApplication>;
+    updateJobApplicationStatus(params: any, body: any, req: any): Promise<{
+        id: number;
+        applicationId: number;
+        jobId: number;
+        applicantId: number;
+        status: string;
+        bidAmount: number;
+        bidCurrency: string;
+        chatId: string;
+        conversationId: string;
+        legacyApplicationChatId: number;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
 }

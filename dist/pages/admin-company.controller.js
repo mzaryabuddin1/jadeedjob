@@ -26,11 +26,38 @@ let AdminCompanyController = class AdminCompanyController {
     constructor(pagesService) {
         this.pagesService = pagesService;
     }
+    listCompanies(query) {
+        return this.pagesService.getAdminCompanyReviews(query);
+    }
+    getCompany(companyId) {
+        return this.pagesService.getAdminCompanyReview(companyId);
+    }
     updateVerification(companyId, body, req) {
         return this.pagesService.updateCompanyVerification(companyId, req.user.id, body.status, body.reason);
     }
 };
 exports.AdminCompanyController = AdminCompanyController;
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        status: joi_1.default.string()
+            .valid('pending', 'approved', 'needs_changes', 'rejected', 'suspended', 'all')
+            .default('pending'),
+        q: joi_1.default.string().trim().max(80).allow('').optional(),
+        page: joi_1.default.number().integer().min(1).default(1),
+        limit: joi_1.default.number().integer().min(1).max(100).default(20),
+    })))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AdminCompanyController.prototype, "listCompanies", null);
+__decorate([
+    (0, common_1.Get)(':companyId'),
+    __param(0, (0, common_1.Param)('companyId', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], AdminCompanyController.prototype, "getCompany", null);
 __decorate([
     (0, common_1.Patch)(':companyId/verification'),
     __param(0, (0, common_1.Param)('companyId', common_1.ParseIntPipe)),

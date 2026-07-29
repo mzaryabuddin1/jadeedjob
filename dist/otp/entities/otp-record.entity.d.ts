@@ -1,4 +1,4 @@
-export type OtpPurpose = 'register' | 'forgot-password' | 'phone-change' | 'password-change';
+export type OtpPurpose = 'register' | 'forgot-password' | 'phone-change' | 'password-change' | 'social-phone' | 'account-deletion' | 'account-recovery';
 export declare class OtpRecord {
     id: number;
     purpose: OtpPurpose;

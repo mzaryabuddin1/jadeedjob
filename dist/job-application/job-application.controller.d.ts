@@ -2,12 +2,27 @@ import { JobApplicationService } from './job-application.service';
 export declare class JobApplicationController {
     private readonly jobAppService;
     constructor(jobAppService: JobApplicationService);
-    apply(body: any, req: any): Promise<import("./entities/job-application.entity").JobApplication>;
+    apply(body: any, idempotencyKey: string, req: any): Promise<{
+        id: number;
+        applicationId: number;
+        jobId: number;
+        applicantId: number;
+        status: string;
+        bidAmount: number;
+        bidCurrency: string;
+        chatId: string;
+        conversationId: string;
+        legacyApplicationChatId: number;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     getMyApplications(req: any, page?: number, limit?: number, status?: any): Promise<{
         data: {
             applicationId: number;
             id: number;
             status: string;
+            bidAmount: number;
+            bidCurrency: string;
             createdAt: Date;
             updatedAt: Date;
             job: {
@@ -32,7 +47,9 @@ export declare class JobApplicationController {
                 companyName: string;
                 logoUrl: string;
             };
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
         }[];
         total: number;
         totalPages: number;
@@ -73,6 +90,8 @@ export declare class JobApplicationController {
             rating: number;
             ratingCount: number;
             status: string;
+            bidAmount: number;
+            bidCurrency: string;
             lastReview: {
                 stars: number;
                 comment: string;
@@ -87,7 +106,9 @@ export declare class JobApplicationController {
                 ratingAverage: number;
                 ratingCount: number;
             };
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
             createdAt: Date;
             updatedAt: Date;
         }[];
@@ -118,9 +139,35 @@ export declare class JobApplicationController {
         currentPage: number;
     }>;
     getByJob(jobId: number): Promise<import("./entities/job-application.entity").JobApplication[]>;
-    updateStatus(params: any, body: any, req: any): Promise<import("./entities/job-application.entity").JobApplication>;
+    updateStatus(params: any, body: any, req: any): Promise<{
+        id: number;
+        applicationId: number;
+        jobId: number;
+        applicantId: number;
+        status: string;
+        bidAmount: number;
+        bidCurrency: string;
+        chatId: string;
+        conversationId: string;
+        legacyApplicationChatId: number;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     withdraw(id: number, req: any): Promise<{
         message: string;
-        application: import("./entities/job-application.entity").JobApplication;
+        application: {
+            id: number;
+            applicationId: number;
+            jobId: number;
+            applicantId: number;
+            status: string;
+            bidAmount: number;
+            bidCurrency: string;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
+            createdAt: Date;
+            updatedAt: Date;
+        };
     }>;
 }

@@ -35,6 +35,13 @@ const notifications_module_1 = require("./notifications/notifications.module");
 const support_module_1 = require("./support/support.module");
 const profiles_module_1 = require("./profiles/profiles.module");
 const posts_module_1 = require("./posts/posts.module");
+const schedule_1 = require("@nestjs/schedule");
+const idempotency_module_1 = require("./idempotency/idempotency.module");
+const storage_module_1 = require("./storage/storage.module");
+const push_module_1 = require("./push/push.module");
+const moderation_module_1 = require("./moderation/moderation.module");
+const account_deletion_module_1 = require("./users/account-deletion.module");
+const realtime_module_1 = require("./realtime/realtime.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -50,10 +57,17 @@ exports.AppModule = AppModule = __decorate([
                 password: process.env.DB_PASSWORD,
                 database: process.env.DB_DATABASE,
                 autoLoadEntities: true,
-                synchronize: true,
+                synchronize: (process.env.NODE_ENV || 'development') === 'development' &&
+                    process.env.DB_SYNCHRONIZE !== 'false',
                 legacySpatialSupport: false,
             }),
+            schedule_1.ScheduleModule.forRoot(),
             auth_session_module_1.AuthSessionModule,
+            idempotency_module_1.IdempotencyModule,
+            storage_module_1.StorageModule,
+            realtime_module_1.RealtimeModule,
+            push_module_1.PushModule,
+            moderation_module_1.ModerationModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             otp_module_1.OtpModule,
@@ -63,8 +77,8 @@ exports.AppModule = AppModule = __decorate([
             throttler_1.ThrottlerModule.forRoot({
                 throttlers: [
                     {
-                        ttl: 30000,
-                        limit: 10,
+                        ttl: 60000,
+                        limit: 120,
                     },
                 ],
             }),
@@ -82,6 +96,7 @@ exports.AppModule = AppModule = __decorate([
             support_module_1.SupportModule,
             profiles_module_1.ProfilesModule,
             posts_module_1.PostsModule,
+            account_deletion_module_1.AccountDeletionModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

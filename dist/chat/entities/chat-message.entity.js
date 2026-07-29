@@ -13,6 +13,7 @@ exports.ChatMessage = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../users/entities/user.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
+const chat_conversation_entity_1 = require("./chat-conversation.entity");
 let ChatMessage = class ChatMessage {
 };
 exports.ChatMessage = ChatMessage;
@@ -21,14 +22,32 @@ __decorate([
     __metadata("design:type", Number)
 ], ChatMessage.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", Number)
 ], ChatMessage.prototype, "jobApplicationId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => job_application_entity_1.JobApplication, (app) => app.messages, { onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)(() => job_application_entity_1.JobApplication, (app) => app.messages, {
+        onDelete: 'CASCADE',
+    }),
     (0, typeorm_1.JoinColumn)({ name: 'jobApplicationId' }),
     __metadata("design:type", job_application_entity_1.JobApplication)
 ], ChatMessage.prototype, "jobApplication", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 36 }),
+    __metadata("design:type", String)
+], ChatMessage.prototype, "conversationId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => chat_conversation_entity_1.ChatConversation, { nullable: true, onDelete: 'CASCADE' }),
+    (0, typeorm_1.JoinColumn)({
+        name: 'conversationId',
+        foreignKeyConstraintName: 'FK_chat_messages_conversation',
+    }),
+    __metadata("design:type", chat_conversation_entity_1.ChatConversation)
+], ChatMessage.prototype, "conversation", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 120 }),
+    __metadata("design:type", String)
+], ChatMessage.prototype, "clientMessageId", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", Number)
@@ -67,6 +86,11 @@ __decorate([
     __metadata("design:type", Date)
 ], ChatMessage.prototype, "createdAt", void 0);
 exports.ChatMessage = ChatMessage = __decorate([
-    (0, typeorm_1.Entity)('chat_messages')
+    (0, typeorm_1.Entity)('chat_messages'),
+    (0, typeorm_1.Unique)('UQ_chat_messages_conversation_sender_client', [
+        'conversationId',
+        'senderId',
+        'clientMessageId',
+    ])
 ], ChatMessage);
 //# sourceMappingURL=chat-message.entity.js.map

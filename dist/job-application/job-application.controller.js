@@ -21,14 +21,18 @@ const job_application_service_1 = require("./job-application.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const joi_1 = __importDefault(require("joi"));
+const throttler_1 = require("@nestjs/throttler");
 let JobApplicationController = class JobApplicationController {
     constructor(jobAppService) {
         this.jobAppService = jobAppService;
     }
-    async apply(body, req) {
+    async apply(body, idempotencyKey, req) {
         return this.jobAppService.apply({
-            jobId: Number(body.job),
+            jobId: Number(body.jobId ?? body.job),
             applicantId: req.user.id,
+            bidAmount: body.bidAmount,
+            bidCurrency: body.bidCurrency,
+            idempotencyKey,
         });
     }
     async getMyApplications(req, page = 1, limit = 10, status) {
@@ -57,13 +61,21 @@ let JobApplicationController = class JobApplicationController {
 exports.JobApplicationController = JobApplicationController;
 __decorate([
     (0, common_1.Post)(),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        job: joi_1.default.number().required(),
-    }))),
-    __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        job: joi_1.default.number().integer().positive().optional(),
+        jobId: joi_1.default.number().integer().positive().optional(),
+        bidAmount: joi_1.default.number().positive().precision(2).optional(),
+        bidCurrency: joi_1.default.string().trim().max(12).optional(),
+    })
+        .or('job', 'jobId')
+        .messages({
+        'object.missing': 'jobId is required',
+    })))),
+    __param(1, (0, common_1.Headers)('idempotency-key')),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "apply", null);
 __decorate([

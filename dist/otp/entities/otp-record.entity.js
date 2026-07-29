@@ -21,7 +21,15 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['register', 'forgot-password', 'phone-change', 'password-change'],
+        enum: [
+            'register',
+            'forgot-password',
+            'phone-change',
+            'password-change',
+            'social-phone',
+            'account-deletion',
+            'account-recovery',
+        ],
     }),
     __metadata("design:type", String)
 ], OtpRecord.prototype, "purpose", void 0);

@@ -23,6 +23,9 @@ const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
 const filter_module_1 = require("../filter/filter.module");
 const firebase_module_1 = require("../firebase/firebase.module");
+const auth_identity_entity_1 = require("./entities/auth-identity.entity");
+const social_auth_service_1 = require("./social-auth.service");
+const auth_social_challenge_entity_1 = require("./entities/auth-social-challenge.entity");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -32,9 +35,15 @@ exports.AuthModule = AuthModule = __decorate([
             config_1.ConfigModule.forRoot(),
             jwt_1.JwtModule.register({
                 secret: process.env.JWT_SECRET,
-                signOptions: { expiresIn: '365d' },
+                signOptions: { expiresIn: '15m' },
             }),
-            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language]),
+            typeorm_1.TypeOrmModule.forFeature([
+                user_entity_1.User,
+                country_entity_1.Country,
+                language_entity_1.Language,
+                auth_identity_entity_1.AuthIdentity,
+                auth_social_challenge_entity_1.AuthSocialChallenge,
+            ]),
             users_module_1.UsersModule,
             otp_module_1.OtpModule,
             country_module_1.CountryModule,
@@ -44,7 +53,7 @@ exports.AuthModule = AuthModule = __decorate([
             firebase_module_1.FirebaseModule
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService],
+        providers: [auth_service_1.AuthService, social_auth_service_1.SocialAuthService],
         exports: [auth_service_1.AuthService],
     })
 ], AuthModule);

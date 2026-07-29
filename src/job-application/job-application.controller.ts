@@ -10,11 +10,13 @@ import {
   UsePipes,
   Query,
   ParseIntPipe,
+  Headers,
 } from '@nestjs/common';
 import { JobApplicationService } from './job-application.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
+import { Throttle } from '@nestjs/throttler';
 
 @UseGuards(JwtAuthGuard)
 @Controller('job-application')
@@ -22,17 +24,32 @@ export class JobApplicationController {
   constructor(private readonly jobAppService: JobApplicationService) {}
 
   @Post()
-  @UsePipes(
-    new JoiValidationPipe(
-      Joi.object({
-        job: Joi.number().required(),
-      }),
-    ),
-  )
-  async apply(@Body() body: any, @Req() req: any) {
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  async apply(
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          job: Joi.number().integer().positive().optional(),
+          jobId: Joi.number().integer().positive().optional(),
+          bidAmount: Joi.number().positive().precision(2).optional(),
+          bidCurrency: Joi.string().trim().max(12).optional(),
+        })
+          .or('job', 'jobId')
+          .messages({
+            'object.missing': 'jobId is required',
+          }),
+      ),
+    )
+    body: any,
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Req() req: any,
+  ) {
     return this.jobAppService.apply({
-      jobId: Number(body.job),
+      jobId: Number(body.jobId ?? body.job),
       applicantId: req.user.id,
+      bidAmount: body.bidAmount,
+      bidCurrency: body.bidCurrency,
+      idempotencyKey,
     });
   }
 
@@ -80,7 +97,14 @@ export class JobApplicationController {
       new JoiValidationPipe(
         Joi.object({
           status: Joi.string()
-            .valid('pending', 'accepted', 'rejected', 'withdrawn', 'completed', 'all')
+            .valid(
+              'pending',
+              'accepted',
+              'rejected',
+              'withdrawn',
+              'completed',
+              'all',
+            )
             .default('all'),
           page: Joi.number().integer().min(1).default(1),
           limit: Joi.number().integer().min(1).max(100).default(20),

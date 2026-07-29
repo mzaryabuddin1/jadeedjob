@@ -24,6 +24,9 @@ const joi_1 = __importDefault(require("joi"));
 const twilio_service_1 = require("../twilio/twilio.service");
 const users_service_1 = require("../users/users.service");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
+const auth_session_service_1 = require("./auth-session.service");
+const social_auth_service_1 = require("./social-auth.service");
+const throttler_1 = require("@nestjs/throttler");
 const relationIdSchema = joi_1.default.alternatives().try(joi_1.default.number().integer().positive(), joi_1.default.string().pattern(/^\d+$/));
 const optionalString = () => joi_1.default.string().allow('', null).optional();
 const passwordSchema = joi_1.default.string()
@@ -39,12 +42,39 @@ const getRelationId = (value) => {
     return id;
 };
 const isRelationIdLike = (value) => getRelationId(value) !== undefined;
+const sessionDeviceFields = {
+    installationId: joi_1.default.string().trim().max(120).optional(),
+    platform: joi_1.default.string().valid('ios', 'android', 'web', 'unknown').optional(),
+    deviceName: joi_1.default.string().trim().max(120).allow('', null).optional(),
+    appVersion: joi_1.default.string().trim().max(40).allow('', null).optional(),
+    locale: joi_1.default.string().trim().max(20).allow('', null).optional(),
+};
 let AuthController = class AuthController {
-    constructor(authService, otpService, twilioService, usersService) {
+    constructor(authService, otpService, twilioService, usersService, authSessionService, socialAuthService) {
         this.authService = authService;
         this.otpService = otpService;
         this.twilioService = twilioService;
         this.usersService = usersService;
+        this.authSessionService = authSessionService;
+        this.socialAuthService = socialAuthService;
+    }
+    deviceFrom(body) {
+        return {
+            installationId: body.installationId,
+            platform: body.platform,
+            deviceName: body.deviceName,
+            appVersion: body.appVersion,
+        };
+    }
+    async sessionResponse(user, session, message) {
+        const { userId: _userId, ...tokens } = session;
+        const profileResponse = await this.usersService.getMyProfileResponse(user.id);
+        return {
+            ...(message ? { message } : {}),
+            ...tokens,
+            profile: profileResponse.user,
+            ...profileResponse,
+        };
     }
     async deliverOtp(phone, code, purpose) {
         if (!process.env.TWILIO_ACCOUNT_SID ||
@@ -117,26 +147,28 @@ let AuthController = class AuthController {
             isVerified: false,
         }));
         if (fcmToken) {
-            await this.authService.attachFcmToken(user.id, fcmToken);
+            await this.authService.attachFcmToken(user.id, fcmToken, {
+                installationId: body.installationId,
+                platform: body.platform,
+                appVersion: body.appVersion,
+                locale: body.locale,
+            });
         }
-        const token = this.authService.generateToken(user);
-        const profile = await this.usersService.getMyProfileResponse(user.id);
-        return {
-            access_token: token,
-            ...profile,
-        };
+        const session = await this.authSessionService.createSession(user, this.deviceFrom(body));
+        return this.sessionResponse(user, session);
     }
     async login(dto) {
         const user = await this.authService.validateUser(dto.phone, dto.password);
         if (dto.fcmToken) {
-            await this.authService.attachFcmToken(user.id, dto.fcmToken);
+            await this.authService.attachFcmToken(user.id, dto.fcmToken, {
+                installationId: dto.installationId,
+                platform: dto.platform,
+                appVersion: dto.appVersion,
+                locale: dto.locale,
+            });
         }
-        const token = this.authService.generateToken(user);
-        const profile = await this.usersService.getMyProfileResponse(user.id);
-        return {
-            access_token: token,
-            ...profile,
-        };
+        const session = await this.authSessionService.createSession(user, this.deviceFrom(dto));
+        return this.sessionResponse(user, session);
     }
     async sendForgotPasswordOtp(body) {
         const user = await this.authService.findUserByPhone(body.phone);
@@ -164,7 +196,8 @@ let AuthController = class AuthController {
         if (!user)
             throw new common_1.UnauthorizedException('User not found');
         const { salt, hash } = this.authService.hashPassword(newPassword);
-        await this.authService.resetPassword(phone, salt, hash);
+        const updated = await this.authService.resetPassword(phone, salt, hash);
+        await this.authSessionService.revokeAllForUser(updated.id, 'password_reset');
         return { message: 'Password reset successfully' };
     }
     async sendPhoneChangeOtp(req, body) {
@@ -227,18 +260,90 @@ let AuthController = class AuthController {
             otp: body.otp,
         });
         const updatedUser = await this.authService.changePassword(userId, body.newPassword);
-        const token = this.authService.generateToken(updatedUser);
-        const profile = await this.usersService.getMyProfileResponse(updatedUser.id);
-        return {
-            message: 'Password changed successfully',
-            access_token: token,
-            ...profile,
-        };
+        await this.authSessionService.revokeAllForUser(updatedUser.id, 'password_changed');
+        const session = await this.authSessionService.createSession(updatedUser, this.deviceFrom(body));
+        return this.sessionResponse(updatedUser, session, 'Password changed successfully');
+    }
+    async refresh(body) {
+        const session = await this.authSessionService.refresh(body.refreshToken);
+        const user = await this.authService.findUserById(session.userId);
+        return this.sessionResponse(user, session);
+    }
+    async logout(req) {
+        await this.authSessionService.revokeSession(req.user?.sid, 'logout');
+        return { message: 'Logged out successfully' };
+    }
+    async logoutAll(req) {
+        const userId = req.user?.id;
+        await this.authService.incrementTokenVersion(userId);
+        await this.authSessionService.revokeAllForUser(userId, 'logout_all');
+        return { message: 'Logged out from all devices successfully' };
+    }
+    async google(body, response) {
+        const providerProfile = await this.socialAuthService.verifyGoogle(body.idToken);
+        return this.finishSocialLogin(providerProfile, body, response);
+    }
+    async facebook(body, response) {
+        const providerProfile = await this.socialAuthService.verifyFacebook(body.accessToken);
+        return this.finishSocialLogin(providerProfile, body, response);
+    }
+    async sendSocialPhoneOtp(body) {
+        const challenge = await this.socialAuthService.verifyPhoneChallenge(body.socialVerificationToken);
+        const { otp } = await this.otpService.createOtp({
+            purpose: 'social-phone',
+            target: body.phone,
+            metadata: {
+                challengeJti: challenge.jti,
+            },
+        });
+        await this.deliverOtp(body.phone, otp, 'social sign-in');
+        return this.otpService.otpResponse(`OTP sent to ${body.phone}`, otp);
+    }
+    async verifySocialPhoneOtp(body) {
+        const challenge = await this.socialAuthService.verifyPhoneChallenge(body.socialVerificationToken);
+        const otpRecord = await this.otpService.verifyOtp({
+            purpose: 'social-phone',
+            target: body.phone,
+            otp: body.otp,
+        });
+        if (otpRecord.metadata?.challengeJti !== challenge.jti) {
+            throw new common_1.UnauthorizedException('OTP does not match this social login');
+        }
+        const consumedChallenge = await this.socialAuthService.consumePhoneChallenge(body.socialVerificationToken);
+        const user = await this.socialAuthService.linkVerifiedPhone(consumedChallenge, body.phone);
+        if (body.fcmToken) {
+            await this.authService.attachFcmToken(user.id, body.fcmToken, {
+                installationId: body.installationId,
+                platform: body.platform,
+                appVersion: body.appVersion,
+                locale: body.locale,
+            });
+        }
+        const session = await this.authSessionService.createSession(user, this.deviceFrom(body));
+        return this.sessionResponse(user, session);
+    }
+    async finishSocialLogin(providerProfile, body, response) {
+        const user = await this.socialAuthService.findLinkedUser(providerProfile);
+        if (!user) {
+            response.status(202);
+            return await this.socialAuthService.createPhoneChallenge(providerProfile);
+        }
+        if (body.fcmToken) {
+            await this.authService.attachFcmToken(user.id, body.fcmToken, {
+                installationId: body.installationId,
+                platform: body.platform,
+                appVersion: body.appVersion,
+                locale: body.locale,
+            });
+        }
+        const session = await this.authSessionService.createSession(user, this.deviceFrom(body));
+        return this.sessionResponse(user, session);
     }
 };
 exports.AuthController = AuthController;
 __decorate([
     (0, common_1.Post)('register/send-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 300_000 } }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         firstName: joi_1.default.string().required(),
         lastName: optionalString(),
@@ -264,11 +369,13 @@ __decorate([
 ], AuthController.prototype, "sendOtp", null);
 __decorate([
     (0, common_1.Post)('register/verify-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 300_000 } }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
         otp: joi_1.default.string().optional(),
         code: joi_1.default.string().optional(),
         fcmToken: joi_1.default.string().optional(),
+        ...sessionDeviceFields,
     }).or('otp', 'code'))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -277,10 +384,12 @@ __decorate([
 ], AuthController.prototype, "verifyOtp", null);
 __decorate([
     (0, common_1.Post)('login'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
         password: joi_1.default.string().required(),
         fcmToken: joi_1.default.string().optional(),
+        ...sessionDeviceFields,
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -289,6 +398,7 @@ __decorate([
 ], AuthController.prototype, "login", null);
 __decorate([
     (0, common_1.Post)('forgot-password/send-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 300_000 } }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
     }))),
@@ -299,6 +409,7 @@ __decorate([
 ], AuthController.prototype, "sendForgotPasswordOtp", null);
 __decorate([
     (0, common_1.Post)('forgot-password/verify-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 300_000 } }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
         code: joi_1.default.string().optional(),
@@ -312,6 +423,7 @@ __decorate([
 ], AuthController.prototype, "verifyForgotPasswordOtp", null);
 __decorate([
     (0, common_1.Post)('phone-change/send-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 300_000 } }),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         currentPassword: joi_1.default.string().required(),
@@ -325,11 +437,13 @@ __decorate([
 ], AuthController.prototype, "sendPhoneChangeOtp", null);
 __decorate([
     (0, common_1.Post)('phone-change/verify-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 300_000 } }),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         currentPassword: joi_1.default.string().required(),
         newPhone: joi_1.default.string().required(),
         otp: joi_1.default.string().required(),
+        ...sessionDeviceFields,
     }))),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -339,6 +453,7 @@ __decorate([
 ], AuthController.prototype, "verifyPhoneChangeOtp", null);
 __decorate([
     (0, common_1.Post)('password-change/send-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 300_000 } }),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         currentPassword: joi_1.default.string().required(),
@@ -351,11 +466,13 @@ __decorate([
 ], AuthController.prototype, "sendPasswordChangeOtp", null);
 __decorate([
     (0, common_1.Post)('password-change/verify-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 300_000 } }),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         currentPassword: joi_1.default.string().required(),
         newPassword: passwordSchema.required(),
         otp: joi_1.default.string().required(),
+        ...sessionDeviceFields,
     }))),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -363,11 +480,91 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "verifyPasswordChangeOtp", null);
+__decorate([
+    (0, common_1.Post)('refresh'),
+    (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        refreshToken: joi_1.default.string().required(),
+    }))),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "refresh", null);
+__decorate([
+    (0, common_1.Post)('logout'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "logout", null);
+__decorate([
+    (0, common_1.Post)('logout-all'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "logoutAll", null);
+__decorate([
+    (0, common_1.Post)('google'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
+    __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        idToken: joi_1.default.string().required(),
+        fcmToken: joi_1.default.string().optional(),
+        ...sessionDeviceFields,
+    })))),
+    __param(1, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "google", null);
+__decorate([
+    (0, common_1.Post)('facebook'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
+    __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        accessToken: joi_1.default.string().required(),
+        fcmToken: joi_1.default.string().optional(),
+        ...sessionDeviceFields,
+    })))),
+    __param(1, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "facebook", null);
+__decorate([
+    (0, common_1.Post)('social/phone/send-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 300_000 } }),
+    __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        socialVerificationToken: joi_1.default.string().required(),
+        phone: joi_1.default.string().required(),
+    })))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "sendSocialPhoneOtp", null);
+__decorate([
+    (0, common_1.Post)('social/phone/verify-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 300_000 } }),
+    __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        socialVerificationToken: joi_1.default.string().required(),
+        phone: joi_1.default.string().required(),
+        otp: joi_1.default.string().required(),
+        fcmToken: joi_1.default.string().optional(),
+        ...sessionDeviceFields,
+    })))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifySocialPhoneOtp", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,
         otp_service_1.OtpService,
         twilio_service_1.TwilioService,
-        users_service_1.UsersService])
+        users_service_1.UsersService,
+        auth_session_service_1.AuthSessionService,
+        social_auth_service_1.SocialAuthService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

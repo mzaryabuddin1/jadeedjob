@@ -18,6 +18,7 @@ import {
   CompanyPermissionKey,
   normalizeCompanyPermissions,
 } from 'src/pages/company-permissions';
+import { ModerationService } from 'src/moderation/moderation.service';
 
 type JobStatus = 'draft' | 'active' | 'closed';
 
@@ -53,6 +54,7 @@ export class JobService {
     private firebaseService: FirebaseService,
 
     private notificationsService: NotificationsService,
+    private moderationService: ModerationService,
   ) {}
 
   private async assertCompanyPermission(
@@ -286,7 +288,7 @@ export class JobService {
     return this.formatJob(savedJob);
   }
 
-  async findNearbyJobs(query: any) {
+  async findNearbyJobs(query: any, userId?: number) {
     const {
       lat,
       lng,
@@ -334,6 +336,19 @@ export class JobService {
     const searchParams = search
       ? [`%${search}%`, `%${search}%`, `%${search}%`]
       : [];
+    const blocked = userId
+      ? await this.moderationService.blockedTargets(userId)
+      : { userIds: [], companyIds: [] };
+    const blockedUserClause = blocked.userIds.length
+      ? 'AND (j.pageId IS NOT NULL OR j.createdBy NOT IN (?))'
+      : '';
+    const blockedCompanyClause = blocked.companyIds.length
+      ? 'AND (j.pageId IS NULL OR j.pageId NOT IN (?))'
+      : '';
+    const visibilityParams = [
+      ...(blocked.userIds.length ? [blocked.userIds] : []),
+      ...(blocked.companyIds.length ? [blocked.companyIds] : []),
+    ];
 
     const jobs = await this.jobRepo.query(
       `
@@ -364,12 +379,16 @@ export class JobService {
         LEFT JOIN company_branches b ON b.id = j.branchId
         LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND u.isBanned = 0 AND u.deletedAt IS NULL
+          AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
+          ${blockedUserClause}
+          ${blockedCompanyClause}
           ${searchClause}
         ORDER BY j.location IS NULL ASC, ${orderBy} ${orderDirection}
         LIMIT ?
         OFFSET ?
       `,
-      [pointText, ...searchParams, take, offset],
+      [pointText, ...visibilityParams, ...searchParams, take, offset],
     );
 
     const countResult = await this.jobRepo.query(
@@ -377,10 +396,15 @@ export class JobService {
         SELECT COUNT(*) AS total
         FROM jobs j
         LEFT JOIN pages p ON p.id = j.pageId
+        LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND u.isBanned = 0 AND u.deletedAt IS NULL
+          AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
+          ${blockedUserClause}
+          ${blockedCompanyClause}
           ${searchClause}
       `,
-      searchParams,
+      [...visibilityParams, ...searchParams],
     );
 
     const total = Number(countResult[0]?.total || 0);
@@ -430,7 +454,7 @@ export class JobService {
       myjobs !== 'true' &&
       !requestedCompanyId
     ) {
-      return this.findNearbyJobs(query);
+      return this.findNearbyJobs(query, userId);
     }
 
     if (requestedCompanyId && myjobs === 'true') {
@@ -474,6 +498,29 @@ export class JobService {
     } else {
       qb.andWhere('job.isActive = :active', { active: true });
       qb.andWhere("COALESCE(job.status, 'active') = 'active'");
+      qb.andWhere('creator.isBanned = :creatorBanned', {
+        creatorBanned: false,
+      });
+      qb.andWhere('creator.deletedAt IS NULL');
+      qb.andWhere(
+        '(job.pageId IS NULL OR page.verificationStatus = :approvedCompany)',
+        { approvedCompany: 'approved' },
+      );
+      if (userId) {
+        const blocked = await this.moderationService.blockedTargets(userId);
+        if (blocked.userIds.length) {
+          qb.andWhere(
+            '(job.pageId IS NOT NULL OR job.createdBy NOT IN (:...blockedUserIds))',
+            { blockedUserIds: blocked.userIds },
+          );
+        }
+        if (blocked.companyIds.length) {
+          qb.andWhere(
+            '(job.pageId IS NULL OR job.pageId NOT IN (:...blockedCompanyIds))',
+            { blockedCompanyIds: blocked.companyIds },
+          );
+        }
+      }
     }
 
     if (filter) qb.andWhere('job.filterId = :filterId', { filterId: Number(filter) });
@@ -594,10 +641,40 @@ export class JobService {
     if (!job) throw new NotFoundException(`Job with ID ${id} not found`);
 
     const status = job.status || (job.isActive ? 'active' : 'closed');
-    if (status !== 'active' && job.createdBy !== userId && job.pageId) {
-      await this.assertCompanyPermission(job.pageId, Number(userId), 'viewApplicants');
-    } else if (status !== 'active' && job.createdBy !== userId) {
+    let canManage = job.createdBy === userId;
+    if (job.pageId && userId) {
+      try {
+        await this.assertCompanyPermission(
+          job.pageId,
+          Number(userId),
+          'viewApplicants',
+        );
+        canManage = true;
+      } catch {
+        canManage = false;
+      }
+    }
+    if (!canManage && status !== 'active') {
       throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+    if (!canManage) {
+      if (
+        job.creator?.isBanned ||
+        job.creator?.deletedAt ||
+        (job.pageId && job.page?.verificationStatus !== 'approved')
+      ) {
+        throw new NotFoundException(`Job with ID ${id} not found`);
+      }
+      if (
+        userId &&
+        (await this.moderationService.isInteractionBlocked(
+          userId,
+          job.pageId ? 'company' : 'user',
+          job.pageId || job.createdBy,
+        ))
+      ) {
+        throw new NotFoundException(`Job with ID ${id} not found`);
+      }
     }
 
     return this.formatJob(job);

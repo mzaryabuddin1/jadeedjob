@@ -1,15 +1,50 @@
 import { ProfilesService } from './profiles.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 export declare class ProfilesController {
     private readonly profilesService;
-    constructor(profilesService: ProfilesService);
-    searchProfiles(query: any): Promise<{
+    private readonly moderationService;
+    constructor(profilesService: ProfilesService, moderationService: ModerationService);
+    searchProfiles(query: any, req: any): Promise<{
         data: Record<string, any>[];
         total: number;
         totalPages: number;
         currentPage: number;
     }>;
+    getBlocked(req: any, page?: number, limit?: number): Promise<{
+        data: ({
+            blockedAt: Date;
+            type: "user";
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        } | {
+            blockedAt: Date;
+            type: "company";
+            id: string;
+            name: string;
+            handle: string;
+            avatarUri: string;
+            verified: boolean;
+        })[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    block(profileType: string, profileId: number, req: any): Promise<{
+        profileType: import("./entities/profile-follow.entity").ProfileType;
+        profileId: string;
+        blocked: boolean;
+    }>;
+    unblock(profileType: string, profileId: number, req: any): Promise<{
+        profileType: import("./entities/profile-follow.entity").ProfileType;
+        profileId: string;
+        blocked: boolean;
+    }>;
     getProfile(profileType: string, profileId: number, req: any): Promise<{
         profile: {
+            avatarUri: string;
             subtitle: string;
             location: string;
             bio: string;
@@ -33,7 +68,6 @@ export declare class ProfilesController {
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         viewerState: {
@@ -43,9 +77,14 @@ export declare class ProfilesController {
         };
     } | {
         profile: {
+            avatarUri: string;
             subtitle: string;
             location: string;
             bio: string;
+            rating: {
+                average: number;
+                count: number;
+            };
             followersCount: number;
             website: string;
             socialLinks: {
@@ -59,7 +98,6 @@ export declare class ProfilesController {
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         viewerState: {

@@ -14,6 +14,8 @@ import {
   formatCompanyPublisher,
   formatUserPublisher,
 } from './profile-format.util';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 
 type ProfileSearchQuery = {
   profileType: ProfileType;
@@ -33,23 +35,30 @@ export class ProfilesService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(CompanyPage)
     private readonly pageRepo: Repository<CompanyPage>,
+    private readonly moderationService: ModerationService,
+    private readonly storageService: ObjectStorageService,
   ) {}
 
-  async searchProfiles(query: ProfileSearchQuery) {
+  async searchProfiles(query: ProfileSearchQuery, viewerId: number) {
     const profileType = this.parseProfileType(query.profileType);
     const q = query.q.trim().toLowerCase();
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(30, Math.max(1, Number(query.limit) || 20));
 
     if (profileType === 'user') {
-      return this.searchUsers(q, page, limit);
+      return this.searchUsers(q, page, limit, viewerId);
     }
 
-    return this.searchCompanies(q, page, limit);
+    return this.searchCompanies(q, page, limit, viewerId);
   }
 
   async getProfile(profileType: string, profileId: number, viewerId: number) {
     const type = this.parseProfileType(profileType);
+    await this.moderationService.assertInteractionAllowed(
+      viewerId,
+      type,
+      profileId,
+    );
     if (type === 'user') {
       return this.getUserProfile(profileId, viewerId);
     }
@@ -60,6 +69,11 @@ export class ProfilesService {
   async follow(profileType: string, profileId: number, followerUserId: number) {
     const type = this.parseProfileType(profileType);
     await this.assertTargetViewable(type, profileId);
+    await this.moderationService.assertInteractionAllowed(
+      followerUserId,
+      type,
+      profileId,
+    );
 
     if (type === 'user' && profileId === followerUserId) {
       throw new BadRequestException('You cannot follow yourself');
@@ -138,6 +152,7 @@ export class ProfilesService {
     return {
       profile: {
         ...publisher,
+        avatarUri: await this.userAvatarUrl(user),
         subtitle: user.work_experience?.find((item) => item.currently_working)
           ?.designation,
         location: this.formatLocation(
@@ -199,6 +214,9 @@ export class ProfilesService {
     return {
       profile: {
         ...formatCompanyPublisher(company),
+        avatarUri: company.logoAssetId
+          ? await this.storageService.getUrl(company.logoAssetId)
+          : company.company_logo || null,
         subtitle: company.industry_type || undefined,
         location: this.formatLocation(
           company.city,
@@ -206,6 +224,10 @@ export class ProfilesService {
           company.country,
         ),
         bio: company.company_description || undefined,
+        rating: {
+          average: Number(company.ratingAverage || 0),
+          count: Number(company.ratingCount || 0),
+        },
         followersCount,
         website: company.website_url || undefined,
         socialLinks: {
@@ -224,7 +246,12 @@ export class ProfilesService {
     };
   }
 
-  private async searchUsers(q: string, page: number, limit: number) {
+  private async searchUsers(
+    q: string,
+    page: number,
+    limit: number,
+    viewerId: number,
+  ) {
     const patterns = this.getSearchPatterns(q);
     const displayName = `COALESCE(
       NULLIF(TRIM(user.full_name), ''),
@@ -245,6 +272,7 @@ export class ProfilesService {
       .leftJoinAndSelect('user.country', 'country')
       .leftJoinAndSelect('user.work_experience', 'workExperience')
       .where('user.isBanned = :isBanned', { isBanned: false })
+      .andWhere('user.deletedAt IS NULL')
       .andWhere(
         `(LOWER(COALESCE(user.full_name, '')) LIKE :containsQuery ESCAPE '!'
           OR LOWER(COALESCE(user.firstName, '')) LIKE :containsQuery ESCAPE '!'
@@ -259,17 +287,31 @@ export class ProfilesService {
       .skip((page - 1) * limit)
       .take(limit);
 
+    const blocked = await this.moderationService.blockedTargets(viewerId);
+    if (blocked.userIds.length) {
+      qb.andWhere('user.id NOT IN (:...blockedUserIds)', {
+        blockedUserIds: blocked.userIds,
+      });
+    }
+
     const [users, total] = await qb.getManyAndCount();
 
     return this.getSearchResponse(
-      users.map((user) => this.formatUserSearchResult(user)),
+      await Promise.all(
+        users.map((user) => this.formatUserSearchResult(user)),
+      ),
       total,
       page,
       limit,
     );
   }
 
-  private async searchCompanies(q: string, page: number, limit: number) {
+  private async searchCompanies(
+    q: string,
+    page: number,
+    limit: number,
+    viewerId: number,
+  ) {
     const patterns = this.getSearchPatterns(q);
     const rank = `CASE
       WHEN LOWER(page.company_name) = :exactQuery
@@ -297,17 +339,28 @@ export class ProfilesService {
       .skip((page - 1) * limit)
       .take(limit);
 
+    const blocked = await this.moderationService.blockedTargets(viewerId);
+    if (blocked.companyIds.length) {
+      qb.andWhere('page.id NOT IN (:...blockedCompanyIds)', {
+        blockedCompanyIds: blocked.companyIds,
+      });
+    }
+
     const [companies, total] = await qb.getManyAndCount();
 
     return this.getSearchResponse(
-      companies.map((company) => this.formatCompanySearchResult(company)),
+      await Promise.all(
+        companies.map((company) =>
+          this.formatCompanySearchResult(company),
+        ),
+      ),
       total,
       page,
       limit,
     );
   }
 
-  private formatUserSearchResult(user: User) {
+  private async formatUserSearchResult(user: User) {
     const publisher = formatUserPublisher(user);
     const subtitle = user.work_experience?.find(
       (item) => item.currently_working && item.designation,
@@ -323,14 +376,14 @@ export class ProfilesService {
       id: publisher.id,
       name: publisher.name,
       handle: publisher.handle,
-      avatarUri: publisher.avatarUri,
+      avatarUri: await this.userAvatarUrl(user),
       verified: publisher.verified,
       ...(subtitle ? { subtitle } : {}),
       ...(location ? { location } : {}),
     };
   }
 
-  private formatCompanySearchResult(company: CompanyPage) {
+  private async formatCompanySearchResult(company: CompanyPage) {
     const publisher = formatCompanyPublisher(company);
     const subtitle = company.industry_type || undefined;
     const location = this.formatLocation(
@@ -345,6 +398,9 @@ export class ProfilesService {
       name: publisher.name,
       handle: publisher.handle,
       avatarUri: publisher.avatarUri,
+      ...(company.logoAssetId
+        ? { avatarUri: await this.storageService.getUrl(company.logoAssetId) }
+        : {}),
       verified: publisher.verified,
       ...(subtitle ? { subtitle } : {}),
       ...(location ? { location } : {}),
@@ -419,5 +475,11 @@ export class ProfilesService {
 
   private formatLocation(...parts: Array<string | null | undefined>) {
     return parts.filter(Boolean).join(', ') || undefined;
+  }
+
+  private async userAvatarUrl(user: User) {
+    return user.profilePhotoAssetId
+      ? await this.storageService.getUrl(user.profilePhotoAssetId)
+      : user.profile_photo || null;
   }
 }

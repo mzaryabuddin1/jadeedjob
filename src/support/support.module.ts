@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { FilesModule } from 'src/files/files.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { User } from 'src/users/entities/user.entity';
 import { SupportContactMessage } from './entities/support-contact-message.entity';
 import { SupportTicketAttachment } from './entities/support-ticket-attachment.entity';
 import { SupportTicket } from './entities/support-ticket.entity';
 import { SupportController } from './support.controller';
 import { SupportService } from './support.service';
+import { SupportTicketMessage } from './entities/support-ticket-message.entity';
+import { AdminSupportController } from './admin-support.controller';
 
 @Module({
   imports: [
@@ -14,11 +16,12 @@ import { SupportService } from './support.service';
       SupportContactMessage,
       SupportTicket,
       SupportTicketAttachment,
+      SupportTicketMessage,
+      User,
     ]),
-    FilesModule,
     NotificationsModule,
   ],
-  controllers: [SupportController],
+  controllers: [SupportController, AdminSupportController],
   providers: [SupportService],
 })
 export class SupportModule {}

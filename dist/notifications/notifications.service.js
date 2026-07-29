@@ -18,10 +18,12 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const notification_entity_1 = require("./entities/notification.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const push_service_1 = require("../push/push.service");
 let NotificationsService = class NotificationsService {
-    constructor(notificationRepo, userRepo) {
+    constructor(notificationRepo, userRepo, pushService) {
         this.notificationRepo = notificationRepo;
         this.userRepo = userRepo;
+        this.pushService = pushService;
     }
     format(notification) {
         return {
@@ -39,6 +41,13 @@ let NotificationsService = class NotificationsService {
             ...input,
             data: input.data || {},
         }));
+        await this.pushService
+            .sendToUser(input.userId, this.categoryForType(input.type), input.title, input.message, input.data || {})
+            .catch((error) => console.error('Push delivery failed', {
+            userId: input.userId,
+            type: input.type,
+            error: error.message,
+        }));
         return this.format(notification);
     }
     async createMany(inputs) {
@@ -48,6 +57,9 @@ let NotificationsService = class NotificationsService {
             ...input,
             data: input.data || {},
         })));
+        await Promise.all(inputs.map((input) => this.pushService
+            .sendToUser(input.userId, this.categoryForType(input.type), input.title, input.message, input.data || {})
+            .catch(() => undefined)));
         return notifications.map((notification) => this.format(notification));
     }
     async createForFilterSubscribers(filterId, title, message, data, excludeUserId) {
@@ -112,6 +124,23 @@ let NotificationsService = class NotificationsService {
         await this.notificationRepo.update({ userId, readAt: (0, typeorm_2.IsNull)() }, { readAt: new Date() });
         return { message: 'Notifications marked as read' };
     }
+    categoryForType(type) {
+        if (type.includes('chat') || type.includes('message'))
+            return 'messages';
+        if (type.includes('application'))
+            return 'applications';
+        if (type.includes('job'))
+            return 'jobs';
+        if (type.includes('support'))
+            return 'support';
+        if (type.includes('company') || type.includes('access'))
+            return 'company';
+        if (type.includes('reel') || type.includes('video'))
+            return 'videos';
+        if (type.includes('security') || type.includes('password'))
+            return 'security';
+        return 'community';
+    }
 };
 exports.NotificationsService = NotificationsService;
 exports.NotificationsService = NotificationsService = __decorate([
@@ -119,6 +148,7 @@ exports.NotificationsService = NotificationsService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(notification_entity_1.Notification)),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        push_service_1.PushService])
 ], NotificationsService);
 //# sourceMappingURL=notifications.service.js.map

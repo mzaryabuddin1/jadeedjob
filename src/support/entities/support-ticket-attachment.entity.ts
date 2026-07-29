@@ -23,8 +23,11 @@ export class SupportTicketAttachment {
   @Column()
   fileName: string;
 
-  @Column()
+  @Column({ nullable: true })
   fileUrl: string;
+
+  @Column({ nullable: true, length: 36 })
+  assetId: string;
 
   @Column({ nullable: true })
   contentType: string;

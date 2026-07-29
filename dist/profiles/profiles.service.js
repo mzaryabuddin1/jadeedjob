@@ -22,25 +22,30 @@ const reel_creator_follow_entity_1 = require("../reels/entities/reel-creator-fol
 const company_permissions_1 = require("../pages/company-permissions");
 const profile_follow_entity_1 = require("./entities/profile-follow.entity");
 const profile_format_util_1 = require("./profile-format.util");
+const moderation_service_1 = require("../moderation/moderation.service");
+const object_storage_service_1 = require("../storage/object-storage.service");
 let ProfilesService = class ProfilesService {
-    constructor(followRepo, legacyFollowRepo, userRepo, pageRepo) {
+    constructor(followRepo, legacyFollowRepo, userRepo, pageRepo, moderationService, storageService) {
         this.followRepo = followRepo;
         this.legacyFollowRepo = legacyFollowRepo;
         this.userRepo = userRepo;
         this.pageRepo = pageRepo;
+        this.moderationService = moderationService;
+        this.storageService = storageService;
     }
-    async searchProfiles(query) {
+    async searchProfiles(query, viewerId) {
         const profileType = this.parseProfileType(query.profileType);
         const q = query.q.trim().toLowerCase();
         const page = Math.max(1, Number(query.page) || 1);
         const limit = Math.min(30, Math.max(1, Number(query.limit) || 20));
         if (profileType === 'user') {
-            return this.searchUsers(q, page, limit);
+            return this.searchUsers(q, page, limit, viewerId);
         }
-        return this.searchCompanies(q, page, limit);
+        return this.searchCompanies(q, page, limit, viewerId);
     }
     async getProfile(profileType, profileId, viewerId) {
         const type = this.parseProfileType(profileType);
+        await this.moderationService.assertInteractionAllowed(viewerId, type, profileId);
         if (type === 'user') {
             return this.getUserProfile(profileId, viewerId);
         }
@@ -49,6 +54,7 @@ let ProfilesService = class ProfilesService {
     async follow(profileType, profileId, followerUserId) {
         const type = this.parseProfileType(profileType);
         await this.assertTargetViewable(type, profileId);
+        await this.moderationService.assertInteractionAllowed(followerUserId, type, profileId);
         if (type === 'user' && profileId === followerUserId) {
             throw new common_1.BadRequestException('You cannot follow yourself');
         }
@@ -110,6 +116,7 @@ let ProfilesService = class ProfilesService {
         return {
             profile: {
                 ...publisher,
+                avatarUri: await this.userAvatarUrl(user),
                 subtitle: user.work_experience?.find((item) => item.currently_working)
                     ?.designation,
                 location: this.formatLocation(user.city, user.state, user.country?.name),
@@ -161,9 +168,16 @@ let ProfilesService = class ProfilesService {
         return {
             profile: {
                 ...(0, profile_format_util_1.formatCompanyPublisher)(company),
+                avatarUri: company.logoAssetId
+                    ? await this.storageService.getUrl(company.logoAssetId)
+                    : company.company_logo || null,
                 subtitle: company.industry_type || undefined,
                 location: this.formatLocation(company.city, company.state, company.country),
                 bio: company.company_description || undefined,
+                rating: {
+                    average: Number(company.ratingAverage || 0),
+                    count: Number(company.ratingCount || 0),
+                },
                 followersCount,
                 website: company.website_url || undefined,
                 socialLinks: {
@@ -181,7 +195,7 @@ let ProfilesService = class ProfilesService {
             },
         };
     }
-    async searchUsers(q, page, limit) {
+    async searchUsers(q, page, limit, viewerId) {
         const patterns = this.getSearchPatterns(q);
         const displayName = `COALESCE(
       NULLIF(TRIM(user.full_name), ''),
@@ -201,6 +215,7 @@ let ProfilesService = class ProfilesService {
             .leftJoinAndSelect('user.country', 'country')
             .leftJoinAndSelect('user.work_experience', 'workExperience')
             .where('user.isBanned = :isBanned', { isBanned: false })
+            .andWhere('user.deletedAt IS NULL')
             .andWhere(`(LOWER(COALESCE(user.full_name, '')) LIKE :containsQuery ESCAPE '!'
           OR LOWER(COALESCE(user.firstName, '')) LIKE :containsQuery ESCAPE '!'
           OR LOWER(COALESCE(user.lastName, '')) LIKE :containsQuery ESCAPE '!')`, patterns)
@@ -211,10 +226,16 @@ let ProfilesService = class ProfilesService {
             .addOrderBy('user.id', 'ASC')
             .skip((page - 1) * limit)
             .take(limit);
+        const blocked = await this.moderationService.blockedTargets(viewerId);
+        if (blocked.userIds.length) {
+            qb.andWhere('user.id NOT IN (:...blockedUserIds)', {
+                blockedUserIds: blocked.userIds,
+            });
+        }
         const [users, total] = await qb.getManyAndCount();
-        return this.getSearchResponse(users.map((user) => this.formatUserSearchResult(user)), total, page, limit);
+        return this.getSearchResponse(await Promise.all(users.map((user) => this.formatUserSearchResult(user))), total, page, limit);
     }
-    async searchCompanies(q, page, limit) {
+    async searchCompanies(q, page, limit, viewerId) {
         const patterns = this.getSearchPatterns(q);
         const rank = `CASE
       WHEN LOWER(page.company_name) = :exactQuery
@@ -237,10 +258,16 @@ let ProfilesService = class ProfilesService {
             .addOrderBy('page.id', 'ASC')
             .skip((page - 1) * limit)
             .take(limit);
+        const blocked = await this.moderationService.blockedTargets(viewerId);
+        if (blocked.companyIds.length) {
+            qb.andWhere('page.id NOT IN (:...blockedCompanyIds)', {
+                blockedCompanyIds: blocked.companyIds,
+            });
+        }
         const [companies, total] = await qb.getManyAndCount();
-        return this.getSearchResponse(companies.map((company) => this.formatCompanySearchResult(company)), total, page, limit);
+        return this.getSearchResponse(await Promise.all(companies.map((company) => this.formatCompanySearchResult(company))), total, page, limit);
     }
-    formatUserSearchResult(user) {
+    async formatUserSearchResult(user) {
         const publisher = (0, profile_format_util_1.formatUserPublisher)(user);
         const subtitle = user.work_experience?.find((item) => item.currently_working && item.designation)?.designation;
         const location = this.formatLocation(user.city, user.state, user.country?.name);
@@ -249,13 +276,13 @@ let ProfilesService = class ProfilesService {
             id: publisher.id,
             name: publisher.name,
             handle: publisher.handle,
-            avatarUri: publisher.avatarUri,
+            avatarUri: await this.userAvatarUrl(user),
             verified: publisher.verified,
             ...(subtitle ? { subtitle } : {}),
             ...(location ? { location } : {}),
         };
     }
-    formatCompanySearchResult(company) {
+    async formatCompanySearchResult(company) {
         const publisher = (0, profile_format_util_1.formatCompanyPublisher)(company);
         const subtitle = company.industry_type || undefined;
         const location = this.formatLocation(company.city, company.state, company.country);
@@ -265,6 +292,9 @@ let ProfilesService = class ProfilesService {
             name: publisher.name,
             handle: publisher.handle,
             avatarUri: publisher.avatarUri,
+            ...(company.logoAssetId
+                ? { avatarUri: await this.storageService.getUrl(company.logoAssetId) }
+                : {}),
             verified: publisher.verified,
             ...(subtitle ? { subtitle } : {}),
             ...(location ? { location } : {}),
@@ -318,6 +348,11 @@ let ProfilesService = class ProfilesService {
     formatLocation(...parts) {
         return parts.filter(Boolean).join(', ') || undefined;
     }
+    async userAvatarUrl(user) {
+        return user.profilePhotoAssetId
+            ? await this.storageService.getUrl(user.profilePhotoAssetId)
+            : user.profile_photo || null;
+    }
 };
 exports.ProfilesService = ProfilesService;
 exports.ProfilesService = ProfilesService = __decorate([
@@ -329,6 +364,8 @@ exports.ProfilesService = ProfilesService = __decorate([
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        moderation_service_1.ModerationService,
+        object_storage_service_1.ObjectStorageService])
 ], ProfilesService);
 //# sourceMappingURL=profiles.service.js.map

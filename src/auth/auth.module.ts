@@ -14,14 +14,23 @@ import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { FilterModule } from 'src/filter/filter.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
+import { AuthIdentity } from './entities/auth-identity.entity';
+import { SocialAuthService } from './social-auth.service';
+import { AuthSocialChallenge } from './entities/auth-social-challenge.entity';
 @Module({
   imports: [
     ConfigModule.forRoot(),
     JwtModule.register({
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '365d' },
+      signOptions: { expiresIn: '15m' },
     }),
-    TypeOrmModule.forFeature([User, Country, Language]),
+    TypeOrmModule.forFeature([
+      User,
+      Country,
+      Language,
+      AuthIdentity,
+      AuthSocialChallenge,
+    ]),
     UsersModule,
     OtpModule,
     CountryModule,
@@ -31,7 +40,7 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
     FirebaseModule
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, SocialAuthService],
   exports: [AuthService],
 })
 export class AuthModule {}

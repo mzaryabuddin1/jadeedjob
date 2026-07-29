@@ -4,6 +4,8 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Get,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -17,6 +19,37 @@ import { PagesService } from './pages.service';
 @Controller('admin/companies')
 export class AdminCompanyController {
   constructor(private readonly pagesService: PagesService) {}
+
+  @Get()
+  listCompanies(
+    @Query(
+      new JoiValidationPipe(
+        Joi.object({
+          status: Joi.string()
+            .valid(
+              'pending',
+              'approved',
+              'needs_changes',
+              'rejected',
+              'suspended',
+              'all',
+            )
+            .default('pending'),
+          q: Joi.string().trim().max(80).allow('').optional(),
+          page: Joi.number().integer().min(1).default(1),
+          limit: Joi.number().integer().min(1).max(100).default(20),
+        }),
+      ),
+    )
+    query: any,
+  ) {
+    return this.pagesService.getAdminCompanyReviews(query);
+  }
+
+  @Get(':companyId')
+  getCompany(@Param('companyId', ParseIntPipe) companyId: number) {
+    return this.pagesService.getAdminCompanyReview(companyId);
+  }
 
   @Patch(':companyId/verification')
   updateVerification(

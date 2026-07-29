@@ -18,31 +18,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SupportController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
-const multer_1 = require("multer");
-const path_1 = require("path");
 const joi_1 = __importDefault(require("joi"));
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
-const files_service_1 = require("../files/files.service");
 const support_service_1 = require("./support.service");
-const supportAttachmentUploadOptions = {
-    storage: (0, multer_1.diskStorage)({
-        destination: (_req, _file, cb) => {
-            const uploadPath = './uploads/support-tickets';
-            require('fs').mkdirSync(uploadPath, { recursive: true });
-            cb(null, uploadPath);
-        },
-        filename: (_req, file, cb) => {
-            const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-            cb(null, `${unique}${(0, path_1.extname)(file.originalname)}`);
-        },
-    }),
-    limits: { fileSize: 10 * 1024 * 1024 },
-};
+const ticketPaginationSchema = joi_1.default.object({
+    page: joi_1.default.number().integer().min(1).default(1),
+    limit: joi_1.default.number().integer().min(1).max(100).default(20),
+});
 let SupportController = class SupportController {
-    constructor(supportService, filesService) {
+    constructor(supportService) {
         this.supportService = supportService;
-        this.filesService = filesService;
     }
     getContactInfo() {
         return this.supportService.getContactInfo();
@@ -53,13 +39,22 @@ let SupportController = class SupportController {
     createTicket(req, body) {
         return this.supportService.createTicket(req.user.id, body);
     }
-    listTickets(req, page = 1, limit = 20) {
-        return this.supportService.listTickets(req.user.id, Number(page), Number(limit));
+    listTickets(req, query) {
+        return this.supportService.listTickets(req.user.id, query.page, query.limit);
+    }
+    getTicket(req, id) {
+        return this.supportService.getTicket(id, req.user.id);
+    }
+    getMessages(req, id, query) {
+        return this.supportService.getMessages(id, req.user.id, query.page, query.limit);
+    }
+    addMessage(req, id, body) {
+        return this.supportService.addMessage(id, req.user.id, 'user', body.message);
     }
     addAttachment(req, id, file) {
         if (!file)
             throw new common_1.BadRequestException('No file provided');
-        return this.supportService.addAttachment(req.user.id, id, file, this.filesService.getFileUrl(file.filename, 'support-tickets'));
+        return this.supportService.addAttachment(req.user.id, id, file);
     }
 };
 exports.SupportController = SupportController;
@@ -71,33 +66,35 @@ __decorate([
 ], SupportController.prototype, "getContactInfo", null);
 __decorate([
     (0, common_1.Post)('contact-messages'),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        name: joi_1.default.string().required(),
-        phone: joi_1.default.string().required(),
-        subject: joi_1.default.string().required(),
-        message: joi_1.default.string().required(),
-        source: joi_1.default.string().allow('', null).optional(),
-    }))),
     __param(0, (0, common_1.Req)()),
-    __param(1, (0, common_1.Body)()),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        name: joi_1.default.string().optional().strip(),
+        phone: joi_1.default.string().optional().strip(),
+        subject: joi_1.default.string().trim().max(200).allow('', null).optional(),
+        message: joi_1.default.string().trim().min(1).max(5000).required(),
+        source: joi_1.default.string().trim().max(80).allow('', null).optional(),
+    })))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], SupportController.prototype, "createContactMessage", null);
 __decorate([
     (0, common_1.Post)('tickets'),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         kind: joi_1.default.string().valid('feedback', 'complaint').required(),
         category: joi_1.default.string()
             .valid('app', 'payment', 'job_post', 'worker', 'chat', 'suggestion', 'other')
             .default('other'),
-        message: joi_1.default.string().required(),
-        preferredContact: joi_1.default.string().allow('', null).optional(),
-        contact: joi_1.default.string().allow('', null).optional(),
-        attachments: joi_1.default.array().items(joi_1.default.string().uri()).optional(),
-    }))),
-    __param(0, (0, common_1.Req)()),
-    __param(1, (0, common_1.Body)()),
+        subject: joi_1.default.string().trim().max(200).allow('', null).optional(),
+        message: joi_1.default.string().trim().min(1).max(5000).required(),
+        preferredContact: joi_1.default.string().max(80).allow('', null).optional(),
+        contact: joi_1.default.string().max(255).allow('', null).optional(),
+        attachments: joi_1.default.array()
+            .items(joi_1.default.string().uri())
+            .max(5)
+            .optional(),
+    })))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
@@ -105,15 +102,44 @@ __decorate([
 __decorate([
     (0, common_1.Get)('tickets'),
     __param(0, (0, common_1.Req)()),
-    __param(1, (0, common_1.Query)('page')),
-    __param(2, (0, common_1.Query)('limit')),
+    __param(1, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(ticketPaginationSchema))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], SupportController.prototype, "listTickets", null);
 __decorate([
+    (0, common_1.Get)('tickets/:id'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number]),
+    __metadata("design:returntype", void 0)
+], SupportController.prototype, "getTicket", null);
+__decorate([
+    (0, common_1.Get)('tickets/:id/messages'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(ticketPaginationSchema))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number, Object]),
+    __metadata("design:returntype", void 0)
+], SupportController.prototype, "getMessages", null);
+__decorate([
+    (0, common_1.Post)('tickets/:id/messages'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        message: joi_1.default.string().trim().min(1).max(5000).required(),
+    })))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number, Object]),
+    __metadata("design:returntype", void 0)
+], SupportController.prototype, "addMessage", null);
+__decorate([
     (0, common_1.Post)('tickets/:id/attachments'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', supportAttachmentUploadOptions)),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
+        limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(2, (0, common_1.UploadedFile)()),
@@ -124,7 +150,6 @@ __decorate([
 exports.SupportController = SupportController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('support'),
-    __metadata("design:paramtypes", [support_service_1.SupportService,
-        files_service_1.FilesService])
+    __metadata("design:paramtypes", [support_service_1.SupportService])
 ], SupportController);
 //# sourceMappingURL=support.controller.js.map

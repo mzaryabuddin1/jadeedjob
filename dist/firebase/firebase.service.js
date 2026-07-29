@@ -52,11 +52,25 @@ let FirebaseService = class FirebaseService {
     constructor(firebaseApp) {
         this.firebaseApp = firebaseApp;
     }
-    async sendNotification(tokens, title, body) {
-        return this.firebaseApp.messaging().sendEachForMulticast({
+    async sendNotification(tokens, title, body, data = {}) {
+        const response = await this.firebaseApp.messaging().sendEachForMulticast({
             tokens,
             notification: { title, body },
+            data,
         });
+        const invalidTokens = response.responses
+            .map((item, index) => ({ item, token: tokens[index] }))
+            .filter(({ item }) => !item.success &&
+            [
+                'messaging/registration-token-not-registered',
+                'messaging/invalid-registration-token',
+            ].includes(item.error?.code))
+            .map(({ token }) => token);
+        return {
+            successCount: response.successCount,
+            failureCount: response.failureCount,
+            invalidTokens,
+        };
     }
     async subscribeTokenToFilters(token, filterIds) {
         const topics = filterIds.map((id) => `filter_${id}`);
@@ -98,13 +112,7 @@ let FirebaseService = class FirebaseService {
         });
     }
     async sendTestToToken(token) {
-        return this.firebaseApp.messaging().send({
-            token,
-            notification: {
-                title: "🔥 Test Notification",
-                body: "Your browser is receiving push notifications!",
-            },
-        });
+        return this.sendNotification([token], 'JobsLoot test notification', 'Push delivery is configured.', { type: 'security_test' });
     }
 };
 exports.FirebaseService = FirebaseService;

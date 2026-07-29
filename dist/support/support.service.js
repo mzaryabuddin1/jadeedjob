@@ -17,15 +17,21 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const notifications_service_1 = require("../notifications/notifications.service");
+const object_storage_service_1 = require("../storage/object-storage.service");
+const user_entity_1 = require("../users/entities/user.entity");
 const support_contact_message_entity_1 = require("./entities/support-contact-message.entity");
 const support_ticket_entity_1 = require("./entities/support-ticket.entity");
 const support_ticket_attachment_entity_1 = require("./entities/support-ticket-attachment.entity");
+const support_ticket_message_entity_1 = require("./entities/support-ticket-message.entity");
 let SupportService = class SupportService {
-    constructor(contactMessageRepo, ticketRepo, attachmentRepo, notificationsService) {
+    constructor(contactMessageRepo, ticketRepo, attachmentRepo, messageRepo, userRepo, notificationsService, storageService) {
         this.contactMessageRepo = contactMessageRepo;
         this.ticketRepo = ticketRepo;
         this.attachmentRepo = attachmentRepo;
+        this.messageRepo = messageRepo;
+        this.userRepo = userRepo;
         this.notificationsService = notificationsService;
+        this.storageService = storageService;
     }
     getContactInfo() {
         return {
@@ -36,12 +42,20 @@ let SupportService = class SupportService {
         };
     }
     async createContactMessage(userId, body) {
+        const user = await this.userRepo.findOne({ where: { id: userId } });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        const name = user.full_name ||
+            [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+            'JobsLoot user';
         const message = await this.contactMessageRepo.save(this.contactMessageRepo.create({
             userId,
-            name: body.name,
-            phone: body.phone,
-            subject: body.subject,
-            message: body.message,
+            name,
+            phone: user.phone,
+            subject: String(body.subject || '').trim() ||
+                process.env.SUPPORT_DEFAULT_SUBJECT ||
+                'JobsLoot support request',
+            message: String(body.message).trim(),
             source: body.source || 'mobile',
         }));
         return {
@@ -52,15 +66,30 @@ let SupportService = class SupportService {
         };
     }
     async createTicket(userId, body) {
-        const ticket = await this.ticketRepo.save(this.ticketRepo.create({
-            userId,
-            kind: body.kind,
-            category: body.category || 'other',
-            message: body.message,
-            preferredContact: body.preferredContact || null,
-            contact: body.contact || null,
-            attachments: body.attachments || [],
-        }));
+        const ticket = await this.ticketRepo.manager.transaction(async (manager) => {
+            const created = await manager.getRepository(support_ticket_entity_1.SupportTicket).save(manager.getRepository(support_ticket_entity_1.SupportTicket).create({
+                userId,
+                kind: body.kind,
+                category: body.category || 'other',
+                subject: String(body.subject || '').trim() ||
+                    this.defaultTicketSubject(body.kind, body.category),
+                message: body.message,
+                preferredContact: body.preferredContact || null,
+                contact: body.contact || null,
+                attachments: body.attachments || [],
+                status: 'open',
+            }));
+            await manager.getRepository(support_ticket_message_entity_1.SupportTicketMessage).save(manager.getRepository(support_ticket_message_entity_1.SupportTicketMessage).create({
+                ticketId: created.id,
+                sender: 'user',
+                senderUserId: userId,
+                body: body.message,
+                attachments: (body.attachments || []).map((fileUrl) => ({
+                    fileUrl,
+                })),
+            }));
+            return created;
+        });
         await this.notificationsService.create({
             userId,
             type: 'support_ticket',
@@ -75,47 +104,195 @@ let SupportService = class SupportService {
         const take = Math.min(100, Math.max(1, Number(limit) || 20));
         const [tickets, total] = await this.ticketRepo.findAndCount({
             where: { userId },
-            relations: ['uploadedAttachments'],
-            order: { createdAt: 'DESC' },
+            relations: ['uploadedAttachments', 'messages'],
+            order: { updatedAt: 'DESC' },
             skip: (currentPage - 1) * take,
             take,
         });
         return {
-            data: tickets.map((ticket) => this.formatTicket(ticket)),
+            data: await Promise.all(tickets.map((ticket) => this.formatTicket(ticket))),
             total,
             totalPages: Math.ceil(total / take),
             currentPage,
         };
     }
-    async addAttachment(userId, ticketId, file, fileUrl) {
+    async getTicket(ticketId, userId) {
+        const ticket = await this.requireTicket(ticketId, userId);
+        return {
+            ticket: await this.formatTicket(ticket),
+            ...(await this.getMessages(ticketId, userId, 1, 50)),
+        };
+    }
+    async getMessages(ticketId, userId, page = 1, limit = 20) {
+        await this.requireTicket(ticketId, userId);
+        return this.listMessages(ticketId, page, limit);
+    }
+    async addMessage(ticketId, senderUserId, sender, body) {
         const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
         if (!ticket)
             throw new common_1.NotFoundException('Ticket not found');
-        if (ticket.userId !== userId) {
+        if (sender === 'user' && ticket.userId !== senderUserId) {
             throw new common_1.ForbiddenException('You cannot update this ticket');
         }
-        if (!file?.filename)
-            throw new common_1.BadRequestException('No file provided');
-        const attachment = await this.attachmentRepo.save(this.attachmentRepo.create({
+        if (['resolved', 'closed'].includes(ticket.status) && sender === 'user') {
+            throw new common_1.BadRequestException('This support ticket is closed');
+        }
+        const message = await this.messageRepo.save(this.messageRepo.create({
             ticketId,
-            fileName: file.filename,
-            fileUrl,
-            contentType: file.mimetype || null,
+            sender,
+            senderUserId,
+            body: String(body).trim(),
+            attachments: [],
         }));
-        ticket.attachments = [...(ticket.attachments || []), fileUrl];
-        await this.ticketRepo.save(ticket);
+        if (sender === 'support') {
+            ticket.status = ticket.status === 'open' ? 'in_progress' : ticket.status;
+            await this.ticketRepo.save(ticket);
+            await this.notificationsService.create({
+                userId: ticket.userId,
+                type: 'support_message',
+                title: 'Support replied',
+                message: 'You received a reply on your support ticket.',
+                data: { ticketId },
+            });
+        }
+        else {
+            await this.ticketRepo.update(ticketId, { updatedAt: new Date() });
+        }
+        return { message: await this.formatMessage(message) };
+    }
+    async addAttachment(userId, ticketId, file) {
+        const ticket = await this.requireTicket(ticketId, userId);
+        if (['resolved', 'closed'].includes(ticket.status)) {
+            throw new common_1.BadRequestException('This support ticket is closed');
+        }
+        const asset = await this.storageService.store({
+            ownerUserId: userId,
+            purpose: 'support-ticket-attachments',
+            file,
+            allowedTypes: [
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'application/pdf',
+                'video/mp4',
+                'video/quicktime',
+            ],
+            maxBytes: 10 * 1024 * 1024,
+            visibility: 'private',
+            metadata: { ticketId },
+        });
+        try {
+            const attachment = await this.attachmentRepo.save(this.attachmentRepo.create({
+                ticketId,
+                assetId: asset.id,
+                fileName: asset.originalName,
+                fileUrl: null,
+                contentType: asset.contentType,
+            }));
+            const message = await this.messageRepo.save(this.messageRepo.create({
+                ticketId,
+                sender: 'user',
+                senderUserId: userId,
+                body: null,
+                attachments: [
+                    {
+                        assetId: asset.id,
+                        fileName: asset.originalName,
+                        contentType: asset.contentType,
+                        fileUrl: await this.storageService.getUrl(asset),
+                    },
+                ],
+            }));
+            return {
+                ticketId: ticket.id,
+                status: ticket.status,
+                createdAt: ticket.createdAt,
+                message: 'Attachment uploaded successfully',
+                attachment: await this.formatAttachment(attachment),
+                threadMessage: await this.formatMessage(message),
+            };
+        }
+        catch (error) {
+            await this.storageService.remove(asset);
+            throw error;
+        }
+    }
+    async listAdminTickets(query) {
+        const currentPage = Math.max(1, Number(query.page) || 1);
+        const take = Math.min(100, Math.max(1, Number(query.limit) || 20));
+        const [tickets, total] = await this.ticketRepo.findAndCount({
+            where: !query.status || query.status === 'all'
+                ? {}
+                : { status: query.status },
+            relations: ['user', 'messages', 'uploadedAttachments'],
+            order: { updatedAt: 'DESC' },
+            skip: (currentPage - 1) * take,
+            take,
+        });
         return {
-            ticketId: ticket.id,
-            status: ticket.status,
-            createdAt: ticket.createdAt,
-            message: 'Attachment uploaded successfully',
-            attachment: {
-                id: attachment.id,
-                fileName: attachment.fileName,
-                fileUrl: attachment.fileUrl,
-                contentType: attachment.contentType,
-                createdAt: attachment.createdAt,
-            },
+            data: await Promise.all(tickets.map((ticket) => this.formatTicket(ticket))),
+            total,
+            totalPages: Math.ceil(total / take),
+            currentPage,
+        };
+    }
+    async getAdminTicket(ticketId) {
+        const ticket = await this.ticketRepo.findOne({
+            where: { id: ticketId },
+            relations: ['user', 'messages', 'uploadedAttachments'],
+        });
+        if (!ticket)
+            throw new common_1.NotFoundException('Ticket not found');
+        return {
+            ticket: await this.formatTicket(ticket),
+            ...(await this.listMessages(ticketId, 1, 100)),
+        };
+    }
+    async updateTicketStatus(ticketId, status) {
+        const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
+        if (!ticket)
+            throw new common_1.NotFoundException('Ticket not found');
+        ticket.status = status;
+        await this.ticketRepo.save(ticket);
+        await this.notificationsService.create({
+            userId: ticket.userId,
+            type: 'support_status',
+            title: 'Support ticket updated',
+            message: `Ticket #${ticket.id} is now ${status}.`,
+            data: { ticketId },
+        });
+        return {
+            message: 'Support ticket status updated',
+            ticketId,
+            status,
+        };
+    }
+    async requireTicket(ticketId, userId) {
+        const ticket = await this.ticketRepo.findOne({
+            where: { id: ticketId },
+            relations: ['uploadedAttachments', 'messages'],
+        });
+        if (!ticket)
+            throw new common_1.NotFoundException('Ticket not found');
+        if (ticket.userId !== userId) {
+            throw new common_1.ForbiddenException('You cannot view this ticket');
+        }
+        return ticket;
+    }
+    async listMessages(ticketId, page, limit) {
+        const currentPage = Math.max(1, Number(page) || 1);
+        const take = Math.min(100, Math.max(1, Number(limit) || 20));
+        const [messages, total] = await this.messageRepo.findAndCount({
+            where: { ticketId },
+            order: { createdAt: 'ASC', id: 'ASC' },
+            skip: (currentPage - 1) * take,
+            take,
+        });
+        return {
+            messages: await Promise.all(messages.map((message) => this.formatMessage(message))),
+            total,
+            totalPages: Math.ceil(total / take),
+            currentPage,
         };
     }
     formatTicketResponse(ticket, message) {
@@ -126,26 +303,63 @@ let SupportService = class SupportService {
             message,
         };
     }
-    formatTicket(ticket) {
+    async formatTicket(ticket) {
+        const latest = [...(ticket.messages || [])].sort((a, b) => b.id - a.id)[0];
         return {
             ticketId: ticket.id,
             kind: ticket.kind,
             category: ticket.category,
+            subject: ticket.subject,
             message: ticket.message,
             preferredContact: ticket.preferredContact,
             contact: ticket.contact,
             status: ticket.status,
-            attachments: ticket.attachments || [],
-            uploadedAttachments: (ticket.uploadedAttachments || []).map((item) => ({
-                id: item.id,
-                fileName: item.fileName,
-                fileUrl: item.fileUrl,
-                contentType: item.contentType,
-                createdAt: item.createdAt,
-            })),
+            attachments: await Promise.all((ticket.uploadedAttachments || []).map((item) => this.formatAttachment(item))),
+            latestMessage: latest ? await this.formatMessage(latest) : null,
+            user: ticket.user
+                ? {
+                    id: ticket.user.id,
+                    name: ticket.user.full_name ||
+                        [ticket.user.firstName, ticket.user.lastName]
+                            .filter(Boolean)
+                            .join(' '),
+                    phone: ticket.user.phone,
+                }
+                : undefined,
             createdAt: ticket.createdAt,
             updatedAt: ticket.updatedAt,
         };
+    }
+    async formatMessage(message) {
+        return {
+            id: message.id,
+            ticketId: message.ticketId,
+            sender: message.sender,
+            body: message.body || '',
+            attachments: await Promise.all((message.attachments || []).map(async (attachment) => ({
+                ...attachment,
+                fileUrl: attachment.assetId
+                    ? await this.storageService.getUrl(attachment.assetId)
+                    : attachment.fileUrl,
+            }))),
+            createdAt: message.createdAt,
+        };
+    }
+    async formatAttachment(attachment) {
+        return {
+            id: attachment.id,
+            assetId: attachment.assetId || null,
+            fileName: attachment.fileName,
+            fileUrl: attachment.assetId
+                ? await this.storageService.getUrl(attachment.assetId)
+                : attachment.fileUrl,
+            contentType: attachment.contentType,
+            createdAt: attachment.createdAt,
+        };
+    }
+    defaultTicketSubject(kind, category) {
+        const categoryLabel = String(category || 'other').replace(/_/g, ' ');
+        return `${kind === 'complaint' ? 'Complaint' : 'Feedback'}: ${categoryLabel}`;
     }
 };
 exports.SupportService = SupportService;
@@ -154,9 +368,14 @@ exports.SupportService = SupportService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(support_contact_message_entity_1.SupportContactMessage)),
     __param(1, (0, typeorm_1.InjectRepository)(support_ticket_entity_1.SupportTicket)),
     __param(2, (0, typeorm_1.InjectRepository)(support_ticket_attachment_entity_1.SupportTicketAttachment)),
+    __param(3, (0, typeorm_1.InjectRepository)(support_ticket_message_entity_1.SupportTicketMessage)),
+    __param(4, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        notifications_service_1.NotificationsService])
+        typeorm_2.Repository,
+        typeorm_2.Repository,
+        notifications_service_1.NotificationsService,
+        object_storage_service_1.ObjectStorageService])
 ], SupportService);
 //# sourceMappingURL=support.service.js.map

@@ -32,6 +32,13 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SupportModule } from './support/support.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { PostsModule } from './posts/posts.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { IdempotencyModule } from './idempotency/idempotency.module';
+import { StorageModule } from './storage/storage.module';
+import { PushModule } from './push/push.module';
+import { ModerationModule } from './moderation/moderation.module';
+import { AccountDeletionModule } from './users/account-deletion.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -45,10 +52,18 @@ import { PostsModule } from './posts/posts.module';
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize:
+        (process.env.NODE_ENV || 'development') === 'development' &&
+        process.env.DB_SYNCHRONIZE !== 'false',
       legacySpatialSupport: false, 
     }),
+    ScheduleModule.forRoot(),
     AuthSessionModule,
+    IdempotencyModule,
+    StorageModule,
+    RealtimeModule,
+    PushModule,
+    ModerationModule,
     // Application Modules
     AuthModule,
     UsersModule,
@@ -59,8 +74,8 @@ import { PostsModule } from './posts/posts.module';
     ThrottlerModule.forRoot({
       throttlers: [
         {
-          ttl: 30000, // 30 seconds window
-          limit: 10,   // 1 request per IP per window
+          ttl: 60000,
+          limit: 120,
         },
       ],
     }),
@@ -78,6 +93,7 @@ import { PostsModule } from './posts/posts.module';
     SupportModule,
     ProfilesModule,
     PostsModule,
+    AccountDeletionModule,
   ],
   controllers: [AppController],
   providers: [

@@ -6,12 +6,12 @@ import { Education } from './entities/education.entity';
 import { Certification } from './entities/certification.entity';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
+import { AdminUserController } from './admin-user.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
 import { Filter } from 'src/filter/entities/filter.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
-import { FilesModule } from 'src/files/files.module';
 
 @Module({
   imports: [
@@ -26,9 +26,8 @@ import { FilesModule } from 'src/files/files.module';
     ]),
     forwardRef(() => AuthModule),
     FirebaseModule,
-    FilesModule,
   ],
-  controllers: [UsersController],
+  controllers: [UsersController, AdminUserController],
   providers: [UsersService],
   exports: [UsersService, TypeOrmModule],
 })

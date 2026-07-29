@@ -18,11 +18,6 @@ import { Request } from 'express';
 import * as Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { mkdirSync } from 'fs';
-import { extname } from 'path';
-import { randomBytes } from 'crypto';
-import { FilesService } from 'src/files/files.service';
 
 const optionalString = () => Joi.string().allow('', null).optional();
 const optionalUri = () => Joi.string().uri().allow('', null).optional();
@@ -75,17 +70,6 @@ const spokenLanguageSchema = Joi.object({
 });
 
 const documentUploadOptions = {
-  storage: diskStorage({
-    destination: (req, file, callback) => {
-      const uploadPath = './uploads/profile-documents';
-      mkdirSync(uploadPath, { recursive: true });
-      callback(null, uploadPath);
-    },
-    filename: (req, file, callback) => {
-      const uniqueName = `${Date.now()}-${randomBytes(6).toString('hex')}${extname(file.originalname)}`;
-      callback(null, uniqueName);
-    },
-  }),
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
@@ -103,10 +87,7 @@ const documentUploadOptions = {
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly filesService: FilesService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
   async getMe(@Req() req: Request) {
@@ -145,7 +126,7 @@ export class UsersController {
           .valid('Single', 'Married', 'Other', '')
           .allow(null)
           .optional(),
-        profile_photo: optionalUri(),
+        profile_photo: Joi.forbidden(),
 
         alternate_phone: optionalString(),
         address_line1: optionalString(),
@@ -158,9 +139,9 @@ export class UsersController {
         national_id_number: optionalString(),
         passport_number: optionalString(),
         id_expiry_date: optionalDate(),
-        id_document_front: optionalUri(),
-        id_document_back: optionalUri(),
-        address_proof_document: optionalUri(),
+        id_document_front: Joi.forbidden(),
+        id_document_back: Joi.forbidden(),
+        address_proof_document: Joi.forbidden(),
 
         professional_summary: optionalString(),
 
@@ -258,21 +239,17 @@ export class UsersController {
     if (!userId) throw new NotFoundException('User not found or unauthorized');
     if (!file) throw new BadRequestException('No file provided');
 
-    const fileUrl = this.filesService.getFileUrl(
-      file.filename,
-      'profile-documents',
-    );
-    const profile = await this.usersService.updateProfileDocument(
+    const result = await this.usersService.uploadProfileDocument(
       userId,
       body.type,
-      fileUrl,
+      file,
     );
 
     return {
       message: 'Document uploaded successfully',
-      fileName: file.filename,
-      fileUrl,
-      ...profile,
+      fileName: file.originalname,
+      fileUrl: result.fileUrl,
+      ...result.profile,
     };
   }
 

@@ -143,6 +143,21 @@ export class CompanyPage {
   @Column({ nullable: true })
   company_rating: number;
 
+  @Column({ type: 'float', default: 0 })
+  ratingAverage: number;
+
+  @Column({ type: 'int', default: 0 })
+  ratingCount: number;
+
+  @Column({ nullable: true, length: 36 })
+  logoAssetId: string;
+
+  @Column({ nullable: true, length: 36 })
+  verificationDocumentAssetId: string;
+
+  @Column({ nullable: true, length: 80 })
+  verificationProofType: string;
+
   @Column({
     type: 'enum',
     enum: ['pending', 'approved', 'needs_changes', 'rejected', 'suspended'],

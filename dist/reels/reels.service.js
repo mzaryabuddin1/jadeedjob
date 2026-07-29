@@ -29,8 +29,10 @@ const profile_follow_entity_1 = require("../profiles/entities/profile-follow.ent
 const pages_service_1 = require("../pages/pages.service");
 const profiles_service_1 = require("../profiles/profiles.service");
 const profile_format_util_1 = require("../profiles/profile-format.util");
+const moderation_service_1 = require("../moderation/moderation.service");
+const object_storage_service_1 = require("../storage/object-storage.service");
 let ReelsService = class ReelsService {
-    constructor(reelRepo, uploadSessionRepo, likeRepo, saveRepo, commentRepo, profileFollowRepo, jobRepo, userRepo, pagesService, profilesService, storage) {
+    constructor(reelRepo, uploadSessionRepo, likeRepo, saveRepo, commentRepo, profileFollowRepo, jobRepo, userRepo, pagesService, profilesService, storage, moderationService, objectStorageService) {
         this.reelRepo = reelRepo;
         this.uploadSessionRepo = uploadSessionRepo;
         this.likeRepo = likeRepo;
@@ -42,6 +44,8 @@ let ReelsService = class ReelsService {
         this.pagesService = pagesService;
         this.profilesService = profilesService;
         this.storage = storage;
+        this.moderationService = moderationService;
+        this.objectStorageService = objectStorageService;
     }
     onModuleInit() {
         this.cleanupExpiredUploadSessions().catch(() => undefined);
@@ -186,6 +190,11 @@ let ReelsService = class ReelsService {
           COALESCE(reel.publisherType, 'user') = 'user'
           OR publisherCompany.verificationStatus = 'approved'
         )`);
+            qb.andWhere('creator.isBanned = :creatorBanned', {
+                creatorBanned: false,
+            });
+            qb.andWhere('creator.deletedAt IS NULL');
+            await this.applyBlockedPublisherFilters(qb, userId);
             if (feed === 'following') {
                 qb.andWhere(this.publisherFollowExistsSql('reel'), { userId });
             }
@@ -273,7 +282,7 @@ let ReelsService = class ReelsService {
         const hasMore = comments.length > safeLimit;
         const pageItems = hasMore ? comments.slice(0, safeLimit) : comments;
         return {
-            data: pageItems.map((comment) => this.formatComment(comment)),
+            data: await Promise.all(pageItems.map((comment) => this.formatComment(comment))),
             nextCursor: hasMore ? this.encodeCursor(pageItems[pageItems.length - 1]) : null,
         };
     }
@@ -430,6 +439,13 @@ let ReelsService = class ReelsService {
         if (reel.visibility === 'draft' && reel.creatorId !== userId) {
             throw new common_1.NotFoundException('Reel not found');
         }
+        if (reel.creatorId !== userId &&
+            (reel.creator?.isBanned || reel.creator?.deletedAt)) {
+            throw new common_1.NotFoundException('Reel not found');
+        }
+        if (reel.creatorId !== userId) {
+            await this.moderationService.assertInteractionAllowed(userId, this.getPublisherType(reel), this.getPublisherId(reel));
+        }
         if (this.getPublisherType(reel) === 'company' &&
             reel.publisherCompany?.verificationStatus !== 'approved' &&
             reel.creatorId !== userId) {
@@ -496,15 +512,17 @@ let ReelsService = class ReelsService {
         const likedIds = new Set(likes.map((like) => like.reelId));
         const savedIds = new Set(saves.map((save) => save.reelId));
         const followedPublisherKeys = new Set([...userFollows, ...companyFollows].map((follow) => this.publisherKey(follow.profileType, follow.profileId)));
-        return reels.map((reel) => this.formatReelSync(reel, viewerId, likedIds, savedIds, followedPublisherKeys));
+        return Promise.all(reels.map(async (reel) => this.withPublisherAsset(this.formatReelSync(reel, viewerId, likedIds, savedIds, followedPublisherKeys), reel)));
     }
     async getReelAudio(reelId, viewerId) {
         const reel = await this.getViewableReelOrThrow(reelId, viewerId);
         const audioTitle = reel.audioTitle || 'Original audio';
-        const usageCount = await this.createViewablePublishedQuery(viewerId)
+        const usageQuery = this.createViewablePublishedQuery(viewerId);
+        await this.applyBlockedPublisherFilters(usageQuery, viewerId);
+        const usageCount = await usageQuery
             .andWhere('reel.audioTitle = :audioTitle', { audioTitle })
             .getCount();
-        const publisher = this.formatPublisher(reel);
+        const publisher = await this.publisherWithAsset(reel);
         return {
             audioId: encodeURIComponent(audioTitle),
             audioTitle,
@@ -518,7 +536,9 @@ let ReelsService = class ReelsService {
         const audioTitle = decodeURIComponent(audioId);
         const limit = Math.min(50, Math.max(1, Number(query.limit) || 20));
         const page = Math.max(1, Number(query.page) || 1);
-        const [reels, total] = await this.createViewablePublishedQuery(viewerId)
+        const qb = this.createViewablePublishedQuery(viewerId);
+        await this.applyBlockedPublisherFilters(qb, viewerId);
+        const [reels, total] = await qb
             .leftJoinAndSelect('reel.linkedJob', 'linkedJob')
             .andWhere('reel.audioTitle = :audioTitle', { audioTitle })
             .orderBy('reel.publishedAt', 'DESC')
@@ -548,9 +568,9 @@ let ReelsService = class ReelsService {
                 },
             }),
         ]);
-        return this.formatReelSync(reel, viewerId, new Set(like ? [reel.id] : []), new Set(save ? [reel.id] : []), new Set(follow
+        return this.withPublisherAsset(this.formatReelSync(reel, viewerId, new Set(like ? [reel.id] : []), new Set(save ? [reel.id] : []), new Set(follow
             ? [this.publisherKey(follow.profileType, follow.profileId)]
-            : []));
+            : [])), reel);
     }
     formatReelSync(reel, viewerId, likedIds, savedIds, followedPublisherKeys) {
         const publisherType = this.getPublisherType(reel);
@@ -587,25 +607,43 @@ let ReelsService = class ReelsService {
             publishedAt: reel.publishedAt,
         };
     }
-    formatComment(comment) {
+    async formatComment(comment) {
         if (!comment) {
             return null;
         }
         return {
             id: String(comment.id),
             reelId: String(comment.reelId),
-            author: this.formatAuthor(comment.user),
+            author: await this.formatAuthor(comment.user),
             text: comment.text,
             createdAt: comment.createdAt,
         };
     }
-    formatAuthor(user) {
+    async formatAuthor(user) {
         const author = (0, profile_format_util_1.formatUserPublisher)(user);
         return {
             ...author,
-            avatarUri: author.avatarUri ||
+            avatarUri: (user?.profilePhotoAssetId
+                ? await this.storageAssetUrl(user.profilePhotoAssetId)
+                : author.avatarUri) ||
                 `https://i.pravatar.cc/160?u=jadeed-${user?.id || 'anonymous'}`,
         };
+    }
+    async publisherWithAsset(reel) {
+        const publisher = this.formatPublisher(reel);
+        const assetId = this.getPublisherType(reel) === 'company'
+            ? reel.publisherCompany?.logoAssetId
+            : reel.creator?.profilePhotoAssetId;
+        return assetId
+            ? { ...publisher, avatarUri: await this.storageAssetUrl(assetId) }
+            : publisher;
+    }
+    async withPublisherAsset(result, reel) {
+        const publisher = await this.publisherWithAsset(reel);
+        return { ...result, publisher, author: publisher };
+    }
+    async storageAssetUrl(assetId) {
+        return this.objectStorageService.getUrl(assetId);
     }
     async resolvePublisher(publisher, userId) {
         if (!publisher || publisher.type === 'user') {
@@ -704,6 +742,10 @@ let ReelsService = class ReelsService {
             .andWhere('reel.status = :publishedStatus', {
             publishedStatus: 'published',
         })
+            .andWhere('creator.isBanned = :creatorBanned', {
+            creatorBanned: false,
+        })
+            .andWhere('creator.deletedAt IS NULL')
             .andWhere(`(
           COALESCE(reel.publisherType, 'user') = 'user'
           OR publisherCompany.verificationStatus = 'approved'
@@ -721,6 +763,16 @@ let ReelsService = class ReelsService {
               AND ${this.publisherFollowExistsSql('reel')}
             )`, { followersVisibility: 'followers', userId: viewerId });
         }));
+        return qb;
+    }
+    async applyBlockedPublisherFilters(qb, viewerId) {
+        const blocked = await this.moderationService.blockedTargets(viewerId);
+        if (blocked.userIds.length) {
+            qb.andWhere("(COALESCE(reel.publisherType, 'user') != 'user' OR reel.creatorId NOT IN (:...blockedReelUserIds))", { blockedReelUserIds: blocked.userIds });
+        }
+        if (blocked.companyIds.length) {
+            qb.andWhere("(reel.publisherType != 'company' OR reel.publisherCompanyId NOT IN (:...blockedReelCompanyIds))", { blockedReelCompanyIds: blocked.companyIds });
+        }
         return qb;
     }
     getUploadExpiry() {
@@ -796,6 +848,8 @@ exports.ReelsService = ReelsService = __decorate([
         typeorm_2.Repository,
         pages_service_1.PagesService,
         profiles_service_1.ProfilesService,
-        reel_storage_service_1.ReelStorageService])
+        reel_storage_service_1.ReelStorageService,
+        moderation_service_1.ModerationService,
+        object_storage_service_1.ObjectStorageService])
 ], ReelsService);
 //# sourceMappingURL=reels.service.js.map

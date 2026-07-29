@@ -3,12 +3,19 @@ import { OtpService } from 'src/otp/otp.service';
 import { TwilioService } from 'src/twilio/twilio.service';
 import { UsersService } from 'src/users/users.service';
 import { Request } from 'express';
+import { Response } from 'express';
+import { AuthSessionService } from './auth-session.service';
+import { SocialAuthService } from './social-auth.service';
 export declare class AuthController {
     private readonly authService;
     private readonly otpService;
     private readonly twilioService;
     private readonly usersService;
-    constructor(authService: AuthService, otpService: OtpService, twilioService: TwilioService, usersService: UsersService);
+    private readonly authSessionService;
+    private readonly socialAuthService;
+    constructor(authService: AuthService, otpService: OtpService, twilioService: TwilioService, usersService: UsersService, authSessionService: AuthSessionService, socialAuthService: SocialAuthService);
+    private deviceFrom;
+    private sessionResponse;
     private deliverOtp;
     sendOtp(body: any): Promise<{
         message: string;
@@ -17,20 +24,12 @@ export declare class AuthController {
         message: string;
         otp?: undefined;
     }>;
-    verifyOtp(body: any): Promise<{
-        user: any;
-        verificationRequirements: import("../users/profile-verification.util").VerificationRequirements;
-        access_token: string;
-    }>;
+    verifyOtp(body: any): Promise<any>;
     login(dto: {
         phone: string;
         password: string;
         fcmToken?: string;
-    }): Promise<{
-        user: any;
-        verificationRequirements: import("../users/profile-verification.util").VerificationRequirements;
-        access_token: string;
-    }>;
+    }): Promise<any>;
     sendForgotPasswordOtp(body: any): Promise<{
         message: string;
         otp: string;
@@ -60,10 +59,23 @@ export declare class AuthController {
         message: string;
         otp?: undefined;
     }>;
-    verifyPasswordChangeOtp(req: Request, body: any): Promise<{
-        user: any;
-        verificationRequirements: import("../users/profile-verification.util").VerificationRequirements;
+    verifyPasswordChangeOtp(req: Request, body: any): Promise<any>;
+    refresh(body: any): Promise<any>;
+    logout(req: Request): Promise<{
         message: string;
-        access_token: string;
     }>;
+    logoutAll(req: Request): Promise<{
+        message: string;
+    }>;
+    google(body: any, response: Response): Promise<any>;
+    facebook(body: any, response: Response): Promise<any>;
+    sendSocialPhoneOtp(body: any): Promise<{
+        message: string;
+        otp: string;
+    } | {
+        message: string;
+        otp?: undefined;
+    }>;
+    verifySocialPhoneOtp(body: any): Promise<any>;
+    private finishSocialLogin;
 }

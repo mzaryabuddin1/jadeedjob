@@ -22,14 +22,23 @@ const user_entity_1 = require("../users/entities/user.entity");
 const rating_entity_1 = require("../rating/entities/rating.entity");
 const page_member_entity_1 = require("../pages/entities/page-member.entity");
 const notifications_service_1 = require("../notifications/notifications.service");
+const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const company_permissions_1 = require("../pages/company-permissions");
+const chat_service_1 = require("../chat/chat.service");
+const idempotency_service_1 = require("../idempotency/idempotency.service");
+const moderation_service_1 = require("../moderation/moderation.service");
 let JobApplicationService = class JobApplicationService {
-    constructor(jobAppRepo, jobRepo, userRepo, ratingRepo, pageMemberRepo, notificationsService) {
+    constructor(jobAppRepo, jobRepo, userRepo, ratingRepo, pageMemberRepo, companyRepo, notificationsService, chatService, idempotencyService, moderationService) {
         this.jobAppRepo = jobAppRepo;
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
         this.ratingRepo = ratingRepo;
         this.pageMemberRepo = pageMemberRepo;
+        this.companyRepo = companyRepo;
         this.notificationsService = notificationsService;
+        this.chatService = chatService;
+        this.idempotencyService = idempotencyService;
+        this.moderationService = moderationService;
     }
     formatDemand(job) {
         const currency = job.currency || '₨';
@@ -87,65 +96,44 @@ let JobApplicationService = class JobApplicationService {
         };
     }
     async canManageJob(job, userId) {
-        if (job.createdBy === userId)
-            return true;
         if (!job.pageId)
+            return job.createdBy === userId;
+        const company = job.page ||
+            (await this.companyRepo.findOne({ where: { id: job.pageId } }));
+        if (!company || company.verificationStatus !== 'approved')
             return false;
+        if (company.ownerId === userId)
+            return true;
         const member = await this.pageMemberRepo.findOne({
             where: { pageId: job.pageId, userId },
         });
         if (!member || member.hasAccess === false)
             return false;
-        const defaultPermissions = member.role === 'editor'
-            ? {
-                viewApplicants: true,
-                chatApplicants: true,
-            }
-            : {
-                viewApplicants: true,
-                chatApplicants: true,
-            };
-        const permissions = {
-            ...defaultPermissions,
-            ...(member.permissions || {}),
-        };
-        return Boolean(permissions.viewApplicants);
+        return (0, company_permissions_1.normalizeCompanyPermissions)(member.role, member.permissions).viewApplicants;
     }
     async apply(data) {
-        const job = await this.jobRepo.findOne({
-            where: { id: data.jobId, isActive: true },
-            relations: ['page', 'creator'],
+        return this.idempotencyService.execute(data.applicantId, 'job_application_apply', data.idempotencyKey, {
+            jobId: data.jobId,
+            bidAmount: data.bidAmount ?? null,
+            bidCurrency: data.bidCurrency ?? null,
+        }, async () => {
+            const result = await this.jobAppRepo.manager.transaction(async (manager) => this.applyTransaction(data, manager));
+            const conversation = await this.chatService.ensureApplicationConversation(result.app.id);
+            await this.notificationsService.create({
+                userId: result.job.createdBy,
+                type: 'job_application',
+                title: 'New application received',
+                message: `Someone applied to ${result.job.title}.`,
+                data: {
+                    jobId: result.job.id,
+                    applicationId: result.app.id,
+                    chatId: conversation.id,
+                    conversationId: conversation.id,
+                    companyId: result.job.pageId ?? null,
+                },
+            });
+            return this.applicationMutationResponse(result.app, conversation.id);
         });
-        if (!job || (job.status && job.status !== 'active')) {
-            throw new common_1.BadRequestException('Job does not exist or is not active');
-        }
-        const existing = await this.jobAppRepo.findOne({
-            where: {
-                jobId: data.jobId,
-                applicantId: data.applicantId,
-            },
-        });
-        if (existing && existing.status !== 'withdrawn') {
-            throw new common_1.BadRequestException('You already applied to this job');
-        }
-        const app = existing || this.jobAppRepo.create(data);
-        app.status = 'pending';
-        app.withdrawnAt = null;
-        app.completedAt = null;
-        const saved = await this.jobAppRepo.save(app);
-        await this.notificationsService.create({
-            userId: job.createdBy,
-            type: 'job_application',
-            title: 'New application received',
-            message: `Someone applied to ${job.title}.`,
-            data: {
-                jobId: job.id,
-                applicationId: saved.id,
-                chatId: saved.id,
-                companyId: job.pageId ?? null,
-            },
-        });
-        return saved;
     }
     async getApplicationsByUser(userId, page = 1, limit = 10, status) {
         const currentPage = Math.max(1, Number(page) || 1);
@@ -164,17 +152,27 @@ let JobApplicationService = class JobApplicationService {
             take,
             order: { createdAt: 'DESC' },
         });
-        return {
-            data: applications.map((application) => ({
+        const rows = await Promise.all(applications.map(async (application) => {
+            const conversation = await this.chatService.ensureApplicationConversation(application.id);
+            return {
                 applicationId: application.id,
                 id: application.id,
                 status: application.status,
+                bidAmount: application.bidAmount === null
+                    ? null
+                    : Number(application.bidAmount),
+                bidCurrency: application.bidCurrency || null,
                 createdAt: application.createdAt,
                 updatedAt: application.updatedAt,
                 job: this.getJobSummary(application.job),
                 employer: this.getEmployerSummary(application.job),
-                chatId: application.id,
-            })),
+                chatId: conversation.id,
+                conversationId: conversation.id,
+                legacyApplicationChatId: application.id,
+            };
+        }));
+        return {
+            data: rows,
             total,
             totalPages: Math.ceil(total / take),
             currentPage,
@@ -259,11 +257,12 @@ let JobApplicationService = class JobApplicationService {
         const reviewsByApplicationId = new Map(reviews.map((review) => [review.jobApplicationId, review]));
         const demand = this.formatDemand(job);
         return {
-            data: applications.map((application) => {
+            data: await Promise.all(applications.map(async (application) => {
                 const applicant = application.applicant;
                 const review = reviewsByApplicationId.get(application.id);
                 const ratingAverage = Number(applicant?.ratingAverage || 0);
                 const ratingCount = Number(applicant?.ratingCount || 0);
+                const conversation = await this.chatService.ensureApplicationConversation(application.id);
                 return {
                     id: application.id,
                     jobApplicationId: application.id,
@@ -275,6 +274,10 @@ let JobApplicationService = class JobApplicationService {
                     rating: ratingAverage,
                     ratingCount,
                     status: application.status,
+                    bidAmount: application.bidAmount === null
+                        ? null
+                        : Number(application.bidAmount),
+                    bidCurrency: application.bidCurrency || null,
                     lastReview: review
                         ? {
                             stars: review.stars,
@@ -291,11 +294,13 @@ let JobApplicationService = class JobApplicationService {
                         ratingAverage,
                         ratingCount,
                     },
-                    chatId: application.id,
+                    chatId: conversation.id,
+                    conversationId: conversation.id,
+                    legacyApplicationChatId: application.id,
                     createdAt: application.createdAt,
                     updatedAt: application.updatedAt,
                 };
-            }),
+            })),
             counts: {
                 pending,
                 accepted,
@@ -311,34 +316,49 @@ let JobApplicationService = class JobApplicationService {
         };
     }
     async updateStatus(id, status, employerId) {
-        const app = await this.jobAppRepo.findOne({
-            where: { id },
-            relations: ['job', 'job.page', 'job.creator'],
-        });
-        if (!app)
-            throw new common_1.BadRequestException('Application not found');
-        if (!(await this.canManageJob(app.job, employerId))) {
-            throw new common_1.ForbiddenException('You cannot update this application');
+        if (!['accepted', 'rejected', 'pending', 'completed'].includes(status)) {
+            throw new common_1.BadRequestException('Employer cannot set this application status');
         }
-        app.status = status;
-        if (status === 'completed')
-            app.completedAt = new Date();
-        if (status !== 'withdrawn')
+        const saved = await this.jobAppRepo.manager.transaction(async (manager) => {
+            const app = await manager.getRepository(job_application_entity_1.JobApplication).findOne({
+                where: { id },
+                relations: ['job', 'job.page', 'job.creator'],
+                lock: { mode: 'pessimistic_write' },
+            });
+            if (!app)
+                throw new common_1.NotFoundException('Application not found');
+            if (!(await this.canManageJob(app.job, employerId))) {
+                throw new common_1.ForbiddenException('You cannot update this application');
+            }
+            this.assertEmployerTransition(app.status, status);
+            if (status === 'accepted') {
+                await this.assertVacancyAvailable(app.job, manager, app.id);
+            }
+            app.status = status;
+            app.completedAt = status === 'completed' ? new Date() : null;
             app.withdrawnAt = null;
-        const saved = await this.jobAppRepo.save(app);
+            return manager.save(app);
+        });
+        await this.chatService.syncApplicationConversation(saved.id, saved.status);
+        const conversation = await this.chatService.ensureApplicationConversation(saved.id);
+        const job = await this.jobRepo.findOne({
+            where: { id: saved.jobId },
+            relations: ['page'],
+        });
         await this.notificationsService.create({
-            userId: app.applicantId,
+            userId: saved.applicantId,
             type: 'application_status',
             title: 'Application status updated',
-            message: `Your application for ${app.job.title} is now ${status}.`,
+            message: `Your application for ${job.title} is now ${status}.`,
             data: {
-                jobId: app.jobId,
-                applicationId: app.id,
-                chatId: app.id,
-                companyId: app.job.pageId ?? null,
+                jobId: saved.jobId,
+                applicationId: saved.id,
+                chatId: conversation.id,
+                conversationId: conversation.id,
+                companyId: job.pageId ?? null,
             },
         });
-        return saved;
+        return this.applicationMutationResponse(saved, conversation.id);
     }
     async withdraw(id, applicantId) {
         const app = await this.jobAppRepo.findOne({
@@ -353,9 +373,14 @@ let JobApplicationService = class JobApplicationService {
         if (['accepted', 'completed'].includes(app.status)) {
             throw new common_1.BadRequestException('This application cannot be withdrawn');
         }
+        if (!['pending', 'rejected'].includes(app.status)) {
+            throw new common_1.BadRequestException('This application cannot be withdrawn');
+        }
         app.status = 'withdrawn';
         app.withdrawnAt = new Date();
         const saved = await this.jobAppRepo.save(app);
+        await this.chatService.syncApplicationConversation(saved.id, saved.status);
+        const conversation = await this.chatService.ensureApplicationConversation(saved.id);
         await this.notificationsService.create({
             userId: app.job.createdBy,
             type: 'application_withdrawn',
@@ -364,13 +389,122 @@ let JobApplicationService = class JobApplicationService {
             data: {
                 jobId: app.jobId,
                 applicationId: app.id,
-                chatId: app.id,
+                chatId: conversation.id,
+                conversationId: conversation.id,
                 companyId: app.job.pageId ?? null,
             },
         });
         return {
             message: 'Application withdrawn successfully',
-            application: saved,
+            application: this.applicationMutationResponse(saved, conversation.id),
+        };
+    }
+    async applyTransaction(data, manager) {
+        const job = await manager.getRepository(job_entity_1.Job).findOne({
+            where: { id: data.jobId },
+            relations: ['page', 'creator'],
+            lock: { mode: 'pessimistic_read' },
+        });
+        if (!job ||
+            !job.isActive ||
+            job.status !== 'active' ||
+            (job.pageId && job.page?.verificationStatus !== 'approved')) {
+            throw new common_1.BadRequestException('Job does not exist or is not active');
+        }
+        if (job.createdBy === data.applicantId) {
+            throw new common_1.BadRequestException('You cannot apply to your own job');
+        }
+        await this.moderationService.assertInteractionAllowed(data.applicantId, job.pageId ? 'company' : 'user', job.pageId || job.createdBy);
+        const negotiable = job.salaryType === 'negotiable';
+        if (negotiable && !(Number(data.bidAmount) > 0)) {
+            throw new common_1.BadRequestException('A positive bidAmount is required for negotiable jobs');
+        }
+        if (!negotiable && data.bidAmount !== undefined) {
+            throw new common_1.BadRequestException('Bids are only allowed for negotiable jobs');
+        }
+        let app = await manager.getRepository(job_application_entity_1.JobApplication).findOne({
+            where: { jobId: data.jobId, applicantId: data.applicantId },
+            lock: { mode: 'pessimistic_write' },
+        });
+        if (app && app.status !== 'withdrawn') {
+            throw new common_1.BadRequestException('You already applied to this job');
+        }
+        if (!app) {
+            app = manager.getRepository(job_application_entity_1.JobApplication).create({
+                jobId: data.jobId,
+                applicantId: data.applicantId,
+            });
+        }
+        app.status = 'pending';
+        app.withdrawnAt = null;
+        app.completedAt = null;
+        app.sourceInvitationId = null;
+        app.bidAmount = negotiable ? Number(data.bidAmount) : null;
+        app.bidCurrency = negotiable
+            ? String(data.bidCurrency || job.currency || '').trim() || null
+            : null;
+        app.lastApplyRequestId =
+            String(data.idempotencyKey || '').trim() || null;
+        return { app: await manager.save(app), job };
+    }
+    assertEmployerTransition(current, next) {
+        if (current === next)
+            return;
+        const allowed = {
+            pending: ['accepted', 'rejected'],
+            rejected: ['pending'],
+            accepted: ['completed'],
+        };
+        if (!allowed[current]?.includes(next)) {
+            throw new common_1.BadRequestException(`Application cannot move from ${current} to ${next}`);
+        }
+    }
+    async assertVacancyAvailable(job, manager, excludedApplicationId) {
+        const lockedJob = await manager.getRepository(job_entity_1.Job).findOne({
+            where: { id: job.id },
+            lock: { mode: 'pessimistic_write' },
+        });
+        if (!lockedJob ||
+            !lockedJob.isActive ||
+            lockedJob.status !== 'active') {
+            throw new common_1.BadRequestException('Job is no longer active');
+        }
+        if (!lockedJob.vacancies)
+            return;
+        const occupied = await manager
+            .getRepository(job_application_entity_1.JobApplication)
+            .createQueryBuilder('application')
+            .where('application.jobId = :jobId', { jobId: lockedJob.id })
+            .andWhere('application.id != :excludedApplicationId', {
+            excludedApplicationId,
+        })
+            .andWhere('application.status IN (:...statuses)', {
+            statuses: ['accepted', 'completed'],
+        })
+            .getCount();
+        if (occupied >= lockedJob.vacancies) {
+            throw new common_1.BadRequestException({
+                code: 'APPLICATION_VACANCIES_FILLED',
+                message: 'No vacancies remain for this job',
+            });
+        }
+    }
+    applicationMutationResponse(application, conversationId) {
+        return {
+            id: application.id,
+            applicationId: application.id,
+            jobId: application.jobId,
+            applicantId: application.applicantId,
+            status: application.status,
+            bidAmount: application.bidAmount === null
+                ? null
+                : Number(application.bidAmount),
+            bidCurrency: application.bidCurrency || null,
+            chatId: conversationId,
+            conversationId,
+            legacyApplicationChatId: application.id,
+            createdAt: application.createdAt,
+            updatedAt: application.updatedAt,
         };
     }
 };
@@ -382,11 +516,16 @@ exports.JobApplicationService = JobApplicationService = __decorate([
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(3, (0, typeorm_1.InjectRepository)(rating_entity_1.Rating)),
     __param(4, (0, typeorm_1.InjectRepository)(page_member_entity_1.PageMember)),
+    __param(5, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        notifications_service_1.NotificationsService])
+        typeorm_2.Repository,
+        notifications_service_1.NotificationsService,
+        chat_service_1.ChatService,
+        idempotency_service_1.IdempotencyService,
+        moderation_service_1.ModerationService])
 ], JobApplicationService);
 //# sourceMappingURL=job-application.service.js.map

@@ -18,17 +18,28 @@ const user_entity_1 = require("../users/entities/user.entity");
 const rating_entity_1 = require("../rating/entities/rating.entity");
 const page_member_entity_1 = require("../pages/entities/page-member.entity");
 const notifications_module_1 = require("../notifications/notifications.module");
+const chat_module_1 = require("../chat/chat.module");
+const company_page_entity_1 = require("../pages/entities/company-page.entity");
 let JobApplicationModule = class JobApplicationModule {
 };
 exports.JobApplicationModule = JobApplicationModule;
 exports.JobApplicationModule = JobApplicationModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User, rating_entity_1.Rating, page_member_entity_1.PageMember]),
+            typeorm_1.TypeOrmModule.forFeature([
+                job_application_entity_1.JobApplication,
+                job_entity_1.Job,
+                user_entity_1.User,
+                rating_entity_1.Rating,
+                page_member_entity_1.PageMember,
+                company_page_entity_1.CompanyPage,
+            ]),
             notifications_module_1.NotificationsModule,
+            chat_module_1.ChatModule,
         ],
         controllers: [job_application_controller_1.JobApplicationController, employer_job_application_controller_1.EmployerJobApplicationController],
         providers: [job_application_service_1.JobApplicationService],
+        exports: [job_application_service_1.JobApplicationService],
     })
 ], JobApplicationModule);
 //# sourceMappingURL=job-application.module.js.map

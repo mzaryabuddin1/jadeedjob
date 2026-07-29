@@ -5,8 +5,10 @@ export declare class ChatController {
     getMessages(id: number, page: number, limit: number, req: any): Promise<{
         data: {
             id: number;
-            chatId: number;
+            chatId: string;
+            conversationId: string;
             jobApplicationId: number;
+            clientMessageId: string;
             senderId: number;
             senderName: string;
             senderAvatar: string;
@@ -20,8 +22,11 @@ export declare class ChatController {
             createdAt: Date;
             readAt: Date;
         }[];
+        nextBefore: string;
         total: number;
         totalPages: number;
         currentPage: number;
+        readOnly: boolean;
+        readOnlyReason: string;
     }>;
 }

@@ -13,6 +13,7 @@ import Joi from 'joi';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { ProfilesService } from './profiles.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 
 const profileSearchQuerySchema = Joi.object({
   profileType: Joi.string().valid('user', 'company').required(),
@@ -24,13 +25,48 @@ const profileSearchQuerySchema = Joi.object({
 @UseGuards(JwtAuthGuard)
 @Controller('profiles')
 export class ProfilesController {
-  constructor(private readonly profilesService: ProfilesService) {}
+  constructor(
+    private readonly profilesService: ProfilesService,
+    private readonly moderationService: ModerationService,
+  ) {}
 
   @Get('search')
   searchProfiles(
     @Query(new JoiValidationPipe(profileSearchQuerySchema)) query: any,
+    @Req() req: any,
   ) {
-    return this.profilesService.searchProfiles(query);
+    return this.profilesService.searchProfiles(query, req.user.id);
+  }
+
+  @Get('blocked')
+  getBlocked(
+    @Req() req: any,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.moderationService.listBlocked(
+      req.user.id,
+      Number(page),
+      Number(limit),
+    );
+  }
+
+  @Post(':profileType/:profileId/block')
+  block(
+    @Param('profileType') profileType: string,
+    @Param('profileId', ParseIntPipe) profileId: number,
+    @Req() req: any,
+  ) {
+    return this.moderationService.block(req.user.id, profileType, profileId);
+  }
+
+  @Delete(':profileType/:profileId/block')
+  unblock(
+    @Param('profileType') profileType: string,
+    @Param('profileId', ParseIntPipe) profileId: number,
+    @Req() req: any,
+  ) {
+    return this.moderationService.unblock(req.user.id, profileType, profileId);
   }
 
   @Get(':profileType/:profileId')

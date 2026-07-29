@@ -11,6 +11,8 @@ import { ReelComment } from './entities/reel-comment.entity';
 import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
 import { PagesService } from 'src/pages/pages.service';
 import { ProfilesService } from 'src/profiles/profiles.service';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 type CreateReelPayload = {
     caption: string;
     category: ReelCategory;
@@ -52,8 +54,10 @@ export declare class ReelsService implements OnModuleInit {
     private readonly pagesService;
     private readonly profilesService;
     private readonly storage;
+    private readonly moderationService;
+    private readonly objectStorageService;
     private cleanupTimer?;
-    constructor(reelRepo: Repository<Reel>, uploadSessionRepo: Repository<ReelUploadSession>, likeRepo: Repository<ReelLike>, saveRepo: Repository<ReelSave>, commentRepo: Repository<ReelComment>, profileFollowRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, pagesService: PagesService, profilesService: ProfilesService, storage: ReelStorageService);
+    constructor(reelRepo: Repository<Reel>, uploadSessionRepo: Repository<ReelUploadSession>, likeRepo: Repository<ReelLike>, saveRepo: Repository<ReelSave>, commentRepo: Repository<ReelComment>, profileFollowRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, pagesService: PagesService, profilesService: ProfilesService, storage: ReelStorageService, moderationService: ModerationService, objectStorageService: ObjectStorageService);
     onModuleInit(): void;
     getPublisherOptions(userId: number): Promise<{
         data: ({
@@ -76,63 +80,7 @@ export declare class ReelsService implements OnModuleInit {
         })[];
     }>;
     createReel(data: CreateReelPayload, userId: number): Promise<{
-        reel: {
-            id: string;
-            videoUrl: string;
-            category: ReelCategory;
-            publisher: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            author: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            caption: string;
-            audioTitle: string;
-            linkedJobId: number;
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                followingCreator: boolean;
-                isOwner: boolean;
-            };
-            visibility: ReelVisibility;
-            status: import("./entities/reel.entity").ReelStatus;
-            allowComments: boolean;
-            allowSharing: boolean;
-            createdAt: Date;
-            publishedAt: Date;
-        };
+        reel: any;
         upload: {
             uploadId: string;
             method: string;
@@ -153,121 +101,9 @@ export declare class ReelsService implements OnModuleInit {
         fileSizeBytes: number;
         contentType: string;
     }>;
-    completeUpload(reelId: number, userId: number, uploadId: string): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
+    completeUpload(reelId: number, userId: number, uploadId: string): Promise<any>;
     getFeed(query: FeedQuery, userId: number): Promise<{
-        data: {
-            id: string;
-            videoUrl: string;
-            category: ReelCategory;
-            publisher: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            author: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            caption: string;
-            audioTitle: string;
-            linkedJobId: number;
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                followingCreator: boolean;
-                isOwner: boolean;
-            };
-            visibility: ReelVisibility;
-            status: import("./entities/reel.entity").ReelStatus;
-            allowComments: boolean;
-            allowSharing: boolean;
-            createdAt: Date;
-            publishedAt: Date;
-        }[];
+        data: any[];
         nextCursor: string;
     }>;
     getComments(reelId: number, userId: number, cursor?: string, limit?: number): Promise<{
@@ -301,291 +137,11 @@ export declare class ReelsService implements OnModuleInit {
         text: string;
         createdAt: Date;
     }>;
-    likeReel(reelId: number, userId: number): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
-    unlikeReel(reelId: number, userId: number): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
-    saveReel(reelId: number, userId: number): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
-    unsaveReel(reelId: number, userId: number): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
-    registerShare(reelId: number, userId: number): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
+    likeReel(reelId: number, userId: number): Promise<any>;
+    unlikeReel(reelId: number, userId: number): Promise<any>;
+    saveReel(reelId: number, userId: number): Promise<any>;
+    unsaveReel(reelId: number, userId: number): Promise<any>;
+    registerShare(reelId: number, userId: number): Promise<any>;
     followCreator(creatorId: number, followerId: number): Promise<{
         creatorId: string;
         profileType: import("src/profiles/entities/profile-follow.entity").ProfileType;
@@ -602,63 +158,7 @@ export declare class ReelsService implements OnModuleInit {
         id: string;
         deleted: boolean;
     }>;
-    publishReel(reelId: number, userId: number): Promise<{
-        id: string;
-        videoUrl: string;
-        category: ReelCategory;
-        publisher: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        author: {
-            id: string;
-            avatarUri: string;
-            type: "company";
-            name: string;
-            handle: string;
-            verified: boolean;
-        } | {
-            id: string;
-            avatarUri: string;
-            type: "user";
-            name: string;
-            handle: string;
-            verified: boolean;
-        };
-        caption: string;
-        audioTitle: string;
-        linkedJobId: number;
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            followingCreator: boolean;
-            isOwner: boolean;
-        };
-        visibility: ReelVisibility;
-        status: import("./entities/reel.entity").ReelStatus;
-        allowComments: boolean;
-        allowSharing: boolean;
-        createdAt: Date;
-        publishedAt: Date;
-    }>;
+    publishReel(reelId: number, userId: number): Promise<any>;
     cleanupExpiredUploadSessions(): Promise<void>;
     private validateCreateMedia;
     private validateUploadedFile;
@@ -700,126 +200,14 @@ export declare class ReelsService implements OnModuleInit {
             handle: string;
             verified: boolean;
         };
-        originalReel: {
-            id: string;
-            videoUrl: string;
-            category: ReelCategory;
-            publisher: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            author: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            caption: string;
-            audioTitle: string;
-            linkedJobId: number;
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                followingCreator: boolean;
-                isOwner: boolean;
-            };
-            visibility: ReelVisibility;
-            status: import("./entities/reel.entity").ReelStatus;
-            allowComments: boolean;
-            allowSharing: boolean;
-            createdAt: Date;
-            publishedAt: Date;
-        };
+        originalReel: any;
         usageCount: number;
     }>;
     getReelsByAudio(audioId: string, viewerId: number, query?: any): Promise<{
         audioId: string;
         audioTitle: string;
         usageCount: number;
-        relatedReels: {
-            id: string;
-            videoUrl: string;
-            category: ReelCategory;
-            publisher: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            author: {
-                id: string;
-                avatarUri: string;
-                type: "company";
-                name: string;
-                handle: string;
-                verified: boolean;
-            } | {
-                id: string;
-                avatarUri: string;
-                type: "user";
-                name: string;
-                handle: string;
-                verified: boolean;
-            };
-            caption: string;
-            audioTitle: string;
-            linkedJobId: number;
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                followingCreator: boolean;
-                isOwner: boolean;
-            };
-            visibility: ReelVisibility;
-            status: import("./entities/reel.entity").ReelStatus;
-            allowComments: boolean;
-            allowSharing: boolean;
-            createdAt: Date;
-            publishedAt: Date;
-        }[];
+        relatedReels: any[];
         total: number;
         totalPages: number;
         currentPage: number;
@@ -828,6 +216,9 @@ export declare class ReelsService implements OnModuleInit {
     private formatReelSync;
     private formatComment;
     private formatAuthor;
+    private publisherWithAsset;
+    private withPublisherAsset;
+    private storageAssetUrl;
     private resolvePublisher;
     private assertPublisherCanPublish;
     private validateLinkedJob;
@@ -837,6 +228,7 @@ export declare class ReelsService implements OnModuleInit {
     private formatPublisher;
     private publisherFollowExistsSql;
     private createViewablePublishedQuery;
+    private applyBlockedPublisherFilters;
     private getUploadExpiry;
     private isExpired;
     private markSessionExpired;

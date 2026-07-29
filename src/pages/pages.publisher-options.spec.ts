@@ -79,6 +79,13 @@ describe('PagesService publisher options', () => {
       {} as any,
       userRepo as any,
       {} as any,
+      {} as any,
+      {} as any,
+      { getUrl: jest.fn(async () => null) } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
 
     const result = await service.getPublisherOptions(7, 'publishContent');

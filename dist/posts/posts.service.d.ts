@@ -12,11 +12,19 @@ import { PostSave } from './entities/post-save.entity';
 import { PostStorageService } from './post-storage.service';
 import { PostVideoUploadSession } from './entities/post-video-upload-session.entity';
 import { PostVideoStorageService } from './post-video-storage.service';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 type PostFeedQuery = {
+    feed?: 'forYou' | 'mine';
     cursor?: string;
     limit?: number;
     publisherType?: PostPublisherType;
     publisherId?: number;
+};
+type PostSearchQuery = {
+    q: string;
+    page?: number;
+    limit?: number;
 };
 type PostMutationBody = {
     publisherType?: PostPublisherType;
@@ -49,176 +57,25 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
     private readonly pagesService;
     private readonly storage;
     private readonly videoStorage;
+    private readonly moderationService;
+    private readonly objectStorageService;
     private cleanupTimer?;
-    constructor(postRepo: Repository<CommunityPost>, likeRepo: Repository<PostLike>, saveRepo: Repository<PostSave>, commentRepo: Repository<PostComment>, reportRepo: Repository<PostReport>, followRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, videoUploadRepo: Repository<PostVideoUploadSession>, pagesService: PagesService, storage: PostStorageService, videoStorage: PostVideoStorageService);
+    constructor(postRepo: Repository<CommunityPost>, likeRepo: Repository<PostLike>, saveRepo: Repository<PostSave>, commentRepo: Repository<PostComment>, reportRepo: Repository<PostReport>, followRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, videoUploadRepo: Repository<PostVideoUploadSession>, pagesService: PagesService, storage: PostStorageService, videoStorage: PostVideoStorageService, moderationService: ModerationService, objectStorageService: ObjectStorageService);
     onModuleInit(): void;
     onModuleDestroy(): void;
     getFeed(query: PostFeedQuery, viewerId: number): Promise<{
-        data: {
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                isOwner: boolean;
-                canManage: boolean;
-            };
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            allowComments: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-            linkedJob?: {
-                id: string;
-                title: string;
-                companyName: string;
-                salaryAmount: number;
-                salaryType: string;
-                currency: string;
-            };
-            id: string;
-            publisher: {
-                id: string;
-                type: "company";
-                name: string;
-                handle: string;
-                avatarUri: string;
-                verified: boolean;
-            } | {
-                id: string;
-                type: "user";
-                name: string;
-                handle: string;
-                avatarUri: string;
-                verified: boolean;
-            };
-            body: string;
-            imageUrl: string;
-            media: {
-                durationSeconds?: number;
-                type: "video";
-                url: string;
-                thumbnailUrl: string;
-            } | {
-                type: "image";
-                url: string;
-            };
-            mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-        }[];
+        data: any[];
         nextCursor: string;
     }>;
-    getPost(postId: number, viewerId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
+    searchPosts(query: PostSearchQuery, viewerId: number): Promise<{
+        data: any[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
     }>;
+    getPost(postId: number, viewerId: number): Promise<any>;
     createVideoUpload(data: CreateVideoPostBody, userId: number): Promise<{
-        post: {
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                isOwner: boolean;
-                canManage: boolean;
-            };
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            allowComments: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-            linkedJob?: {
-                id: string;
-                title: string;
-                companyName: string;
-                salaryAmount: number;
-                salaryType: string;
-                currency: string;
-            };
-            id: string;
-            publisher: {
-                id: string;
-                type: "company";
-                name: string;
-                handle: string;
-                avatarUri: string;
-                verified: boolean;
-            } | {
-                id: string;
-                type: "user";
-                name: string;
-                handle: string;
-                avatarUri: string;
-                verified: boolean;
-            };
-            body: string;
-            imageUrl: string;
-            media: {
-                durationSeconds?: number;
-                type: "video";
-                url: string;
-                thumbnailUrl: string;
-            } | {
-                type: "image";
-                url: string;
-            };
-            mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-        };
+        post: any;
         upload: {
             uploadId: string;
             method: string;
@@ -232,60 +89,7 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         };
     }>;
     createVideoReplacement(postId: number, media: PostVideoMediaInput, userId: number): Promise<{
-        post: {
-            viewerState: {
-                liked: boolean;
-                saved: boolean;
-                followingPublisher: boolean;
-                isOwner: boolean;
-                canManage: boolean;
-            };
-            stats: {
-                likes: number;
-                comments: number;
-                saves: number;
-                shares: number;
-            };
-            allowComments: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-            linkedJob?: {
-                id: string;
-                title: string;
-                companyName: string;
-                salaryAmount: number;
-                salaryType: string;
-                currency: string;
-            };
-            id: string;
-            publisher: {
-                id: string;
-                type: "company";
-                name: string;
-                handle: string;
-                avatarUri: string;
-                verified: boolean;
-            } | {
-                id: string;
-                type: "user";
-                name: string;
-                handle: string;
-                avatarUri: string;
-                verified: boolean;
-            };
-            body: string;
-            imageUrl: string;
-            media: {
-                durationSeconds?: number;
-                type: "video";
-                url: string;
-                thumbnailUrl: string;
-            } | {
-                type: "image";
-                url: string;
-            };
-            mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-        };
+        post: any;
         upload: {
             uploadId: string;
             method: string;
@@ -306,452 +110,28 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         fileSizeBytes: number;
         contentType: string;
     }>;
-    completeVideoUpload(postId: number, userId: number, uploadId: string): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
-    createPost(data: PostMutationBody, image: Express.Multer.File | undefined, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
-    updatePost(postId: number, data: PostMutationBody, image: Express.Multer.File | undefined, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
+    completeVideoUpload(postId: number, userId: number, uploadId: string): Promise<any>;
+    createPost(data: PostMutationBody, image: Express.Multer.File | undefined, userId: number): Promise<any>;
+    updatePost(postId: number, data: PostMutationBody, image: Express.Multer.File | undefined, userId: number): Promise<any>;
     deletePost(postId: number, userId: number): Promise<{
         id: string;
         deleted: boolean;
     }>;
-    like(postId: number, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
-    unlike(postId: number, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
-    save(postId: number, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
-    unsave(postId: number, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
-    share(postId: number, userId: number): Promise<{
-        viewerState: {
-            liked: boolean;
-            saved: boolean;
-            followingPublisher: boolean;
-            isOwner: boolean;
-            canManage: boolean;
-        };
-        stats: {
-            likes: number;
-            comments: number;
-            saves: number;
-            shares: number;
-        };
-        allowComments: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        linkedJob?: {
-            id: string;
-            title: string;
-            companyName: string;
-            salaryAmount: number;
-            salaryType: string;
-            currency: string;
-        };
-        id: string;
-        publisher: {
-            id: string;
-            type: "company";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        } | {
-            id: string;
-            type: "user";
-            name: string;
-            handle: string;
-            avatarUri: string;
-            verified: boolean;
-        };
-        body: string;
-        imageUrl: string;
-        media: {
-            durationSeconds?: number;
-            type: "video";
-            url: string;
-            thumbnailUrl: string;
-        } | {
-            type: "image";
-            url: string;
-        };
-        mediaStatus: import("./entities/community-post.entity").PostMediaStatus;
-    }>;
+    like(postId: number, userId: number): Promise<any>;
+    unlike(postId: number, userId: number): Promise<any>;
+    save(postId: number, userId: number): Promise<any>;
+    unsave(postId: number, userId: number): Promise<any>;
+    share(postId: number, userId: number): Promise<any>;
     getComments(postId: number, viewerId: number, cursor?: string, limit?: number): Promise<{
         data: {
             id: string;
             postId: string;
             author: {
+                avatarUri: string;
                 type: "user";
                 id: string;
                 name: string;
                 handle: string;
-                avatarUri: string;
                 verified: boolean;
             };
             text: string;
@@ -763,11 +143,11 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         id: string;
         postId: string;
         author: {
+            avatarUri: string;
             type: "user";
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         text: string;
@@ -776,6 +156,8 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
     report(postId: number, userId: number, reason?: string, details?: string): Promise<{
         reported: boolean;
     }>;
+    private getManageableFeed;
+    private applyBlockedPublisherFilters;
     private createViewableQuery;
     private applyPublisherFilter;
     private getViewablePostOrThrow;
@@ -790,6 +172,7 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
     private formatPublisher;
     private formatLinkedJob;
     private formatComment;
+    private withPublisherAsset;
     private canManage;
     private getCompanyPublishingAccess;
     private canManageFromAccess;
@@ -807,6 +190,7 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
     private clearVideoMedia;
     private normalizeBody;
     private parseBoolean;
+    private getSearchPatterns;
     private decrementCounter;
     private wasInserted;
     private encodeCursor;

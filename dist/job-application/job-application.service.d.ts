@@ -5,6 +5,10 @@ import { User } from 'src/users/entities/user.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
 import { PageMember } from 'src/pages/entities/page-member.entity';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { ChatService } from 'src/chat/chat.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'completed';
 type ReceivedApplicationsQuery = {
     status?: ApplicationStatus | 'all';
@@ -17,8 +21,12 @@ export declare class JobApplicationService {
     private userRepo;
     private ratingRepo;
     private pageMemberRepo;
+    private companyRepo;
     private notificationsService;
-    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, ratingRepo: Repository<Rating>, pageMemberRepo: Repository<PageMember>, notificationsService: NotificationsService);
+    private chatService;
+    private idempotencyService;
+    private moderationService;
+    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, ratingRepo: Repository<Rating>, pageMemberRepo: Repository<PageMember>, companyRepo: Repository<CompanyPage>, notificationsService: NotificationsService, chatService: ChatService, idempotencyService: IdempotencyService, moderationService: ModerationService);
     private formatDemand;
     private getApplicantName;
     private getEmployerName;
@@ -28,12 +36,30 @@ export declare class JobApplicationService {
     apply(data: {
         jobId: number;
         applicantId: number;
-    }): Promise<JobApplication>;
+        bidAmount?: number;
+        bidCurrency?: string;
+        idempotencyKey?: string;
+    }): Promise<{
+        id: number;
+        applicationId: number;
+        jobId: number;
+        applicantId: number;
+        status: string;
+        bidAmount: number;
+        bidCurrency: string;
+        chatId: string;
+        conversationId: string;
+        legacyApplicationChatId: number;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     getApplicationsByUser(userId: number, page?: number, limit?: number, status?: ApplicationStatus | 'all'): Promise<{
         data: {
             applicationId: number;
             id: number;
             status: string;
+            bidAmount: number;
+            bidCurrency: string;
             createdAt: Date;
             updatedAt: Date;
             job: {
@@ -58,7 +84,9 @@ export declare class JobApplicationService {
                 companyName: string;
                 logoUrl: string;
             };
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
         }[];
         total: number;
         totalPages: number;
@@ -100,6 +128,8 @@ export declare class JobApplicationService {
             rating: number;
             ratingCount: number;
             status: string;
+            bidAmount: number;
+            bidCurrency: string;
             lastReview: {
                 stars: number;
                 comment: string;
@@ -114,7 +144,9 @@ export declare class JobApplicationService {
                 ratingAverage: number;
                 ratingCount: number;
             };
-            chatId: number;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
             createdAt: Date;
             updatedAt: Date;
         }[];
@@ -144,10 +176,40 @@ export declare class JobApplicationService {
         totalPages: number;
         currentPage: number;
     }>;
-    updateStatus(id: number, status: ApplicationStatus, employerId: number): Promise<JobApplication>;
+    updateStatus(id: number, status: ApplicationStatus, employerId: number): Promise<{
+        id: number;
+        applicationId: number;
+        jobId: number;
+        applicantId: number;
+        status: string;
+        bidAmount: number;
+        bidCurrency: string;
+        chatId: string;
+        conversationId: string;
+        legacyApplicationChatId: number;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     withdraw(id: number, applicantId: number): Promise<{
         message: string;
-        application: JobApplication;
+        application: {
+            id: number;
+            applicationId: number;
+            jobId: number;
+            applicantId: number;
+            status: string;
+            bidAmount: number;
+            bidCurrency: string;
+            chatId: string;
+            conversationId: string;
+            legacyApplicationChatId: number;
+            createdAt: Date;
+            updatedAt: Date;
+        };
     }>;
+    private applyTransaction;
+    private assertEmployerTransition;
+    private assertVacancyAvailable;
+    private applicationMutationResponse;
 }
 export {};

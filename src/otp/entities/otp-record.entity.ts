@@ -11,7 +11,10 @@ export type OtpPurpose =
   | 'register'
   | 'forgot-password'
   | 'phone-change'
-  | 'password-change';
+  | 'password-change'
+  | 'social-phone'
+  | 'account-deletion'
+  | 'account-recovery';
 
 @Entity('otp_records')
 @Index(['purpose', 'target', 'userId'])
@@ -21,7 +24,15 @@ export class OtpRecord {
 
   @Column({
     type: 'enum',
-    enum: ['register', 'forgot-password', 'phone-change', 'password-change'],
+    enum: [
+      'register',
+      'forgot-password',
+      'phone-change',
+      'password-change',
+      'social-phone',
+      'account-deletion',
+      'account-recovery',
+    ],
   })
   purpose: OtpPurpose;
 

@@ -51,6 +51,13 @@ const createService = (overrides: Record<string, any> = {}) => {
       deleteLocalFile: jest.fn(),
       commitLocalUpload: jest.fn(),
     },
+    moderationService: {
+      assertInteractionAllowed: jest.fn(),
+      blockedTargets: jest.fn(async () => ({ userIds: [], companyIds: [] })),
+    },
+    objectStorageService: {
+      getUrl: jest.fn(async () => null),
+    },
     ...overrides,
   };
 
@@ -66,6 +73,8 @@ const createService = (overrides: Record<string, any> = {}) => {
     repos.pagesService as any,
     repos.profilesService as any,
     repos.storage as any,
+    repos.moderationService as any,
+    repos.objectStorageService as any,
   );
 
   return { service, repos };
@@ -141,7 +150,10 @@ describe('ReelsService', () => {
       7,
     );
 
-    expect(repos.pagesService.assertCompanyCanPublish).toHaveBeenCalledWith(12, 7);
+    expect(repos.pagesService.assertCompanyCanPublish).toHaveBeenCalledWith(
+      12,
+      7,
+    );
     expect(repos.reelRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
         publisherType: 'company',

@@ -34,9 +34,13 @@ __decorate([
     __metadata("design:type", String)
 ], SupportTicketAttachment.prototype, "fileName", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], SupportTicketAttachment.prototype, "fileUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 36 }),
+    __metadata("design:type", String)
+], SupportTicketAttachment.prototype, "assetId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)

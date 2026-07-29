@@ -7,6 +7,7 @@ import {
   UsePipes,
   BadRequestException,
   UseGuards,
+  Res,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { OtpService } from 'src/otp/otp.service';
@@ -16,6 +17,10 @@ import { TwilioService } from 'src/twilio/twilio.service';
 import { UsersService } from 'src/users/users.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { Request } from 'express';
+import { Response } from 'express';
+import { AuthSessionService, SessionDeviceInput } from './auth-session.service';
+import { SocialAuthService } from './social-auth.service';
+import { Throttle } from '@nestjs/throttler';
 
 const relationIdSchema = Joi.alternatives().try(
   Joi.number().integer().positive(),
@@ -40,6 +45,13 @@ const getRelationId = (value: unknown) => {
 };
 
 const isRelationIdLike = (value: unknown) => getRelationId(value) !== undefined;
+const sessionDeviceFields = {
+  installationId: Joi.string().trim().max(120).optional(),
+  platform: Joi.string().valid('ios', 'android', 'web', 'unknown').optional(),
+  deviceName: Joi.string().trim().max(120).allow('', null).optional(),
+  appVersion: Joi.string().trim().max(40).allow('', null).optional(),
+  locale: Joi.string().trim().max(20).allow('', null).optional(),
+};
 
 @Controller('auth')
 export class AuthController {
@@ -48,7 +60,35 @@ export class AuthController {
     private readonly otpService: OtpService,
     private readonly twilioService: TwilioService,
     private readonly usersService: UsersService,
+    private readonly authSessionService: AuthSessionService,
+    private readonly socialAuthService: SocialAuthService,
   ) {}
+
+  private deviceFrom(body: any): SessionDeviceInput {
+    return {
+      installationId: body.installationId,
+      platform: body.platform,
+      deviceName: body.deviceName,
+      appVersion: body.appVersion,
+    };
+  }
+
+  private async sessionResponse(
+    user: any,
+    session: Awaited<ReturnType<AuthSessionService['createSession']>>,
+    message?: string,
+  ) {
+    const { userId: _userId, ...tokens } = session as any;
+    const profileResponse = await this.usersService.getMyProfileResponse(
+      user.id,
+    );
+    return {
+      ...(message ? { message } : {}),
+      ...tokens,
+      profile: profileResponse.user,
+      ...profileResponse,
+    };
+  }
 
   private async deliverOtp(phone: string, code: string, purpose: string) {
     if (
@@ -69,7 +109,9 @@ export class AuthController {
         throw error;
       }
 
-      console.warn(`Skipping OTP SMS delivery in dev: ${(error as Error).message}`);
+      console.warn(
+        `Skipping OTP SMS delivery in dev: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -77,6 +119,7 @@ export class AuthController {
   // SEND OTP FOR REGISTRATION
   // ────────────────────────────────────────────────
   @Post('register/send-otp')
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -155,6 +198,7 @@ export class AuthController {
   // VERIFY OTP (REGISTER)
   // ────────────────────────────────────────────────
   @Post('register/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -162,6 +206,7 @@ export class AuthController {
         otp: Joi.string().optional(),
         code: Joi.string().optional(),
         fcmToken: Joi.string().optional(),
+        ...sessionDeviceFields,
       }).or('otp', 'code'),
     ),
   )
@@ -183,28 +228,33 @@ export class AuthController {
 
     // 👉 Save FCM token if present
     if (fcmToken) {
-      await this.authService.attachFcmToken(user.id, fcmToken);
+      await this.authService.attachFcmToken(user.id, fcmToken, {
+        installationId: body.installationId,
+        platform: body.platform,
+        appVersion: body.appVersion,
+        locale: body.locale,
+      });
     }
 
-    const token = this.authService.generateToken(user);
-    const profile = await this.usersService.getMyProfileResponse(user.id);
-
-    return {
-      access_token: token,
-      ...profile,
-    };
+    const session = await this.authSessionService.createSession(
+      user,
+      this.deviceFrom(body),
+    );
+    return this.sessionResponse(user, session);
   }
 
   // ────────────────────────────────────────────────
   // LOGIN
   // ────────────────────────────────────────────────
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
         phone: Joi.string().required(),
         password: Joi.string().required(),
         fcmToken: Joi.string().optional(),
+        ...sessionDeviceFields,
       }),
     ),
   )
@@ -215,22 +265,26 @@ export class AuthController {
 
     // 🔥 attach FCM token + subscribe to filter topics (if provided)
     if (dto.fcmToken) {
-      await this.authService.attachFcmToken(user.id, dto.fcmToken);
+      await this.authService.attachFcmToken(user.id, dto.fcmToken, {
+        installationId: (dto as any).installationId,
+        platform: (dto as any).platform,
+        appVersion: (dto as any).appVersion,
+        locale: (dto as any).locale,
+      });
     }
 
-    const token = this.authService.generateToken(user);
-    const profile = await this.usersService.getMyProfileResponse(user.id);
-
-    return {
-      access_token: token,
-      ...profile,
-    };
+    const session = await this.authSessionService.createSession(
+      user,
+      this.deviceFrom(dto),
+    );
+    return this.sessionResponse(user, session);
   }
 
   // ────────────────────────────────────────────────
   // SEND OTP FOR FORGOT PASSWORD
   // ────────────────────────────────────────────────
   @Post('forgot-password/send-otp')
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -258,6 +312,7 @@ export class AuthController {
   // VERIFY OTP & RESET PASSWORD
   // ────────────────────────────────────────────────
   @Post('forgot-password/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -282,12 +337,17 @@ export class AuthController {
     if (!user) throw new UnauthorizedException('User not found');
 
     const { salt, hash } = this.authService.hashPassword(newPassword);
-    await this.authService.resetPassword(phone, salt, hash);
+    const updated = await this.authService.resetPassword(phone, salt, hash);
+    await this.authSessionService.revokeAllForUser(
+      updated.id,
+      'password_reset',
+    );
 
     return { message: 'Password reset successfully' };
   }
 
   @Post('phone-change/send-otp')
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
   @UseGuards(JwtAuthGuard)
   @UsePipes(
     new JoiValidationPipe(
@@ -325,6 +385,7 @@ export class AuthController {
   }
 
   @Post('phone-change/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @UseGuards(JwtAuthGuard)
   @UsePipes(
     new JoiValidationPipe(
@@ -332,6 +393,7 @@ export class AuthController {
         currentPassword: Joi.string().required(),
         newPhone: Joi.string().required(),
         otp: Joi.string().required(),
+        ...sessionDeviceFields,
       }),
     ),
   )
@@ -359,6 +421,7 @@ export class AuthController {
   }
 
   @Post('password-change/send-otp')
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
   @UseGuards(JwtAuthGuard)
   @UsePipes(
     new JoiValidationPipe(
@@ -389,6 +452,7 @@ export class AuthController {
   }
 
   @Post('password-change/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @UseGuards(JwtAuthGuard)
   @UsePipes(
     new JoiValidationPipe(
@@ -396,6 +460,7 @@ export class AuthController {
         currentPassword: Joi.string().required(),
         newPassword: passwordSchema.required(),
         otp: Joi.string().required(),
+        ...sessionDeviceFields,
       }),
     ),
   )
@@ -417,13 +482,196 @@ export class AuthController {
       userId,
       body.newPassword,
     );
-    const token = this.authService.generateToken(updatedUser);
-    const profile = await this.usersService.getMyProfileResponse(updatedUser.id);
+    await this.authSessionService.revokeAllForUser(
+      updatedUser.id,
+      'password_changed',
+    );
+    const session = await this.authSessionService.createSession(
+      updatedUser,
+      this.deviceFrom(body),
+    );
+    return this.sessionResponse(
+      updatedUser,
+      session,
+      'Password changed successfully',
+    );
+  }
 
-    return {
-      message: 'Password changed successfully',
-      access_token: token,
-      ...profile,
-    };
+  @Post('refresh')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        refreshToken: Joi.string().required(),
+      }),
+    ),
+  )
+  async refresh(@Body() body: any) {
+    const session = await this.authSessionService.refresh(body.refreshToken);
+    const user = await this.authService.findUserById((session as any).userId);
+    return this.sessionResponse(user, session as any);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  async logout(@Req() req: Request) {
+    await this.authSessionService.revokeSession(
+      (req.user as any)?.sid,
+      'logout',
+    );
+    return { message: 'Logged out successfully' };
+  }
+
+  @Post('logout-all')
+  @UseGuards(JwtAuthGuard)
+  async logoutAll(@Req() req: Request) {
+    const userId = (req.user as any)?.id;
+    await this.authService.incrementTokenVersion(userId);
+    await this.authSessionService.revokeAllForUser(userId, 'logout_all');
+    return { message: 'Logged out from all devices successfully' };
+  }
+
+  @Post('google')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async google(
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          idToken: Joi.string().required(),
+          fcmToken: Joi.string().optional(),
+          ...sessionDeviceFields,
+        }),
+      ),
+    )
+    body: any,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const providerProfile = await this.socialAuthService.verifyGoogle(
+      body.idToken,
+    );
+    return this.finishSocialLogin(providerProfile, body, response);
+  }
+
+  @Post('facebook')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async facebook(
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          accessToken: Joi.string().required(),
+          fcmToken: Joi.string().optional(),
+          ...sessionDeviceFields,
+        }),
+      ),
+    )
+    body: any,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const providerProfile = await this.socialAuthService.verifyFacebook(
+      body.accessToken,
+    );
+    return this.finishSocialLogin(providerProfile, body, response);
+  }
+
+  @Post('social/phone/send-otp')
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
+  async sendSocialPhoneOtp(
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          socialVerificationToken: Joi.string().required(),
+          phone: Joi.string().required(),
+        }),
+      ),
+    )
+    body: any,
+  ) {
+    const challenge = await this.socialAuthService.verifyPhoneChallenge(
+      body.socialVerificationToken,
+    );
+    const { otp } = await this.otpService.createOtp({
+      purpose: 'social-phone',
+      target: body.phone,
+      metadata: {
+        challengeJti: challenge.jti,
+      },
+    });
+    await this.deliverOtp(body.phone, otp, 'social sign-in');
+    return this.otpService.otpResponse(`OTP sent to ${body.phone}`, otp);
+  }
+
+  @Post('social/phone/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
+  async verifySocialPhoneOtp(
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          socialVerificationToken: Joi.string().required(),
+          phone: Joi.string().required(),
+          otp: Joi.string().required(),
+          fcmToken: Joi.string().optional(),
+          ...sessionDeviceFields,
+        }),
+      ),
+    )
+    body: any,
+  ) {
+    const challenge = await this.socialAuthService.verifyPhoneChallenge(
+      body.socialVerificationToken,
+    );
+    const otpRecord = await this.otpService.verifyOtp({
+      purpose: 'social-phone',
+      target: body.phone,
+      otp: body.otp,
+    });
+    if (otpRecord.metadata?.challengeJti !== challenge.jti) {
+      throw new UnauthorizedException('OTP does not match this social login');
+    }
+    const consumedChallenge =
+      await this.socialAuthService.consumePhoneChallenge(
+        body.socialVerificationToken,
+      );
+    const user = await this.socialAuthService.linkVerifiedPhone(
+      consumedChallenge,
+      body.phone,
+    );
+    if (body.fcmToken) {
+      await this.authService.attachFcmToken(user.id, body.fcmToken, {
+        installationId: body.installationId,
+        platform: body.platform,
+        appVersion: body.appVersion,
+        locale: body.locale,
+      });
+    }
+    const session = await this.authSessionService.createSession(
+      user,
+      this.deviceFrom(body),
+    );
+    return this.sessionResponse(user, session);
+  }
+
+  private async finishSocialLogin(
+    providerProfile: any,
+    body: any,
+    response: Response,
+  ) {
+    const user = await this.socialAuthService.findLinkedUser(providerProfile);
+    if (!user) {
+      response.status(202);
+      return await this.socialAuthService.createPhoneChallenge(providerProfile);
+    }
+    if (body.fcmToken) {
+      await this.authService.attachFcmToken(user.id, body.fcmToken, {
+        installationId: body.installationId,
+        platform: body.platform,
+        appVersion: body.appVersion,
+        locale: body.locale,
+      });
+    }
+    const session = await this.authSessionService.createSession(
+      user,
+      this.deviceFrom(body),
+    );
+    return this.sessionResponse(user, session);
   }
 }

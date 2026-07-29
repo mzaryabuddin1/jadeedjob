@@ -1,9 +1,7 @@
-import { FilesService } from 'src/files/files.service';
 import { SupportService } from './support.service';
 export declare class SupportController {
     private readonly supportService;
-    private readonly filesService;
-    constructor(supportService: SupportService, filesService: FilesService);
+    constructor(supportService: SupportService);
     getContactInfo(): {
         phoneDisplay: string;
         phone: string;
@@ -22,29 +20,139 @@ export declare class SupportController {
         createdAt: Date;
         message: string;
     }>;
-    listTickets(req: any, page?: number, limit?: number): Promise<{
+    listTickets(req: any, query: any): Promise<{
         data: {
             ticketId: number;
             kind: import("./entities/support-ticket.entity").SupportTicketKind;
             category: import("./entities/support-ticket.entity").SupportTicketCategory;
+            subject: string;
             message: string;
             preferredContact: string;
             contact: string;
             status: string;
-            attachments: string[];
-            uploadedAttachments: {
+            attachments: {
                 id: number;
+                assetId: string;
                 fileName: string;
                 fileUrl: string;
                 contentType: string;
                 createdAt: Date;
             }[];
+            latestMessage: {
+                id: number;
+                ticketId: number;
+                sender: "user" | "support";
+                body: string;
+                attachments: {
+                    fileUrl: string;
+                    fileName?: string;
+                    contentType?: string;
+                    assetId?: string;
+                }[];
+                createdAt: Date;
+            };
+            user: {
+                id: number;
+                name: string;
+                phone: string;
+            };
             createdAt: Date;
             updatedAt: Date;
         }[];
         total: number;
         totalPages: number;
         currentPage: number;
+    }>;
+    getTicket(req: any, id: number): Promise<{
+        messages: {
+            id: number;
+            ticketId: number;
+            sender: "user" | "support";
+            body: string;
+            attachments: {
+                fileUrl: string;
+                fileName?: string;
+                contentType?: string;
+                assetId?: string;
+            }[];
+            createdAt: Date;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+        ticket: {
+            ticketId: number;
+            kind: import("./entities/support-ticket.entity").SupportTicketKind;
+            category: import("./entities/support-ticket.entity").SupportTicketCategory;
+            subject: string;
+            message: string;
+            preferredContact: string;
+            contact: string;
+            status: string;
+            attachments: {
+                id: number;
+                assetId: string;
+                fileName: string;
+                fileUrl: string;
+                contentType: string;
+                createdAt: Date;
+            }[];
+            latestMessage: {
+                id: number;
+                ticketId: number;
+                sender: "user" | "support";
+                body: string;
+                attachments: {
+                    fileUrl: string;
+                    fileName?: string;
+                    contentType?: string;
+                    assetId?: string;
+                }[];
+                createdAt: Date;
+            };
+            user: {
+                id: number;
+                name: string;
+                phone: string;
+            };
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    getMessages(req: any, id: number, query: any): Promise<{
+        messages: {
+            id: number;
+            ticketId: number;
+            sender: "user" | "support";
+            body: string;
+            attachments: {
+                fileUrl: string;
+                fileName?: string;
+                contentType?: string;
+                assetId?: string;
+            }[];
+            createdAt: Date;
+        }[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+    }>;
+    addMessage(req: any, id: number, body: {
+        message: string;
+    }): Promise<{
+        message: {
+            id: number;
+            ticketId: number;
+            sender: "user" | "support";
+            body: string;
+            attachments: {
+                fileUrl: string;
+                fileName?: string;
+                contentType?: string;
+                assetId?: string;
+            }[];
+            createdAt: Date;
+        };
     }>;
     addAttachment(req: any, id: number, file: Express.Multer.File): Promise<{
         ticketId: number;
@@ -53,9 +161,23 @@ export declare class SupportController {
         message: string;
         attachment: {
             id: number;
+            assetId: string;
             fileName: string;
             fileUrl: string;
             contentType: string;
+            createdAt: Date;
+        };
+        threadMessage: {
+            id: number;
+            ticketId: number;
+            sender: "user" | "support";
+            body: string;
+            attachments: {
+                fileUrl: string;
+                fileName?: string;
+                contentType?: string;
+                assetId?: string;
+            }[];
             createdAt: Date;
         };
     }>;

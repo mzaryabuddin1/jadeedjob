@@ -3,6 +3,8 @@ import { User } from 'src/users/entities/user.entity';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { ReelCreatorFollow } from 'src/reels/entities/reel-creator-follow.entity';
 import { ProfileFollow, ProfileType } from './entities/profile-follow.entity';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 type ProfileSearchQuery = {
     profileType: ProfileType;
     q: string;
@@ -14,8 +16,10 @@ export declare class ProfilesService {
     private readonly legacyFollowRepo;
     private readonly userRepo;
     private readonly pageRepo;
-    constructor(followRepo: Repository<ProfileFollow>, legacyFollowRepo: Repository<ReelCreatorFollow>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>);
-    searchProfiles(query: ProfileSearchQuery): Promise<{
+    private readonly moderationService;
+    private readonly storageService;
+    constructor(followRepo: Repository<ProfileFollow>, legacyFollowRepo: Repository<ReelCreatorFollow>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, moderationService: ModerationService, storageService: ObjectStorageService);
+    searchProfiles(query: ProfileSearchQuery, viewerId: number): Promise<{
         data: Record<string, any>[];
         total: number;
         totalPages: number;
@@ -23,6 +27,7 @@ export declare class ProfilesService {
     }>;
     getProfile(profileType: string, profileId: number, viewerId: number): Promise<{
         profile: {
+            avatarUri: string;
             subtitle: string;
             location: string;
             bio: string;
@@ -46,7 +51,6 @@ export declare class ProfilesService {
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         viewerState: {
@@ -56,9 +60,14 @@ export declare class ProfilesService {
         };
     } | {
         profile: {
+            avatarUri: string;
             subtitle: string;
             location: string;
             bio: string;
+            rating: {
+                average: number;
+                count: number;
+            };
             followersCount: number;
             website: string;
             socialLinks: {
@@ -72,7 +81,6 @@ export declare class ProfilesService {
             id: string;
             name: string;
             handle: string;
-            avatarUri: string;
             verified: boolean;
         };
         viewerState: {
@@ -104,5 +112,6 @@ export declare class ProfilesService {
     private parseProfileType;
     private followResponse;
     private formatLocation;
+    private userAvatarUrl;
 }
 export {};

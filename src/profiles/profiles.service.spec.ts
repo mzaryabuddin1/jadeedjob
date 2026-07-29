@@ -27,6 +27,13 @@ const createService = (overrides: Record<string, any> = {}) => {
     legacyFollowRepo: createRepo(),
     userRepo: createRepo(),
     pageRepo: createRepo(),
+    moderationService: {
+      assertInteractionAllowed: jest.fn(),
+      blockedTargets: jest.fn(async () => ({ userIds: [], companyIds: [] })),
+    },
+    storageService: {
+      getUrl: jest.fn(async () => null),
+    },
     ...overrides,
   };
 
@@ -36,6 +43,8 @@ const createService = (overrides: Record<string, any> = {}) => {
       repos.legacyFollowRepo as any,
       repos.userRepo as any,
       repos.pageRepo as any,
+      repos.moderationService as any,
+      repos.storageService as any,
     ),
     repos,
   };
@@ -75,12 +84,15 @@ describe('ProfilesService', () => {
     });
     const { service } = createService({ userRepo });
 
-    const result = (await service.searchProfiles({
-      profileType: 'user',
-      q: '  AARAV  ',
-      page: 2,
-      limit: 20,
-    })) as any;
+    const result = (await service.searchProfiles(
+      {
+        profileType: 'user',
+        q: '  AARAV  ',
+        page: 2,
+        limit: 20,
+      },
+      99,
+    )) as any;
     const serialized = JSON.stringify(result);
 
     expect(result).toMatchObject({
@@ -154,10 +166,13 @@ describe('ProfilesService', () => {
     });
     const { service } = createService({ pageRepo });
 
-    const result = (await service.searchProfiles({
-      profileType: 'company',
-      q: 'ACME',
-    })) as any;
+    const result = (await service.searchProfiles(
+      {
+        profileType: 'company',
+        q: 'ACME',
+      },
+      99,
+    )) as any;
     const serialized = JSON.stringify(result);
 
     expect(result).toMatchObject({
@@ -202,7 +217,7 @@ describe('ProfilesService', () => {
     const { service } = createService({ userRepo });
 
     await expect(
-      service.searchProfiles({ profileType: 'user', q: '%_!' }),
+      service.searchProfiles({ profileType: 'user', q: '%_!' }, 99),
     ).resolves.toEqual({
       data: [],
       total: 0,

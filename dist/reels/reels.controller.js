@@ -25,7 +25,9 @@ const joi_1 = __importDefault(require("joi"));
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const reels_service_1 = require("./reels.service");
+const moderation_service_1 = require("../moderation/moderation.service");
 const reel_storage_service_1 = require("./reel-storage.service");
+const throttler_1 = require("@nestjs/throttler");
 const createReelSchema = joi_1.default.object({
     caption: joi_1.default.string().trim().min(5).max(300).required(),
     category: joi_1.default.string().valid('community', 'jobs', 'social').required(),
@@ -79,7 +81,8 @@ const uploadInterceptor = (0, platform_express_1.FileInterceptor)(reel_storage_s
         fileSize: (0, reel_storage_service_1.getReelMaxFileSizeBytes)(),
     },
     fileFilter: (_req, file, callback) => {
-        if (!(0, reel_storage_service_1.isAllowedReelMimeType)(file.mimetype) || !(0, reel_storage_service_1.isAllowedReelFileName)(file.originalname)) {
+        if (!(0, reel_storage_service_1.isAllowedReelMimeType)(file.mimetype) ||
+            !(0, reel_storage_service_1.isAllowedReelFileName)(file.originalname)) {
             callback(new common_1.BadRequestException('Unsupported reel video file'), false);
             return;
         }
@@ -87,8 +90,9 @@ const uploadInterceptor = (0, platform_express_1.FileInterceptor)(reel_storage_s
     },
 });
 let ReelsController = class ReelsController {
-    constructor(reelsService) {
+    constructor(reelsService, moderationService) {
         this.reelsService = reelsService;
+        this.moderationService = moderationService;
     }
     create(body, req) {
         return this.reelsService.createReel(body, req.user.id);
@@ -135,6 +139,9 @@ let ReelsController = class ReelsController {
     share(id, req) {
         return this.reelsService.registerShare(id, req.user.id);
     }
+    report(id, body, req) {
+        return this.moderationService.reportReel(id, req.user.id, body);
+    }
     followCreator(creatorId, req) {
         return this.reelsService.followCreator(creatorId, req.user.id);
     }
@@ -151,6 +158,7 @@ let ReelsController = class ReelsController {
 exports.ReelsController = ReelsController;
 __decorate([
     (0, common_1.Post)(),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(createReelSchema)),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -160,6 +168,7 @@ __decorate([
 ], ReelsController.prototype, "create", null);
 __decorate([
     (0, common_1.Post)(':id/upload'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
     (0, common_1.UseInterceptors)(uploadInterceptor),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)('uploadId')),
@@ -272,6 +281,21 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], ReelsController.prototype, "share", null);
 __decorate([
+    (0, common_1.Post)(':id/report'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 3_600_000 } }),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        reason: joi_1.default.string()
+            .valid('spam', 'unsafe', 'false_information', 'other')
+            .required(),
+        details: joi_1.default.string().trim().max(1000).allow('', null).optional(),
+    })))),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:returntype", void 0)
+], ReelsController.prototype, "report", null);
+__decorate([
     (0, common_1.Post)('creators/:creatorId/follow'),
     __param(0, (0, common_1.Param)('creatorId', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Req)()),
@@ -306,6 +330,7 @@ __decorate([
 exports.ReelsController = ReelsController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('reels'),
-    __metadata("design:paramtypes", [reels_service_1.ReelsService])
+    __metadata("design:paramtypes", [reels_service_1.ReelsService,
+        moderation_service_1.ModerationService])
 ], ReelsController);
 //# sourceMappingURL=reels.controller.js.map

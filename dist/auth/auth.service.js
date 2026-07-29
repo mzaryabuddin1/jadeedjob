@@ -22,17 +22,19 @@ const user_entity_1 = require("../users/entities/user.entity");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
 const filter_service_1 = require("../filter/filter.service");
-const firebase_service_1 = require("../firebase/firebase.service");
 const profile_verification_util_1 = require("../users/profile-verification.util");
 const referral_code_util_1 = require("../users/referral-code.util");
+const push_service_1 = require("../push/push.service");
+const api_exception_1 = require("../common/errors/api-exception");
+const common_2 = require("@nestjs/common");
 let AuthService = class AuthService {
-    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService, firebaseService) {
+    constructor(jwtService, userRepo, countryRepo, languageRepo, filterService, pushService) {
         this.jwtService = jwtService;
         this.userRepo = userRepo;
         this.countryRepo = countryRepo;
         this.languageRepo = languageRepo;
         this.filterService = filterService;
-        this.firebaseService = firebaseService;
+        this.pushService = pushService;
     }
     generateToken(user) {
         return this.jwtService.sign({
@@ -108,6 +110,32 @@ let AuthService = class AuthService {
         });
         return this.userRepo.save(user);
     }
+    async createSocialUser(data) {
+        const existing = await this.findUserByPhone(data.phone);
+        if (existing)
+            return existing;
+        const filterPreferences = await this.filterService.getTopFiltersByJobs(9);
+        return this.userRepo.save(this.userRepo.create({
+            phone: data.phone,
+            firstName: data.firstName || 'JobsLoot',
+            lastName: data.lastName || 'User',
+            email: data.email || null,
+            profile_photo: data.profilePhoto || null,
+            passwordHash: null,
+            passwordSalt: null,
+            phoneVerifiedAt: new Date(),
+            isVerified: false,
+            isBanned: false,
+            referralCode: await this.generateUniqueReferralCode(),
+            filter_preferences: filterPreferences,
+        }));
+    }
+    async findUserById(userId) {
+        return this.userRepo.findOne({
+            where: { id: userId },
+            relations: ['country', 'language'],
+        });
+    }
     async validateRegistrationRelations(countryId, languageId) {
         const [country, language] = await Promise.all([
             this.countryRepo.findOne({ where: { id: countryId } }),
@@ -124,6 +152,8 @@ let AuthService = class AuthService {
         return { salt, hash };
     }
     validatePassword(password, storedHash, salt) {
+        if (!storedHash || !salt)
+            return false;
         const hash = (0, crypto_1.pbkdf2Sync)(password, salt, 1000, 64, 'sha512').toString('hex');
         return hash === storedHash;
     }
@@ -134,8 +164,15 @@ let AuthService = class AuthService {
         const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
         if (!isValid)
             throw new common_1.UnauthorizedException('Invalid phone or password');
-        if (user.isBanned)
-            throw new common_1.UnauthorizedException('Your account is blocked!');
+        if (user.isBanned) {
+            throw new api_exception_1.ApiException(common_2.HttpStatus.FORBIDDEN, 'AUTH_ACCOUNT_BANNED', 'Your account is blocked');
+        }
+        if (user.deletedAt) {
+            throw new api_exception_1.ApiException(common_2.HttpStatus.UNAUTHORIZED, 'AUTH_ACCOUNT_DELETED', 'This account is no longer available');
+        }
+        if (user.deletionScheduledAt) {
+            throw new api_exception_1.ApiException(common_2.HttpStatus.CONFLICT, 'ACCOUNT_PENDING_DELETION', 'Account deletion is pending; recover the account to continue', { scheduledDeletionAt: user.deletionScheduledAt });
+        }
         return user;
     }
     async resetPassword(phone, salt, hash) {
@@ -190,21 +227,19 @@ let AuthService = class AuthService {
         user.isVerified = (0, profile_verification_util_1.computeUserIsVerified)(user);
         return this.userRepo.save(user);
     }
-    async attachFcmToken(userId, fcmToken) {
-        const user = await this.userRepo.findOne({
-            where: { id: userId },
-            select: ['id', 'fcmTokens', 'filter_preferences'],
+    async incrementTokenVersion(userId) {
+        await this.userRepo.increment({ id: userId }, 'tokenVersion', 1);
+        return this.findUserById(userId);
+    }
+    async attachFcmToken(userId, fcmToken, device = {}) {
+        const installationId = device.installationId || `legacy-fcm:${fcmToken.slice(-40)}`;
+        await this.pushService.upsertDevice(userId, {
+            installationId,
+            token: fcmToken,
+            platform: device.platform || 'android',
+            appVersion: device.appVersion,
+            locale: device.locale,
         });
-        if (!user)
-            return;
-        const tokens = new Set(user.fcmTokens || []);
-        tokens.add(fcmToken);
-        user.fcmTokens = Array.from(tokens);
-        await this.userRepo.save(user);
-        const filters = user.filter_preferences || [];
-        if (filters.length) {
-            await this.firebaseService.subscribeTokenToFilters(fcmToken, filters);
-        }
     }
 };
 exports.AuthService = AuthService;
@@ -218,6 +253,6 @@ exports.AuthService = AuthService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         filter_service_1.FilterService,
-        firebase_service_1.FirebaseService])
+        push_service_1.PushService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

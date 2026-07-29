@@ -10,16 +10,38 @@ import { ChatController } from './chat.controller';
 import { ChatMessage } from './entities/chat-message.entity';
 import { ChatsController } from './chats.controller';
 import { PageMember } from 'src/pages/entities/page-member.entity';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { NotificationsModule } from 'src/notifications/notifications.module';
-import { FilesModule } from 'src/files/files.module';
+import { ChatConversation } from './entities/chat-conversation.entity';
+import { ChatParticipant } from './entities/chat-participant.entity';
+import { ChatReadState } from './entities/chat-read-state.entity';
+import { JobInvitation } from './entities/job-invitation.entity';
+import { ProfileChatOptionsController } from './profile-chat-options.controller';
+import { JobInvitationController } from './job-invitation.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatMessage, JobApplication, Job, User, PageMember]),
+    TypeOrmModule.forFeature([
+      ChatMessage,
+      ChatConversation,
+      ChatParticipant,
+      ChatReadState,
+      JobInvitation,
+      JobApplication,
+      Job,
+      User,
+      PageMember,
+      CompanyPage,
+    ]),
     NotificationsModule,
-    FilesModule,
   ],
   providers: [ChatService, ChatGateway],
-  controllers: [ChatController, ChatsController],
+  controllers: [
+    ChatController,
+    ChatsController,
+    ProfileChatOptionsController,
+    JobInvitationController,
+  ],
+  exports: [ChatService, ChatGateway],
 })
 export class ChatModule {}

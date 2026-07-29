@@ -27,6 +27,7 @@ const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const post_storage_service_1 = require("./post-storage.service");
 const post_video_storage_service_1 = require("./post-video-storage.service");
 const posts_service_1 = require("./posts.service");
+const throttler_1 = require("@nestjs/throttler");
 const publisherFields = {
     publisherType: joi_1.default.string().valid('user', 'company').default('user'),
     publisherId: joi_1.default.when('publisherType', {
@@ -76,11 +77,17 @@ const completeVideoUploadSchema = joi_1.default.object({
     uploadId: joi_1.default.string().guid({ version: 'uuidv4' }).required(),
 });
 const feedQuerySchema = joi_1.default.object({
+    feed: joi_1.default.string().valid('forYou', 'mine').default('forYou'),
     cursor: joi_1.default.string().optional(),
     limit: joi_1.default.number().integer().min(1).max(30).default(10),
     publisherType: joi_1.default.string().valid('user', 'company').optional(),
     publisherId: joi_1.default.number().integer().positive().optional(),
 }).and('publisherType', 'publisherId');
+const postSearchQuerySchema = joi_1.default.object({
+    q: joi_1.default.string().trim().min(2).max(80).required(),
+    page: joi_1.default.number().integer().min(1).default(1),
+    limit: joi_1.default.number().integer().min(1).max(30).default(20),
+});
 const commentSchema = joi_1.default.object({
     text: joi_1.default.string().trim().min(1).max(500).required(),
 });
@@ -133,6 +140,9 @@ let PostsController = class PostsController {
     }
     getFeed(query, req) {
         return this.postsService.getFeed(query, req.user.id);
+    }
+    search(query, req) {
+        return this.postsService.searchPosts(query, req.user.id);
     }
     createVideoUpload(body, req) {
         return this.postsService.createVideoUpload(body, req.user.id);
@@ -195,7 +205,16 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "getFeed", null);
 __decorate([
+    (0, common_1.Get)('search'),
+    __param(0, (0, common_1.Query)(new joi_validation_pipe_1.JoiValidationPipe(postSearchQuerySchema))),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], PostsController.prototype, "search", null);
+__decorate([
     (0, common_1.Post)('video-uploads'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
     __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(createVideoPostSchema))),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -204,6 +223,7 @@ __decorate([
 ], PostsController.prototype, "createVideoUpload", null);
 __decorate([
     (0, common_1.Post)(':id/video-uploads'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(replaceVideoSchema))),
     __param(2, (0, common_1.Req)()),
@@ -213,6 +233,7 @@ __decorate([
 ], PostsController.prototype, "replaceVideoUpload", null);
 __decorate([
     (0, common_1.Post)(':id/video-upload'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
     (0, common_1.UseInterceptors)(videoInterceptor),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)('uploadId')),
@@ -241,6 +262,7 @@ __decorate([
 ], PostsController.prototype, "getPost", null);
 __decorate([
     (0, common_1.Post)(),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
     (0, common_1.UseInterceptors)(imageInterceptor),
     __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(createPostSchema))),
     __param(1, (0, common_1.UploadedFile)()),
@@ -328,6 +350,7 @@ __decorate([
 ], PostsController.prototype, "addComment", null);
 __decorate([
     (0, common_1.Post)(':id/report'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 3_600_000 } }),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(reportSchema))),
     __param(2, (0, common_1.Req)()),

@@ -42,6 +42,11 @@ export declare class CompanyPage {
     client_list: string[];
     certifications: string[];
     company_rating: number;
+    ratingAverage: number;
+    ratingCount: number;
+    logoAssetId: string;
+    verificationDocumentAssetId: string;
+    verificationProofType: string;
     verificationStatus: CompanyVerificationStatus;
     verificationReason: string;
     verifiedAt: Date;

@@ -9,7 +9,12 @@ import {
   Post,
   Req,
   UseGuards,
+  Query,
+  UploadedFiles,
+  UseInterceptors,
+  Headers,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import Joi from 'joi';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
@@ -53,6 +58,211 @@ export class EmployerCompanyController {
   @Get('companies/select-options')
   getCompanySelectOptions(@Req() req: any) {
     return this.pagesService.getEmployerCompanySelectOptions(req.user.id);
+  }
+
+  @Post('companies')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'logo', maxCount: 1 },
+        { name: 'verificationDocument', maxCount: 1 },
+      ],
+      {
+        limits: {
+          fileSize: 10 * 1024 * 1024,
+          files: 2,
+        },
+      },
+    ),
+  )
+  createCompany(
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          company_name: Joi.string().trim().max(160).required(),
+          username: Joi.string()
+            .trim()
+            .lowercase()
+            .pattern(/^[a-z0-9.-]+$/)
+            .max(100)
+            .optional(),
+          business_name: Joi.string().trim().max(160).allow('', null).optional(),
+          industry_type: Joi.string().trim().max(120).allow('', null).optional(),
+          company_description: Joi.string().trim().max(4000).allow('', null).optional(),
+          official_email: Joi.string().email().allow('', null).optional(),
+          official_phone: Joi.string().trim().max(40).allow('', null).optional(),
+          website_url: Joi.string().uri().allow('', null).optional(),
+          country: Joi.string().trim().max(120).allow('', null).optional(),
+          state: Joi.string().trim().max(120).allow('', null).optional(),
+          city: Joi.string().trim().max(120).allow('', null).optional(),
+          address_line1: Joi.string().trim().max(255).allow('', null).optional(),
+          business_registration_number: Joi.string().trim().max(120).allow('', null).optional(),
+          tax_identification_number: Joi.string().trim().max(120).allow('', null).optional(),
+          registration_authority: Joi.string().trim().max(160).allow('', null).optional(),
+          representative_name: Joi.string().trim().max(160).allow('', null).optional(),
+          representative_designation: Joi.string().trim().max(120).allow('', null).optional(),
+          representative_email: Joi.string().email().allow('', null).optional(),
+          representative_phone: Joi.string().trim().max(40).allow('', null).optional(),
+          verificationProofType: Joi.string().trim().max(80).required(),
+        }),
+      ),
+    )
+    body: any,
+    @UploadedFiles()
+    files: {
+      logo?: Express.Multer.File[];
+      verificationDocument?: Express.Multer.File[];
+    },
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Req() req: any,
+  ) {
+    return this.pagesService.createEmployerCompany(
+      req.user.id,
+      body,
+      files?.logo?.[0],
+      files?.verificationDocument?.[0],
+      idempotencyKey,
+    );
+  }
+
+  @Get('companies/search')
+  searchCompanies(
+    @Query(
+      new JoiValidationPipe(
+        Joi.object({
+          q: Joi.string().trim().min(2).max(80).required(),
+          page: Joi.number().integer().min(1).default(1),
+          limit: Joi.number().integer().min(1).max(30).default(20),
+        }),
+      ),
+    )
+    query: { q: string; page: number; limit: number },
+    @Req() req: any,
+  ) {
+    return this.pagesService.searchEmployerCompanies(req.user.id, query);
+  }
+
+  @Post('companies/:companyId/access-requests')
+  requestAccess(
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          message: Joi.string().trim().max(1000).allow('', null).optional(),
+          requestedRole: Joi.string().valid('admin', 'editor').default('editor'),
+          clientRequestId: Joi.string().trim().max(120).optional(),
+        }),
+      ),
+    )
+    body: any,
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Req() req: any,
+  ) {
+    return this.pagesService.requestCompanyAccess(companyId, req.user.id, {
+      ...body,
+      clientRequestId:
+        String(idempotencyKey || '').trim() ||
+        body.clientRequestId,
+    });
+  }
+
+  @Get('companies/:companyId/access-requests')
+  getAccessRequests(
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Query(
+      new JoiValidationPipe(
+        Joi.object({
+          status: Joi.string()
+            .valid('pending', 'approved', 'rejected', 'cancelled', 'all')
+            .default('pending'),
+          page: Joi.number().integer().min(1).default(1),
+          limit: Joi.number().integer().min(1).max(100).default(20),
+        }),
+      ),
+    )
+    query: any,
+    @Req() req: any,
+  ) {
+    return this.pagesService.getCompanyAccessRequests(
+      companyId,
+      req.user.id,
+      query,
+    );
+  }
+
+  @Patch('company-access-requests/:requestId')
+  reviewAccessRequest(
+    @Param('requestId', ParseIntPipe) requestId: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          action: Joi.string().valid('approve', 'reject').required(),
+          role: Joi.string().valid('admin', 'editor').optional(),
+          permissions: permissionSchema.optional(),
+          reason: Joi.string().trim().max(1000).allow('', null).optional(),
+        }),
+      ),
+    )
+    body: any,
+    @Req() req: any,
+  ) {
+    return this.pagesService.reviewCompanyAccessRequest(
+      requestId,
+      req.user.id,
+      body,
+    );
+  }
+
+  @Post('companies/:companyId/verification-submissions')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [{ name: 'verificationDocument', maxCount: 1 }],
+      { limits: { fileSize: 10 * 1024 * 1024, files: 1 } },
+    ),
+  )
+  resubmitVerification(
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          verificationProofType: Joi.string().trim().max(80).required(),
+          message: Joi.string().trim().max(2000).allow('', null).optional(),
+        }),
+      ),
+    )
+    body: any,
+    @UploadedFiles()
+    files: { verificationDocument?: Express.Multer.File[] },
+    @Req() req: any,
+  ) {
+    return this.pagesService.resubmitCompanyVerification(
+      companyId,
+      req.user.id,
+      body,
+      files?.verificationDocument?.[0],
+    );
+  }
+
+  @Post('companies/:companyId/ownership-transfer')
+  transferOwnership(
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          newOwnerUserId: Joi.number().integer().positive().required(),
+          currentPassword: Joi.string().min(1).required(),
+        }),
+      ),
+    )
+    body: { newOwnerUserId: number; currentPassword: string },
+    @Req() req: any,
+  ) {
+    return this.pagesService.transferCompanyOwnership(
+      companyId,
+      req.user.id,
+      body.newOwnerUserId,
+      body.currentPassword,
+    );
   }
 
   @Get('companies/:companyId')

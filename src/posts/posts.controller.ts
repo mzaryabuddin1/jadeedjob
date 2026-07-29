@@ -35,6 +35,7 @@ import {
   POST_VIDEO_MAX_BYTES,
 } from './post-video-storage.service';
 import { PostsService } from './posts.service';
+import { Throttle } from '@nestjs/throttler';
 
 const publisherFields = {
   publisherType: Joi.string().valid('user', 'company').default('user'),
@@ -104,11 +105,18 @@ const completeVideoUploadSchema = Joi.object({
 });
 
 const feedQuerySchema = Joi.object({
+  feed: Joi.string().valid('forYou', 'mine').default('forYou'),
   cursor: Joi.string().optional(),
   limit: Joi.number().integer().min(1).max(30).default(10),
   publisherType: Joi.string().valid('user', 'company').optional(),
   publisherId: Joi.number().integer().positive().optional(),
 }).and('publisherType', 'publisherId');
+
+const postSearchQuerySchema = Joi.object({
+  q: Joi.string().trim().min(2).max(80).required(),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(30).default(20),
+});
 
 const commentSchema = Joi.object({
   text: Joi.string().trim().min(1).max(500).required(),
@@ -185,7 +193,16 @@ export class PostsController {
     return this.postsService.getFeed(query, req.user.id);
   }
 
+  @Get('search')
+  search(
+    @Query(new JoiValidationPipe(postSearchQuerySchema)) query: any,
+    @Req() req: any,
+  ) {
+    return this.postsService.searchPosts(query, req.user.id);
+  }
+
   @Post('video-uploads')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   createVideoUpload(
     @Body(new JoiValidationPipe(createVideoPostSchema)) body: any,
     @Req() req: any,
@@ -194,6 +211,7 @@ export class PostsController {
   }
 
   @Post(':id/video-uploads')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   replaceVideoUpload(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(replaceVideoSchema)) body: any,
@@ -207,6 +225,7 @@ export class PostsController {
   }
 
   @Post(':id/video-upload')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
   @UseInterceptors(videoInterceptor)
   uploadVideo(
     @Param('id', ParseIntPipe) id: number,
@@ -238,6 +257,7 @@ export class PostsController {
   }
 
   @Post()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @UseInterceptors(imageInterceptor)
   create(
     @Body(new JoiValidationPipe(createPostSchema)) body: any,
@@ -312,6 +332,7 @@ export class PostsController {
   }
 
   @Post(':id/report')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   report(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(reportSchema)) body: any,

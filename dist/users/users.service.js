@@ -27,11 +27,17 @@ const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
 const profile_verification_util_1 = require("./profile-verification.util");
 const referral_code_util_1 = require("./referral-code.util");
+const object_storage_service_1 = require("../storage/object-storage.service");
+const auth_session_service_1 = require("../auth/auth-session.service");
+const push_service_1 = require("../push/push.service");
 let UsersService = class UsersService {
-    constructor(userRepo, filterRepo, firebaseService) {
+    constructor(userRepo, filterRepo, firebaseService, storageService, authSessionService, pushService) {
         this.userRepo = userRepo;
         this.filterRepo = filterRepo;
         this.firebaseService = firebaseService;
+        this.storageService = storageService;
+        this.authSessionService = authSessionService;
+        this.pushService = pushService;
     }
     normalizeFilterPreferenceIds(preferences) {
         if (!Array.isArray(preferences))
@@ -69,6 +75,10 @@ let UsersService = class UsersService {
             'admin_notes',
             'verified_by_admin_id',
             'systemRole',
+            'profilePhotoAssetId',
+            'idDocumentFrontAssetId',
+            'idDocumentBackAssetId',
+            'addressProofAssetId',
         ]) {
             delete publicUser[field];
         }
@@ -106,9 +116,22 @@ let UsersService = class UsersService {
         }
         return user;
     }
-    buildProfileResponse(user) {
+    async buildProfileResponse(user) {
+        const publicUser = this.toPublicUser(user);
+        const assetFields = [
+            ['profilePhotoAssetId', 'profile_photo'],
+            ['idDocumentFrontAssetId', 'id_document_front'],
+            ['idDocumentBackAssetId', 'id_document_back'],
+            ['addressProofAssetId', 'address_proof_document'],
+        ];
+        await Promise.all(assetFields.map(async ([assetField, outputField]) => {
+            const assetId = user[assetField];
+            if (assetId) {
+                publicUser[outputField] = await this.storageService.getUrl(assetId);
+            }
+        }));
         return {
-            user: this.toPublicUser(user),
+            user: publicUser,
             verificationRequirements: (0, profile_verification_util_1.buildVerificationRequirements)(user),
         };
     }
@@ -164,6 +187,28 @@ let UsersService = class UsersService {
             throw new common_1.NotFoundException('User not found');
         Object.assign(user, data);
         return this.userRepo.save(user);
+    }
+    async setUserBan(userId, adminId, banned, reason) {
+        if (userId === adminId && banned) {
+            throw new common_1.BadRequestException('Administrators cannot ban themselves');
+        }
+        const user = await this.userRepo.findOne({ where: { id: userId } });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        user.isBanned = banned;
+        user.admin_notes = String(reason || '').trim() || user.admin_notes;
+        user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+        await this.userRepo.save(user);
+        await this.authSessionService.revokeAllForUser(userId, banned ? 'account_banned' : 'account_unbanned');
+        if (banned)
+            await this.pushService.removeAllForUser(userId);
+        return {
+            message: banned ? 'User banned successfully' : 'User unbanned successfully',
+            user: {
+                id: user.id,
+                isBanned: user.isBanned,
+            },
+        };
     }
     async updateMyProfile(id, data) {
         const updatedUser = await this.userRepo.manager.transaction(async (manager) => {
@@ -297,20 +342,68 @@ let UsersService = class UsersService {
             throw new common_1.NotFoundException('User not found');
         return this.toPublicUser(await this.normalizeProfileSystemFields(updatedUser));
     }
-    async updateProfileDocument(userId, type, fileUrl) {
+    async uploadProfileDocument(userId, type, file) {
         const fieldByType = {
-            id_front: 'id_document_front',
-            id_back: 'id_document_back',
-            address_proof: 'address_proof_document',
-            profile_photo: 'profile_photo',
+            id_front: {
+                field: 'id_document_front',
+                assetField: 'idDocumentFrontAssetId',
+            },
+            id_back: {
+                field: 'id_document_back',
+                assetField: 'idDocumentBackAssetId',
+            },
+            address_proof: {
+                field: 'address_proof_document',
+                assetField: 'addressProofAssetId',
+            },
+            profile_photo: {
+                field: 'profile_photo',
+                assetField: 'profilePhotoAssetId',
+            },
         };
-        const field = fieldByType[type];
-        if (!field)
+        const mapping = fieldByType[type];
+        if (!mapping)
             throw new common_1.BadRequestException('Invalid document type');
-        await this.updateMyProfile(userId, {
-            [field]: fileUrl,
+        const user = await this.userRepo.findOne({ where: { id: userId } });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        const asset = await this.storageService.store({
+            ownerUserId: userId,
+            purpose: type === 'profile_photo' ? 'profile-photos' : 'profile-documents',
+            file,
+            allowedTypes: type === 'profile_photo'
+                ? ['image/jpeg', 'image/png', 'image/webp']
+                : ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+            maxBytes: 5 * 1024 * 1024,
+            visibility: 'private',
+            metadata: { type },
         });
-        return this.getMyProfileResponse(userId);
+        const oldAssetId = user[mapping.assetField];
+        try {
+            await this.userRepo.manager.transaction(async (manager) => {
+                user[mapping.assetField] = asset.id;
+                user[mapping.field] = `asset:${asset.id}`;
+                if (type !== 'profile_photo') {
+                    user.kyc_status = 'pending';
+                    user.verification_date = null;
+                    user.verified_by_admin_id = null;
+                    user.rejection_reason = null;
+                    user.isVerified = (0, profile_verification_util_1.computeUserIsVerified)(user);
+                }
+                await manager.save(user);
+            });
+        }
+        catch (error) {
+            await this.storageService.remove(asset);
+            throw error;
+        }
+        if (oldAssetId) {
+            await this.storageService.remove(oldAssetId).catch(() => undefined);
+        }
+        return {
+            fileUrl: await this.storageService.getUrl(asset),
+            profile: await this.getMyProfileResponse(userId),
+        };
     }
     async findUsersByIds(ids) {
         return this.userRepo.find({
@@ -366,6 +459,9 @@ exports.UsersService = UsersService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
-        firebase_service_1.FirebaseService])
+        firebase_service_1.FirebaseService,
+        object_storage_service_1.ObjectStorageService,
+        auth_session_service_1.AuthSessionService,
+        push_service_1.PushService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

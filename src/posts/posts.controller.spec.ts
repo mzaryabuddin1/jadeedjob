@@ -11,6 +11,7 @@ describe('PostsController', () => {
   const response = { id: '1' };
   const postsService: Record<string, jest.Mock> = {
     getFeed: jest.fn(),
+    searchPosts: jest.fn(),
     getPost: jest.fn(),
     createPost: jest.fn(),
     createVideoUpload: jest.fn(),
@@ -43,6 +44,12 @@ describe('PostsController', () => {
       mock.mockResolvedValue(response),
     );
     postsService.getFeed.mockResolvedValue({ data: [], nextCursor: null });
+    postsService.searchPosts.mockResolvedValue({
+      data: [],
+      total: 0,
+      totalPages: 0,
+      currentPage: 1,
+    });
     postsService.getComments.mockResolvedValue({ data: [], nextCursor: null });
 
     const moduleRef = await Test.createTestingModule({
@@ -74,7 +81,29 @@ describe('PostsController', () => {
       .expect(200);
 
     expect(postsService.getFeed).toHaveBeenCalledWith(
-      { publisherType: 'company', publisherId: 12, limit: 30 },
+      {
+        feed: 'forYou',
+        publisherType: 'company',
+        publisherId: 12,
+        limit: 30,
+      },
+      7,
+    );
+  });
+
+  it('validates and forwards authenticated post searches', async () => {
+    await request(app.getHttpServer()).get('/posts/search?q=tools').expect(401);
+    await request(app.getHttpServer())
+      .get('/posts/search?q=a')
+      .set('Authorization', 'Bearer valid-token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/posts/search?q=%20safe%20tools%20&page=2&limit=20')
+      .set('Authorization', 'Bearer valid-token')
+      .expect(200);
+
+    expect(postsService.searchPosts).toHaveBeenCalledWith(
+      { q: 'safe tools', page: 2, limit: 20 },
       7,
     );
   });
@@ -147,7 +176,7 @@ describe('PostsController', () => {
     expect(postsService.createVideoUpload).toHaveBeenCalledWith(
       expect.objectContaining({
         body: 'Training update',
-        media: expect.objectContaining({durationSeconds: 7200}),
+        media: expect.objectContaining({ durationSeconds: 7200 }),
       }),
       7,
     );
@@ -156,7 +185,7 @@ describe('PostsController', () => {
     await request(app.getHttpServer())
       .post('/posts/1/complete-video-upload')
       .set('Authorization', 'Bearer valid-token')
-      .send({uploadId})
+      .send({ uploadId })
       .expect(201);
     expect(postsService.completeVideoUpload).toHaveBeenCalledWith(
       1,

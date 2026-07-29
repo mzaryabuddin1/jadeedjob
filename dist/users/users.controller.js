@@ -52,11 +52,6 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const Joi = __importStar(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const platform_express_1 = require("@nestjs/platform-express");
-const multer_1 = require("multer");
-const fs_1 = require("fs");
-const path_1 = require("path");
-const crypto_1 = require("crypto");
-const files_service_1 = require("../files/files.service");
 const optionalString = () => Joi.string().allow('', null).optional();
 const optionalUri = () => Joi.string().uri().allow('', null).optional();
 const optionalDate = () => Joi.alternatives()
@@ -97,17 +92,6 @@ const spokenLanguageSchema = Joi.object({
     level: optionalString(),
 });
 const documentUploadOptions = {
-    storage: (0, multer_1.diskStorage)({
-        destination: (req, file, callback) => {
-            const uploadPath = './uploads/profile-documents';
-            (0, fs_1.mkdirSync)(uploadPath, { recursive: true });
-            callback(null, uploadPath);
-        },
-        filename: (req, file, callback) => {
-            const uniqueName = `${Date.now()}-${(0, crypto_1.randomBytes)(6).toString('hex')}${(0, path_1.extname)(file.originalname)}`;
-            callback(null, uniqueName);
-        },
-    }),
     limits: {
         fileSize: 5 * 1024 * 1024,
     },
@@ -121,9 +105,8 @@ const documentUploadOptions = {
     },
 };
 let UsersController = class UsersController {
-    constructor(usersService, filesService) {
+    constructor(usersService) {
         this.usersService = usersService;
-        this.filesService = filesService;
     }
     async getMe(req) {
         const userId = req.user?.id;
@@ -174,13 +157,12 @@ let UsersController = class UsersController {
             throw new common_1.NotFoundException('User not found or unauthorized');
         if (!file)
             throw new common_1.BadRequestException('No file provided');
-        const fileUrl = this.filesService.getFileUrl(file.filename, 'profile-documents');
-        const profile = await this.usersService.updateProfileDocument(userId, body.type, fileUrl);
+        const result = await this.usersService.uploadProfileDocument(userId, body.type, file);
         return {
             message: 'Document uploaded successfully',
-            fileName: file.filename,
-            fileUrl,
-            ...profile,
+            fileName: file.originalname,
+            fileUrl: result.fileUrl,
+            ...result.profile,
         };
     }
     async getMyPreferences(req) {
@@ -220,7 +202,7 @@ __decorate([
             .valid('Single', 'Married', 'Other', '')
             .allow(null)
             .optional(),
-        profile_photo: optionalUri(),
+        profile_photo: Joi.forbidden(),
         alternate_phone: optionalString(),
         address_line1: optionalString(),
         address_line2: optionalString(),
@@ -231,9 +213,9 @@ __decorate([
         national_id_number: optionalString(),
         passport_number: optionalString(),
         id_expiry_date: optionalDate(),
-        id_document_front: optionalUri(),
-        id_document_back: optionalUri(),
-        address_proof_document: optionalUri(),
+        id_document_front: Joi.forbidden(),
+        id_document_back: Joi.forbidden(),
+        address_proof_document: Joi.forbidden(),
         professional_summary: optionalString(),
         skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
         technical_skills: Joi.array().max(50).items(Joi.string().max(80)).optional(),
@@ -283,7 +265,6 @@ __decorate([
 exports.UsersController = UsersController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('users'),
-    __metadata("design:paramtypes", [users_service_1.UsersService,
-        files_service_1.FilesService])
+    __metadata("design:paramtypes", [users_service_1.UsersService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map

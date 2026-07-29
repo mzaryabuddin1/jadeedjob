@@ -13,6 +13,7 @@ exports.SupportTicket = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../users/entities/user.entity");
 const support_ticket_attachment_entity_1 = require("./support-ticket-attachment.entity");
+const support_ticket_message_entity_1 = require("./support-ticket-message.entity");
 let SupportTicket = class SupportTicket {
 };
 exports.SupportTicket = SupportTicket;
@@ -44,6 +45,10 @@ __decorate([
     __metadata("design:type", String)
 ], SupportTicket.prototype, "category", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], SupportTicket.prototype, "subject", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'text' }),
     __metadata("design:type", String)
 ], SupportTicket.prototype, "message", void 0);
@@ -69,6 +74,10 @@ __decorate([
     }),
     __metadata("design:type", Array)
 ], SupportTicket.prototype, "uploadedAttachments", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => support_ticket_message_entity_1.SupportTicketMessage, (message) => message.ticket),
+    __metadata("design:type", Array)
+], SupportTicket.prototype, "messages", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

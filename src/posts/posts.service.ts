@@ -33,12 +33,21 @@ import {
   POST_VIDEO_MAX_BYTES,
   PostVideoStorageService,
 } from './post-video-storage.service';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 
 type PostFeedQuery = {
+  feed?: 'forYou' | 'mine';
   cursor?: string;
   limit?: number;
   publisherType?: PostPublisherType;
   publisherId?: number;
+};
+
+type PostSearchQuery = {
+  q: string;
+  page?: number;
+  limit?: number;
 };
 
 type PostMutationBody = {
@@ -64,7 +73,8 @@ type CreateVideoPostBody = PostMutationBody & {
 
 type FeedCursor =
   | { mode: 'feed'; score: number; id: number }
-  | { mode: 'profile'; createdAt: string; id: number };
+  | { mode: 'profile'; createdAt: string; id: number }
+  | { mode: 'mine'; createdAt: string; id: number };
 
 @Injectable()
 export class PostsService implements OnModuleInit, OnModuleDestroy {
@@ -92,6 +102,8 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     private readonly pagesService: PagesService,
     private readonly storage: PostStorageService,
     private readonly videoStorage: PostVideoStorageService,
+    private readonly moderationService: ModerationService,
+    private readonly objectStorageService: ObjectStorageService,
   ) {}
 
   onModuleInit() {
@@ -113,7 +125,16 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     const limit = Math.min(30, Math.max(1, Number(query.limit) || 10));
     const profileFiltered = Boolean(query.publisherType && query.publisherId);
     const cursor = this.decodeCursor(query.cursor);
+    if (query.feed === 'mine') {
+      if (profileFiltered) {
+        throw new BadRequestException(
+          'feed=mine cannot be combined with publisher filters',
+        );
+      }
+      return this.getManageableFeed(viewerId, cursor, limit);
+    }
     const qb = this.createViewableQuery();
+    await this.applyBlockedPublisherFilters(qb, viewerId);
 
     if (profileFiltered) {
       if (cursor && cursor.mode !== 'profile') {
@@ -210,8 +231,81 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async searchPosts(query: PostSearchQuery, viewerId: number) {
+    const q = String(query.q || '').trim().toLowerCase();
+    if (q.length < 2 || q.length > 80) {
+      throw new BadRequestException(
+        'Search query must be between 2 and 80 characters',
+      );
+    }
+
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(30, Math.max(1, Number(query.limit) || 20));
+    const patterns = this.getSearchPatterns(q);
+    const userDisplayName = `COALESCE(
+      NULLIF(TRIM(creator.full_name), ''),
+      TRIM(CONCAT_WS(' ', creator.firstName, creator.lastName))
+    )`;
+    const publisherDisplayName = `CASE
+      WHEN post.publisherType = 'company'
+        THEN COALESCE(publisherCompany.company_name, '')
+      ELSE ${userDisplayName}
+    END`;
+    const linkedJobCreatorName = `COALESCE(
+      NULLIF(TRIM(linkedJobCreator.full_name), ''),
+      TRIM(CONCAT_WS(' ', linkedJobCreator.firstName, linkedJobCreator.lastName))
+    )`;
+    const linkedJobCompanyName = `COALESCE(
+      linkedJobPage.company_name,
+      ${linkedJobCreatorName},
+      ''
+    )`;
+    const searchable = `(
+      LOWER(COALESCE(post.body, '')) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(${publisherDisplayName}) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(COALESCE(publisherCompany.username, '')) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(COALESCE(linkedJob.title, '')) LIKE :containsQuery ESCAPE '!'
+      OR LOWER(${linkedJobCompanyName}) LIKE :containsQuery ESCAPE '!'
+    )`;
+    const rank = `CASE
+      WHEN LOWER(TRIM(COALESCE(post.body, ''))) = :exactQuery
+        OR LOWER(${publisherDisplayName}) = :exactQuery
+        OR LOWER(COALESCE(publisherCompany.username, '')) = :exactQuery
+        OR LOWER(COALESCE(linkedJob.title, '')) = :exactQuery
+        OR LOWER(${linkedJobCompanyName}) = :exactQuery THEN 0
+      WHEN LOWER(TRIM(COALESCE(post.body, ''))) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(${publisherDisplayName}) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(COALESCE(publisherCompany.username, '')) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(COALESCE(linkedJob.title, '')) LIKE :prefixQuery ESCAPE '!'
+        OR LOWER(${linkedJobCompanyName}) LIKE :prefixQuery ESCAPE '!' THEN 1
+      ELSE 2
+    END`;
+
+    const qb = this.createViewableQuery();
+    await this.applyBlockedPublisherFilters(qb, viewerId);
+    qb.andWhere(searchable, patterns)
+      .addSelect(rank, 'searchRank')
+      .orderBy('searchRank', 'ASC')
+      .addOrderBy('post.createdAt', 'DESC')
+      .addOrderBy('post.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [posts, total] = await qb.getManyAndCount();
+
+    return {
+      data: await this.formatPosts(posts, viewerId),
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+    };
+  }
+
   async getPost(postId: number, viewerId: number) {
-    return this.formatPost(await this.getViewablePostOrThrow(postId), viewerId);
+    return this.formatPost(
+      await this.getViewablePostOrThrow(postId, viewerId),
+      viewerId,
+    );
   }
 
   async createVideoUpload(data: CreateVideoPostBody, userId: number) {
@@ -589,7 +683,7 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async like(postId: number, userId: number) {
-    await this.getViewablePostOrThrow(postId);
+    await this.getViewablePostOrThrow(postId, userId);
     const result = await this.likeRepo
       .createQueryBuilder()
       .insert()
@@ -603,14 +697,14 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async unlike(postId: number, userId: number) {
-    await this.getViewablePostOrThrow(postId);
+    await this.getViewablePostOrThrow(postId, userId);
     const result = await this.likeRepo.delete({ postId, userId });
     if (result.affected) await this.decrementCounter(postId, 'likesCount');
     return this.getPost(postId, userId);
   }
 
   async save(postId: number, userId: number) {
-    await this.getViewablePostOrThrow(postId);
+    await this.getViewablePostOrThrow(postId, userId);
     const result = await this.saveRepo
       .createQueryBuilder()
       .insert()
@@ -624,14 +718,14 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async unsave(postId: number, userId: number) {
-    await this.getViewablePostOrThrow(postId);
+    await this.getViewablePostOrThrow(postId, userId);
     const result = await this.saveRepo.delete({ postId, userId });
     if (result.affected) await this.decrementCounter(postId, 'savesCount');
     return this.getPost(postId, userId);
   }
 
   async share(postId: number, userId: number) {
-    await this.getViewablePostOrThrow(postId);
+    await this.getViewablePostOrThrow(postId, userId);
     await this.postRepo.increment({ id: postId }, 'sharesCount', 1);
     return this.getPost(postId, userId);
   }
@@ -642,7 +736,7 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     cursor?: string,
     limit = 20,
   ) {
-    await this.getViewablePostOrThrow(postId);
+    await this.getViewablePostOrThrow(postId, viewerId);
     const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
     const decoded = this.decodeSimpleCursor(cursor);
     const qb = this.commentRepo
@@ -672,7 +766,9 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     const pageItems = hasMore ? comments.slice(0, safeLimit) : comments;
 
     return {
-      data: pageItems.map((comment) => this.formatComment(comment)),
+      data: await Promise.all(
+        pageItems.map((comment) => this.formatComment(comment)),
+      ),
       nextCursor:
         hasMore && pageItems.length
           ? this.encodeSimpleCursor(pageItems[pageItems.length - 1])
@@ -681,7 +777,7 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async addComment(postId: number, userId: number, text: string) {
-    const post = await this.getViewablePostOrThrow(postId);
+    const post = await this.getViewablePostOrThrow(postId, userId);
     if (!post.allowComments) {
       throw new BadRequestException('Comments are disabled for this post');
     }
@@ -704,7 +800,7 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     reason = 'other',
     details?: string,
   ) {
-    const post = await this.getViewablePostOrThrow(postId);
+    const post = await this.getViewablePostOrThrow(postId, userId);
     if (post.creatorId === userId) {
       throw new BadRequestException('You cannot report your own post');
     }
@@ -723,6 +819,107 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     });
     await this.reportRepo.save(report);
     return { reported: true };
+  }
+
+  private async getManageableFeed(
+    viewerId: number,
+    cursor: FeedCursor | null,
+    limit: number,
+  ) {
+    if (cursor && cursor.mode !== 'mine') {
+      throw new BadRequestException('Post cursor does not match this feed');
+    }
+    const accounts = await this.pagesService.getEmployerAccounts(viewerId);
+    const companyAccounts = accounts.data.filter(
+      (account) => account.companyId && account.canPublish,
+    );
+    const publishableIds = companyAccounts.map((account) =>
+      Number(account.companyId),
+    );
+    const manageableIds = companyAccounts
+      .filter(
+        (account) =>
+          account.roleType === 'owner' || account.roleType === 'admin',
+      )
+      .map((account) => Number(account.companyId));
+
+    const qb = this.postRepo
+      .createQueryBuilder('post')
+      .leftJoinAndSelect('post.creator', 'creator')
+      .leftJoinAndSelect('post.publisherCompany', 'publisherCompany')
+      .leftJoinAndSelect('post.linkedJob', 'linkedJob')
+      .leftJoinAndSelect('linkedJob.page', 'linkedJobPage')
+      .leftJoinAndSelect('linkedJob.creator', 'linkedJobCreator')
+      .where('post.deletedAt IS NULL')
+      .andWhere(
+        new Brackets((where) => {
+          where.where(
+            "post.publisherType = 'user' AND post.creatorId = :viewerId",
+            { viewerId },
+          );
+          if (publishableIds.length) {
+            where.orWhere(
+              "post.publisherType = 'company' AND post.creatorId = :viewerId AND post.publisherCompanyId IN (:...publishableIds)",
+              { viewerId, publishableIds },
+            );
+          }
+          if (manageableIds.length) {
+            where.orWhere(
+              "post.publisherType = 'company' AND post.publisherCompanyId IN (:...manageableIds)",
+              { manageableIds },
+            );
+          }
+        }),
+      );
+    if (cursor?.mode === 'mine') {
+      qb.andWhere(
+        new Brackets((where) => {
+          where.where('post.createdAt < :createdAt', {
+            createdAt: cursor.createdAt,
+          });
+          where.orWhere(
+            'post.createdAt = :createdAt AND post.id < :cursorId',
+            { createdAt: cursor.createdAt, cursorId: cursor.id },
+          );
+        }),
+      );
+    }
+    const posts = await qb
+      .orderBy('post.createdAt', 'DESC')
+      .addOrderBy('post.id', 'DESC')
+      .take(limit + 1)
+      .getMany();
+    const hasMore = posts.length > limit;
+    const pageItems = hasMore ? posts.slice(0, limit) : posts;
+    return {
+      data: await this.formatPosts(pageItems, viewerId),
+      nextCursor:
+        hasMore && pageItems.length
+          ? this.encodeCursor({
+              mode: 'mine',
+              createdAt:
+                pageItems[pageItems.length - 1].createdAt.toISOString(),
+              id: pageItems[pageItems.length - 1].id,
+            })
+          : null,
+    };
+  }
+
+  private async applyBlockedPublisherFilters(qb: any, viewerId: number) {
+    const blocked = await this.moderationService.blockedTargets(viewerId);
+    if (blocked.userIds.length) {
+      qb.andWhere(
+        "(post.publisherType != 'user' OR post.creatorId NOT IN (:...blockedPostUserIds))",
+        { blockedPostUserIds: blocked.userIds },
+      );
+    }
+    if (blocked.companyIds.length) {
+      qb.andWhere(
+        "(post.publisherType != 'company' OR post.publisherCompanyId NOT IN (:...blockedPostCompanyIds))",
+        { blockedPostCompanyIds: blocked.companyIds },
+      );
+    }
+    return qb;
   }
 
   private createViewableQuery() {
@@ -765,8 +962,10 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     }).andWhere('post.creatorId = :publisherId', { publisherId: id });
   }
 
-  private async getViewablePostOrThrow(postId: number) {
-    const post = await this.createViewableQuery()
+  private async getViewablePostOrThrow(postId: number, viewerId?: number) {
+    const qb = this.createViewableQuery();
+    if (viewerId) await this.applyBlockedPublisherFilters(qb, viewerId);
+    const post = await qb
       .andWhere('post.id = :postId', { postId })
       .getOne();
     if (!post) throw new NotFoundException('Post not found');
@@ -914,23 +1113,30 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       ),
     );
 
-    return posts.map((post) => ({
-      ...this.formatPostBase(post),
-      viewerState: {
-        liked: likedIds.has(post.id),
-        saved: savedIds.has(post.id),
-        followingPublisher: followed.has(
-          `${this.getPublisherType(post)}:${this.getPublisherId(post)}`,
-        ),
-        isOwner: post.creatorId === viewerId,
-        canManage: this.canManageFromAccess(
+    return Promise.all(
+      posts.map(async (post) =>
+        this.withPublisherAsset(
+          {
+            ...this.formatPostBase(post),
+            viewerState: {
+              liked: likedIds.has(post.id),
+              saved: savedIds.has(post.id),
+              followingPublisher: followed.has(
+                `${this.getPublisherType(post)}:${this.getPublisherId(post)}`,
+              ),
+              isOwner: post.creatorId === viewerId,
+              canManage: this.canManageFromAccess(
+                post,
+                viewerId,
+                companyAccess.publishable,
+                companyAccess.manageable,
+              ),
+            },
+          },
           post,
-          viewerId,
-          companyAccess.publishable,
-          companyAccess.manageable,
         ),
-      },
-    }));
+      ),
+    );
   }
 
   private async formatPost(post: CommunityPost, viewerId: number) {
@@ -947,16 +1153,19 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       this.canManage(post, viewerId),
     ]);
 
-    return {
-      ...this.formatPostBase(post),
-      viewerState: {
-        liked: Boolean(like),
-        saved: Boolean(save),
-        followingPublisher: Boolean(follow),
-        isOwner: post.creatorId === viewerId,
-        canManage,
+    return this.withPublisherAsset(
+      {
+        ...this.formatPostBase(post),
+        viewerState: {
+          liked: Boolean(like),
+          saved: Boolean(save),
+          followingPublisher: Boolean(follow),
+          isOwner: post.creatorId === viewerId,
+          canManage,
+        },
       },
-    };
+      post,
+    );
   }
 
   private formatPostBase(post: CommunityPost) {
@@ -1029,14 +1238,39 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private formatComment(comment: PostComment | null) {
+  private async formatComment(comment: PostComment | null) {
     if (!comment) return null;
+    const author = formatUserPublisher(comment.user);
     return {
       id: String(comment.id),
       postId: String(comment.postId),
-      author: formatUserPublisher(comment.user),
+      author: {
+        ...author,
+        avatarUri: comment.user?.profilePhotoAssetId
+          ? await this.objectStorageService.getUrl(
+              comment.user.profilePhotoAssetId,
+            )
+          : author.avatarUri,
+      },
       text: comment.text,
       createdAt: comment.createdAt,
+    };
+  }
+
+  private async withPublisherAsset(result: any, post: CommunityPost) {
+    const publisher = this.formatPublisher(post);
+    const assetId =
+      this.getPublisherType(post) === 'company'
+        ? post.publisherCompany?.logoAssetId
+        : post.creator?.profilePhotoAssetId;
+    return {
+      ...result,
+      publisher: assetId
+        ? {
+            ...publisher,
+            avatarUri: await this.objectStorageService.getUrl(assetId),
+          }
+        : publisher,
     };
   }
 
@@ -1261,6 +1495,19 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     return fallback;
   }
 
+  private getSearchPatterns(q: string) {
+    const escaped = q
+      .replace(/!/g, '!!')
+      .replace(/%/g, '!%')
+      .replace(/_/g, '!_');
+
+    return {
+      exactQuery: q,
+      prefixQuery: `${escaped}%`,
+      containsQuery: `%${escaped}%`,
+    };
+  }
+
   private async decrementCounter(
     postId: number,
     field: 'likesCount' | 'savesCount',
@@ -1301,13 +1548,13 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       }
       const createdAt = new Date(cursor?.createdAt);
       if (
-        cursor?.mode === 'profile' &&
+        (cursor?.mode === 'profile' || cursor?.mode === 'mine') &&
         !Number.isNaN(createdAt.getTime()) &&
         Number.isInteger(id) &&
         id > 0
       ) {
         return {
-          mode: 'profile',
+          mode: cursor.mode,
           createdAt: createdAt.toISOString(),
           id,
         };

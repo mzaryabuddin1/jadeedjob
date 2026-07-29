@@ -9,8 +9,10 @@ const queryBuilder = (overrides: Record<string, any> = {}) => ({
   addSelect: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockReturnThis(),
   addOrderBy: jest.fn().mockReturnThis(),
+  skip: jest.fn().mockReturnThis(),
   take: jest.fn().mockReturnThis(),
   getMany: jest.fn(async () => []),
+  getManyAndCount: jest.fn(async () => [[], 0]),
   getRawAndEntities: jest.fn(async () => ({ entities: [], raw: [] })),
   getOne: jest.fn(),
   insert: jest.fn().mockReturnThis(),
@@ -103,6 +105,12 @@ const createService = (overrides: Record<string, any> = {}) => {
       deleteLocalFile: jest.fn(),
       remove: jest.fn(),
     },
+    moderationService: {
+      blockedTargets: jest.fn(async () => ({ userIds: [], companyIds: [] })),
+    },
+    objectStorageService: {
+      getUrl: jest.fn(async () => null),
+    },
     ...overrides,
   };
 
@@ -120,6 +128,8 @@ const createService = (overrides: Record<string, any> = {}) => {
       deps.pagesService as any,
       deps.storage as any,
       deps.videoStorage as any,
+      deps.moderationService as any,
+      deps.objectStorageService as any,
     ),
     deps,
   };
@@ -207,8 +217,44 @@ describe('PostsService', () => {
     await service.getFeed({}, 7);
     expect(qb.andWhere).toHaveBeenCalledWith(
       'post.mediaStatus = :publishedMediaStatus',
-      {publishedMediaStatus: 'published'},
+      { publishedMediaStatus: 'published' },
     );
+  });
+
+  it('searches only viewable posts with escaped terms and stable pagination', async () => {
+    const post = basePost({ body: 'Safe tools at work' });
+    const qb = queryBuilder({
+      getManyAndCount: jest.fn(async () => [[post], 1]),
+    });
+    const postRepo = repo({ createQueryBuilder: jest.fn(() => qb) });
+    const { service } = createService({ postRepo });
+
+    const response = await service.searchPosts(
+      { q: '  safe%_!  ', page: 2, limit: 10 },
+      7,
+    );
+
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('post.body'),
+      expect.objectContaining({
+        exactQuery: 'safe%_!',
+        prefixQuery: 'safe!%!_!!%',
+        containsQuery: '%safe!%!_!!%',
+      }),
+    );
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'post.mediaStatus = :publishedMediaStatus',
+      { publishedMediaStatus: 'published' },
+    );
+    expect(qb.skip).toHaveBeenCalledWith(10);
+    expect(qb.take).toHaveBeenCalledWith(10);
+    expect(qb.orderBy).toHaveBeenCalledWith('searchRank', 'ASC');
+    expect(response).toMatchObject({
+      total: 1,
+      totalPages: 1,
+      currentPage: 2,
+      data: [{ id: '1', body: 'Safe tools at work' }],
+    });
   });
 
   it('uses the same current company access rules for mutations', async () => {

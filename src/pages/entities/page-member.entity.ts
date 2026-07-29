@@ -5,12 +5,14 @@ import {
   Entity,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { CompanyPage } from './company-page.entity';
 import { CompanyMemberRole, CompanyPermissions } from '../company-permissions';
 
 // src/pages/entities/page-member.entity.ts
 @Entity('page_members')
+@Unique('UQ_page_members_page_user', ['pageId', 'userId'])
 export class PageMember {
   @PrimaryGeneratedColumn()
   id: number;

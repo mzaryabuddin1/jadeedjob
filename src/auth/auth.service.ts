@@ -11,9 +11,11 @@ import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { FilterService } from 'src/filter/filter.service';
-import { FirebaseService } from 'src/firebase/firebase.service';
 import { computeUserIsVerified } from 'src/users/profile-verification.util';
 import { generateReferralCode } from 'src/users/referral-code.util';
+import { PushService } from 'src/push/push.service';
+import { ApiException } from 'src/common/errors/api-exception';
+import { HttpStatus } from '@nestjs/common';
 
 @Injectable()
 export class AuthService {
@@ -30,7 +32,7 @@ export class AuthService {
     private languageRepo: Repository<Language>,
 
     private filterService: FilterService, // 👈 add this
-    private firebaseService: FirebaseService, // 👈 add this
+    private pushService: PushService,
   ) {}
 
   generateToken(user: any) {
@@ -57,7 +59,7 @@ export class AuthService {
     return publicUser;
   }
 
-  private async generateUniqueReferralCode() {
+  async generateUniqueReferralCode() {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const referralCode = generateReferralCode();
       const existing = await this.userRepo.findOne({
@@ -136,6 +138,41 @@ export class AuthService {
     return this.userRepo.save(user);
   }
 
+  async createSocialUser(data: {
+    phone: string;
+    firstName: string;
+    lastName?: string;
+    email?: string;
+    profilePhoto?: string;
+  }) {
+    const existing = await this.findUserByPhone(data.phone);
+    if (existing) return existing;
+    const filterPreferences = await this.filterService.getTopFiltersByJobs(9);
+    return this.userRepo.save(
+      this.userRepo.create({
+        phone: data.phone,
+        firstName: data.firstName || 'JobsLoot',
+        lastName: data.lastName || 'User',
+        email: data.email || null,
+        profile_photo: data.profilePhoto || null,
+        passwordHash: null,
+        passwordSalt: null,
+        phoneVerifiedAt: new Date(),
+        isVerified: false,
+        isBanned: false,
+        referralCode: await this.generateUniqueReferralCode(),
+        filter_preferences: filterPreferences,
+      }),
+    );
+  }
+
+  async findUserById(userId: number) {
+    return this.userRepo.findOne({
+      where: { id: userId },
+      relations: ['country', 'language'],
+    });
+  }
+
   async validateRegistrationRelations(countryId: number, languageId: number) {
     const [country, language] = await Promise.all([
       this.countryRepo.findOne({ where: { id: countryId } }),
@@ -156,6 +193,7 @@ export class AuthService {
   }
 
   validatePassword(password: string, storedHash: string, salt: string) {
+    if (!storedHash || !salt) return false;
     const hash = pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
     return hash === storedHash;
   }
@@ -175,8 +213,28 @@ export class AuthService {
 
     if (!isValid) throw new UnauthorizedException('Invalid phone or password');
 
-    if (user.isBanned)
-      throw new UnauthorizedException('Your account is blocked!');
+    if (user.isBanned) {
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        'AUTH_ACCOUNT_BANNED',
+        'Your account is blocked',
+      );
+    }
+    if (user.deletedAt) {
+      throw new ApiException(
+        HttpStatus.UNAUTHORIZED,
+        'AUTH_ACCOUNT_DELETED',
+        'This account is no longer available',
+      );
+    }
+    if (user.deletionScheduledAt) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'ACCOUNT_PENDING_DELETION',
+        'Account deletion is pending; recover the account to continue',
+        { scheduledDeletionAt: user.deletionScheduledAt },
+      );
+    }
 
     return user;
   }
@@ -249,25 +307,30 @@ export class AuthService {
     return this.userRepo.save(user);
   }
 
-  async attachFcmToken(userId: number, fcmToken: string) {
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: ['id', 'fcmTokens', 'filter_preferences'],
+  async incrementTokenVersion(userId: number) {
+    await this.userRepo.increment({ id: userId }, 'tokenVersion', 1);
+    return this.findUserById(userId);
+  }
+
+  async attachFcmToken(
+    userId: number,
+    fcmToken: string,
+    device: {
+      installationId?: string;
+      platform?: 'ios' | 'android';
+      appVersion?: string;
+      locale?: string;
+    } = {},
+  ) {
+    const installationId =
+      device.installationId || `legacy-fcm:${fcmToken.slice(-40)}`;
+    await this.pushService.upsertDevice(userId, {
+      installationId,
+      token: fcmToken,
+      platform: device.platform || 'android',
+      appVersion: device.appVersion,
+      locale: device.locale,
     });
-
-    if (!user) return;
-
-    const tokens = new Set(user.fcmTokens || []);
-    tokens.add(fcmToken);
-
-    user.fcmTokens = Array.from(tokens);
-    await this.userRepo.save(user);
-
-    // 🔥 Subscribe this token to current filters
-    const filters = user.filter_preferences || [];
-    if (filters.length) {
-      await this.firebaseService.subscribeTokenToFilters(fcmToken, filters);
-    }
   }
 
 

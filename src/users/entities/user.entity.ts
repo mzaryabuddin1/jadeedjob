@@ -41,10 +41,10 @@ export class User {
   @Column({ unique: true })
   phone: string;
 
-  @Column()
+  @Column({ nullable: true })
   passwordHash: string;
 
-  @Column()
+  @Column({ nullable: true })
   passwordSalt: string;
 
   @Column({ default: false })
@@ -69,6 +69,12 @@ export class User {
   @Column({ default: false })
   isBanned: boolean;
 
+  @Column({ type: 'datetime', nullable: true })
+  deletionScheduledAt: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  deletedAt: Date;
+
   // Basic details
   @Column({ nullable: true })
   full_name: string;
@@ -91,6 +97,9 @@ export class User {
   @Column({ nullable: true })
   profile_photo: string;
 
+  @Column({ nullable: true, length: 36 })
+  profilePhotoAssetId: string;
+
   // Identity documents
   @Column({ nullable: true })
   national_id_number: string;
@@ -104,11 +113,20 @@ export class User {
   @Column({ nullable: true })
   id_document_front: string;
 
+  @Column({ nullable: true, length: 36 })
+  idDocumentFrontAssetId: string;
+
   @Column({ nullable: true })
   id_document_back: string;
 
+  @Column({ nullable: true, length: 36 })
+  idDocumentBackAssetId: string;
+
   @Column({ nullable: true })
   address_proof_document: string;
+
+  @Column({ nullable: true, length: 36 })
+  addressProofAssetId: string;
 
   // Contact Information
   @Column({ nullable: true })

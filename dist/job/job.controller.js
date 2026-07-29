@@ -21,6 +21,7 @@ const job_service_1 = require("./job.service");
 const joi_1 = __importDefault(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const optional_jwt_auth_guard_1 = require("../auth/optional-jwt-auth.guard");
 const JOB_TITLE_MAX_LENGTH = 35;
 const jobTitleSchema = joi_1.default.string().trim().max(JOB_TITLE_MAX_LENGTH).messages({
     'string.max': 'Title cannot exceed 35 characters',
@@ -34,10 +35,13 @@ let JobController = class JobController {
         return this.jobService.createJob(body, req.user.id);
     }
     async findJobs(query, req) {
-        return this.jobService.findJobs(query, req.user.id);
+        if (query.myjobs === 'true' && !req.user?.id) {
+            throw new common_1.UnauthorizedException('Authentication is required for myjobs');
+        }
+        return this.jobService.findJobs(query, req.user?.id);
     }
     async findJob(id, req) {
-        return this.jobService.findJobById(Number(id), req.user.id);
+        return this.jobService.findJobById(Number(id), req.user?.id);
     }
     async patchJob(id, body, req) {
         return this.jobService.updateJob(id, body, req.user.id);
@@ -52,6 +56,7 @@ let JobController = class JobController {
 exports.JobController = JobController;
 __decorate([
     (0, common_1.Post)(),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         title: jobTitleSchema.required(),
         filterId: joi_1.default.number().required(),
@@ -97,6 +102,7 @@ __decorate([
 ], JobController.prototype, "createJob", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseGuards)(optional_jwt_auth_guard_1.OptionalJwtAuthGuard),
     __param(0, (0, common_1.Query)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -105,6 +111,7 @@ __decorate([
 ], JobController.prototype, "findJobs", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, common_1.UseGuards)(optional_jwt_auth_guard_1.OptionalJwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -113,6 +120,7 @@ __decorate([
 ], JobController.prototype, "findJob", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         title: jobTitleSchema.optional(),
@@ -158,6 +166,7 @@ __decorate([
 ], JobController.prototype, "patchJob", null);
 __decorate([
     (0, common_1.Patch)(':id/status'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         status: joi_1.default.string().valid('draft', 'active', 'closed').required(),
@@ -169,6 +178,7 @@ __decorate([
 ], JobController.prototype, "updateStatus", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -176,7 +186,6 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "deleteJob", null);
 exports.JobController = JobController = __decorate([
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('job'),
     __metadata("design:paramtypes", [job_service_1.JobService])
 ], JobController);

@@ -43,7 +43,6 @@ exports.FirebaseModule = void 0;
 const common_1 = require("@nestjs/common");
 const admin = __importStar(require("firebase-admin"));
 const firebase_service_1 = require("./firebase.service");
-const firebase_controller_1 = require("./firebase.controller");
 let FirebaseModule = class FirebaseModule {
 };
 exports.FirebaseModule = FirebaseModule;
@@ -54,15 +53,31 @@ exports.FirebaseModule = FirebaseModule = __decorate([
             {
                 provide: 'FIREBASE_ADMIN',
                 useFactory: () => {
-                    const serviceAccount = require('./jobslootstaging-8fa70d6ad08a.json');
+                    if (admin.apps.length > 0) {
+                        return admin.app();
+                    }
+                    let credential;
+                    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+                        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+                        credential = admin.credential.cert(serviceAccount);
+                    }
+                    else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+                        credential = admin.credential.applicationDefault();
+                    }
+                    else if (!['staging', 'production'].includes(process.env.NODE_ENV || '')) {
+                        const serviceAccount = require('./jobslootstaging-8fa70d6ad08a.json');
+                        credential = admin.credential.cert(serviceAccount);
+                    }
+                    else {
+                        throw new Error('Firebase credentials are required in staging and production');
+                    }
                     return admin.initializeApp({
-                        credential: admin.credential.cert(serviceAccount),
+                        credential,
                     });
                 },
             },
         ],
         exports: [firebase_service_1.FirebaseService],
-        controllers: [firebase_controller_1.FirebaseController],
     })
 ], FirebaseModule);
 //# sourceMappingURL=firebase.module.js.map
