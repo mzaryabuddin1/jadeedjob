@@ -11,10 +11,11 @@ import {
   UseGuards,
   Query,
   UploadedFiles,
+  UploadedFile,
   UseInterceptors,
   Headers,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import Joi from 'joi';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
@@ -298,6 +299,10 @@ export class EmployerCompanyController {
           official_phone: Joi.string().allow('', null).optional(),
           industry_type: Joi.string().allow('', null).optional(),
           company_description: Joi.string().allow('', null).optional(),
+          founded_year: Joi.number().integer().min(1800).max(2200).allow(null).optional(),
+          number_of_employees: Joi.number().integer().min(0).allow(null).optional(),
+          company_type: Joi.string().allow('', null).optional(),
+          certifications: Joi.array().items(Joi.string().trim().max(160)).allow(null).optional(),
           country: Joi.string().allow('', null).optional(),
           state: Joi.string().allow('', null).optional(),
           city: Joi.string().allow('', null).optional(),
@@ -310,6 +315,20 @@ export class EmployerCompanyController {
     @Req() req: any,
   ) {
     return this.pagesService.updateEmployerCompany(companyId, req.user.id, body);
+  }
+
+  @Post('companies/:companyId/logo')
+  @UseInterceptors(FileInterceptor('file', {limits: {fileSize: 5 * 1024 * 1024}}))
+  uploadCompanyLogo(
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: any,
+  ) {
+    return this.pagesService.uploadEmployerCompanyLogo(
+      companyId,
+      req.user.id,
+      file,
+    );
   }
 
   @Post('companies/:companyId/branches')

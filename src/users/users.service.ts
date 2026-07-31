@@ -483,6 +483,71 @@ export class UsersService {
     };
   }
 
+  async uploadCredentialDocument(
+    userId: number,
+    type: 'experience' | 'education' | 'certification',
+    recordId: number,
+    file: Express.Multer.File,
+  ) {
+    const config = {
+      experience: {
+        entity: WorkExperience,
+        field: 'experience_certificate',
+      },
+      education: {
+        entity: Education,
+        field: 'degree_document',
+      },
+      certification: {
+        entity: Certification,
+        field: 'certificate_file',
+      },
+    } as const;
+    const mapping = config[type];
+    const repo = this.userRepo.manager.getRepository(mapping.entity);
+    const record = await repo.findOne({
+      where: {id: recordId, user: {id: userId}} as any,
+      relations: ['user'],
+    });
+
+    if (!record) {
+      throw new NotFoundException('Credential record not found');
+    }
+
+    const asset = await this.storageService.store({
+      ownerUserId: userId,
+      purpose: 'profile-credentials',
+      file,
+      allowedTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'application/pdf',
+      ],
+      maxBytes: 5 * 1024 * 1024,
+      visibility: 'private',
+      metadata: {type, recordId},
+    });
+    const previousValue = String((record as any)[mapping.field] || '');
+    const previousAssetId = previousValue.startsWith('asset:')
+      ? previousValue.slice(6)
+      : null;
+
+    try {
+      (record as any)[mapping.field] = `asset:${asset.id}`;
+      await repo.save(record as any);
+    } catch (error) {
+      await this.storageService.remove(asset);
+      throw error;
+    }
+
+    if (previousAssetId) {
+      await this.storageService.remove(previousAssetId).catch(() => undefined);
+    }
+
+    return this.getMyProfileResponse(userId);
+  }
+
   async findUsersByIds(ids: number[]) {
     return this.userRepo.find({
       where: { id: In(ids) },

@@ -83,6 +83,9 @@ let EmployerCompanyController = class EmployerCompanyController {
     updateCompany(companyId, body, req) {
         return this.pagesService.updateEmployerCompany(companyId, req.user.id, body);
     }
+    uploadCompanyLogo(companyId, file, req) {
+        return this.pagesService.uploadEmployerCompanyLogo(companyId, req.user.id, file);
+    }
     createBranch(companyId, body, req) {
         return this.pagesService.createBranch(companyId, req.user.id, body);
     }
@@ -277,6 +280,10 @@ __decorate([
         official_phone: joi_1.default.string().allow('', null).optional(),
         industry_type: joi_1.default.string().allow('', null).optional(),
         company_description: joi_1.default.string().allow('', null).optional(),
+        founded_year: joi_1.default.number().integer().min(1800).max(2200).allow(null).optional(),
+        number_of_employees: joi_1.default.number().integer().min(0).allow(null).optional(),
+        company_type: joi_1.default.string().allow('', null).optional(),
+        certifications: joi_1.default.array().items(joi_1.default.string().trim().max(160)).allow(null).optional(),
         country: joi_1.default.string().allow('', null).optional(),
         state: joi_1.default.string().allow('', null).optional(),
         city: joi_1.default.string().allow('', null).optional(),
@@ -288,6 +295,16 @@ __decorate([
     __metadata("design:paramtypes", [Number, Object, Object]),
     __metadata("design:returntype", void 0)
 ], EmployerCompanyController.prototype, "updateCompany", null);
+__decorate([
+    (0, common_1.Post)('companies/:companyId/logo'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { limits: { fileSize: 5 * 1024 * 1024 } })),
+    __param(0, (0, common_1.Param)('companyId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:returntype", void 0)
+], EmployerCompanyController.prototype, "uploadCompanyLogo", null);
 __decorate([
     (0, common_1.Post)('companies/:companyId/branches'),
     __param(0, (0, common_1.Param)('companyId', common_1.ParseIntPipe)),

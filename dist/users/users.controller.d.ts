@@ -19,6 +19,15 @@ export declare class UsersController {
         fileName: string;
         fileUrl: string;
     }>;
+    uploadMyCredentialDocument(req: Request, file: Express.Multer.File, body: {
+        type: 'experience' | 'education' | 'certification';
+        recordId: number;
+    }): Promise<{
+        user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+        message: string;
+        fileName: string;
+    }>;
     getMyPreferences(req: any): Promise<{
         data: number[];
         filters: {

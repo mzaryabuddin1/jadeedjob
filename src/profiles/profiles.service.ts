@@ -167,6 +167,11 @@ export class ProfilesService {
         },
         followersCount,
         skills,
+        skillGroups: {
+          core: user.skills || [],
+          technical: user.technical_skills || [],
+          soft: user.soft_skills || [],
+        },
         workExperience: (user.work_experience || []).map((item) => ({
           companyName: item.company_name,
           designation: item.designation,
@@ -177,6 +182,29 @@ export class ProfilesService {
           keyResponsibilities: item.key_responsibilities,
           currentlyWorking: Boolean(item.currently_working),
         })),
+        education: (user.education || []).map((item) => ({
+          id: item.id,
+          qualification: item.highest_qualification,
+          institution: item.institution_name,
+          graduationYear: item.graduation_year,
+          grade: item.gpa_or_grade,
+        })),
+        certifications: (user.certifications || []).map((item) => ({
+          id: item.id,
+          name: item.certification_name,
+          issuer: item.issuing_institution,
+          issuedAt: item.certification_date,
+        })),
+        languages: (user.languages_spoken || []).map((item) => ({
+          name: item.language,
+          level: item.level,
+        })),
+        socialLinks: {
+          linkedin: user.linkedin_url || null,
+          github: user.github_url || null,
+          portfolio: user.portfolio_url || null,
+          behance: user.behance_url || null,
+        },
       },
       viewerState: {
         following,
@@ -189,7 +217,7 @@ export class ProfilesService {
   private async getCompanyProfile(companyId: number, viewerId: number) {
     const company = await this.pageRepo.findOne({
       where: { id: companyId },
-      relations: ['members'],
+      relations: ['members', 'branches'],
     });
     if (!company || company.verificationStatus !== 'approved') {
       throw new NotFoundException('Profile not found');
@@ -229,6 +257,18 @@ export class ProfilesService {
           count: Number(company.ratingCount || 0),
         },
         followersCount,
+        foundedYear: company.founded_year || undefined,
+        employeeCount: company.number_of_employees || undefined,
+        companyType: company.company_type || undefined,
+        certifications: company.certifications || [],
+        locations: Array.from(
+          new Set(
+            [
+              this.formatLocation(company.city, company.state, company.country),
+              ...(company.branches || []).map((branch) => branch.address),
+            ].filter(Boolean),
+          ),
+        ),
         website: company.website_url || undefined,
         socialLinks: {
           linkedin: company.linkedin_page_url || null,

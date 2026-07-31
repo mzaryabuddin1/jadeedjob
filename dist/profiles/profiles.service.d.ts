@@ -37,6 +37,11 @@ export declare class ProfilesService {
             };
             followersCount: number;
             skills: string[];
+            skillGroups: {
+                core: string[];
+                technical: string[];
+                soft: string[];
+            };
             workExperience: {
                 companyName: string;
                 designation: string;
@@ -47,6 +52,29 @@ export declare class ProfilesService {
                 keyResponsibilities: string;
                 currentlyWorking: boolean;
             }[];
+            education: {
+                id: number;
+                qualification: string;
+                institution: string;
+                graduationYear: string;
+                grade: string;
+            }[];
+            certifications: {
+                id: number;
+                name: string;
+                issuer: string;
+                issuedAt: Date;
+            }[];
+            languages: {
+                name: string;
+                level: string;
+            }[];
+            socialLinks: {
+                linkedin: string;
+                github: string;
+                portfolio: string;
+                behance: string;
+            };
             type: "user";
             id: string;
             name: string;
@@ -69,6 +97,11 @@ export declare class ProfilesService {
                 count: number;
             };
             followersCount: number;
+            foundedYear: number;
+            employeeCount: number;
+            companyType: string;
+            certifications: string[];
+            locations: string[];
             website: string;
             socialLinks: {
                 linkedin: string;

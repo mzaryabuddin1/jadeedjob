@@ -65,6 +65,10 @@ export declare class EmployerCompanyController {
             email: string;
             phone: string;
             industry: string;
+            foundedYear: number;
+            employeeCount: number;
+            companyType: string;
+            certifications: string[];
             country: string;
             state: string;
             city: string;
@@ -190,6 +194,10 @@ export declare class EmployerCompanyController {
             email: string;
             phone: string;
             industry: string;
+            foundedYear: number;
+            employeeCount: number;
+            companyType: string;
+            certifications: string[];
             country: string;
             state: string;
             city: string;
@@ -247,6 +255,10 @@ export declare class EmployerCompanyController {
             email: string;
             phone: string;
             industry: string;
+            foundedYear: number;
+            employeeCount: number;
+            companyType: string;
+            certifications: string[];
             country: string;
             state: string;
             city: string;
@@ -291,6 +303,58 @@ export declare class EmployerCompanyController {
             email: string;
             phone: string;
             industry: string;
+            foundedYear: number;
+            employeeCount: number;
+            companyType: string;
+            certifications: string[];
+            country: string;
+            state: string;
+            city: string;
+            address_line1: string;
+            address_line2: string;
+            socials: {
+                linkedin: string;
+                facebook: string;
+                instagram: string;
+                twitter: string;
+                youtube: string;
+            };
+            branches: {
+                id: number;
+                label: string;
+                address: string;
+                lat: number;
+                lng: number;
+                location: {
+                    lat: number;
+                    lng: number;
+                };
+            }[];
+            verificationStatus: import("./entities/company-page.entity").CompanyVerificationStatus;
+            verificationReason: string;
+            verifiedAt: Date;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    uploadCompanyLogo(companyId: number, file: Express.Multer.File, req: any): Promise<{
+        message: string;
+        data: {
+            logoUrl: string;
+            id: number;
+            name: string;
+            companyName: string;
+            username: string;
+            businessName: string;
+            description: string;
+            website: string;
+            email: string;
+            phone: string;
+            industry: string;
+            foundedYear: number;
+            employeeCount: number;
+            companyType: string;
+            certifications: string[];
             country: string;
             state: string;
             city: string;

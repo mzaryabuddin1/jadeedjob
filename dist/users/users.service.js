@@ -405,6 +405,61 @@ let UsersService = class UsersService {
             profile: await this.getMyProfileResponse(userId),
         };
     }
+    async uploadCredentialDocument(userId, type, recordId, file) {
+        const config = {
+            experience: {
+                entity: work_experience_entity_1.WorkExperience,
+                field: 'experience_certificate',
+            },
+            education: {
+                entity: education_entity_1.Education,
+                field: 'degree_document',
+            },
+            certification: {
+                entity: certification_entity_1.Certification,
+                field: 'certificate_file',
+            },
+        };
+        const mapping = config[type];
+        const repo = this.userRepo.manager.getRepository(mapping.entity);
+        const record = await repo.findOne({
+            where: { id: recordId, user: { id: userId } },
+            relations: ['user'],
+        });
+        if (!record) {
+            throw new common_1.NotFoundException('Credential record not found');
+        }
+        const asset = await this.storageService.store({
+            ownerUserId: userId,
+            purpose: 'profile-credentials',
+            file,
+            allowedTypes: [
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'application/pdf',
+            ],
+            maxBytes: 5 * 1024 * 1024,
+            visibility: 'private',
+            metadata: { type, recordId },
+        });
+        const previousValue = String(record[mapping.field] || '');
+        const previousAssetId = previousValue.startsWith('asset:')
+            ? previousValue.slice(6)
+            : null;
+        try {
+            record[mapping.field] = `asset:${asset.id}`;
+            await repo.save(record);
+        }
+        catch (error) {
+            await this.storageService.remove(asset);
+            throw error;
+        }
+        if (previousAssetId) {
+            await this.storageService.remove(previousAssetId).catch(() => undefined);
+        }
+        return this.getMyProfileResponse(userId);
+    }
     async findUsersByIds(ids) {
         return this.userRepo.find({
             where: { id: (0, typeorm_2.In)(ids) },

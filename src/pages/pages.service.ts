@@ -194,6 +194,10 @@ export class PagesService {
       email: page.official_email,
       phone: page.official_phone,
       industry: page.industry_type,
+      foundedYear: page.founded_year,
+      employeeCount: page.number_of_employees,
+      companyType: page.company_type,
+      certifications: page.certifications || [],
       country: page.country,
       state: page.state,
       city: page.city,
@@ -1267,6 +1271,45 @@ export class PagesService {
 
     return {
       message: 'Company updated successfully',
+      data: await this.formatCompanyWithAssets(page),
+    };
+  }
+
+  async uploadEmployerCompanyLogo(
+    companyId: number,
+    userId: number,
+    file?: Express.Multer.File,
+  ) {
+    await this.getCompanyAccess(companyId, userId, 'manageTeam');
+    if (!file) throw new BadRequestException('No logo provided');
+
+    const page = await this.pageRepo.findOne({where: {id: companyId}});
+    if (!page) throw new NotFoundException('Company not found');
+
+    const asset = await this.storageService.store({
+      ownerUserId: userId,
+      purpose: 'company-logos',
+      file,
+      allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+      maxBytes: 5 * 1024 * 1024,
+      visibility: 'private',
+      metadata: {companyId},
+    });
+    const previousAssetId = page.logoAssetId;
+    try {
+      page.logoAssetId = asset.id;
+      page.company_logo = null;
+      await this.pageRepo.save(page);
+    } catch (error) {
+      await this.storageService.remove(asset.id).catch(() => undefined);
+      throw error;
+    }
+    if (previousAssetId) {
+      await this.storageService.remove(previousAssetId).catch(() => undefined);
+    }
+
+    return {
+      message: 'Company logo updated',
       data: await this.formatCompanyWithAssets(page),
     };
   }

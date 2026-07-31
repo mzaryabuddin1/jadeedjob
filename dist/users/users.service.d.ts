@@ -45,6 +45,10 @@ export declare class UsersService {
             verificationRequirements: import("./profile-verification.util").VerificationRequirements;
         };
     }>;
+    uploadCredentialDocument(userId: number, type: 'experience' | 'education' | 'certification', recordId: number, file: Express.Multer.File): Promise<{
+        user: any;
+        verificationRequirements: import("./profile-verification.util").VerificationRequirements;
+    }>;
     findUsersByIds(ids: number[]): Promise<User[]>;
     getUserPreference(userId: number): Promise<{
         data: number[];

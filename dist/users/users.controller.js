@@ -165,6 +165,19 @@ let UsersController = class UsersController {
             ...result.profile,
         };
     }
+    async uploadMyCredentialDocument(req, file, body) {
+        const userId = req.user?.id;
+        if (!userId)
+            throw new common_1.NotFoundException('User not found or unauthorized');
+        if (!file)
+            throw new common_1.BadRequestException('No file provided');
+        const profile = await this.usersService.uploadCredentialDocument(userId, body.type, Number(body.recordId), file);
+        return {
+            message: 'Credential document uploaded successfully',
+            fileName: file.originalname,
+            ...profile,
+        };
+    }
     async getMyPreferences(req) {
         return await this.usersService.getUserPreference(req.user.id);
     }
@@ -255,6 +268,21 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object, Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "uploadMyDocument", null);
+__decorate([
+    (0, common_1.Post)('me/credential-documents'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', documentUploadOptions)),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(Joi.object({
+        type: Joi.string()
+            .valid('experience', 'education', 'certification')
+            .required(),
+        recordId: Joi.number().integer().positive().required(),
+    })))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "uploadMyCredentialDocument", null);
 __decorate([
     (0, common_1.Get)('me/preferences'),
     __param(0, (0, common_1.Req)()),

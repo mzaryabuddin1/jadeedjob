@@ -253,6 +253,44 @@ export class UsersController {
     };
   }
 
+  @Post('me/credential-documents')
+  @UseInterceptors(FileInterceptor('file', documentUploadOptions))
+  async uploadMyCredentialDocument(
+    @Req() req: Request,
+    @UploadedFile() file: Express.Multer.File,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          type: Joi.string()
+            .valid('experience', 'education', 'certification')
+            .required(),
+          recordId: Joi.number().integer().positive().required(),
+        }),
+      ),
+    )
+    body: {
+      type: 'experience' | 'education' | 'certification';
+      recordId: number;
+    },
+  ) {
+    const userId = (req.user as any)?.id;
+    if (!userId) throw new NotFoundException('User not found or unauthorized');
+    if (!file) throw new BadRequestException('No file provided');
+
+    const profile = await this.usersService.uploadCredentialDocument(
+      userId,
+      body.type,
+      Number(body.recordId),
+      file,
+    );
+
+    return {
+      message: 'Credential document uploaded successfully',
+      fileName: file.originalname,
+      ...profile,
+    };
+  }
+
   @Get('me/preferences')
   async getMyPreferences(@Req() req: any) {
     return await this.usersService.getUserPreference(req.user.id);
