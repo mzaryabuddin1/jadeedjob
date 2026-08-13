@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Post,
@@ -17,6 +18,9 @@ import Joi from 'joi';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { SupportService } from './support.service';
+import { Throttle } from '@nestjs/throttler';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiOptionalIdempotencyKey } from 'src/idempotency/idempotency.decorators';
 
 const ticketPaginationSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
@@ -25,6 +29,8 @@ const ticketPaginationSchema = Joi.object({
 
 @UseGuards(JwtAuthGuard)
 @Controller('support')
+@ApiTags('Support')
+@ApiBearerAuth()
 export class SupportController {
   constructor(private readonly supportService: SupportService) {}
 
@@ -53,6 +59,8 @@ export class SupportController {
   }
 
   @Post('tickets')
+  @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @ApiOptionalIdempotencyKey()
   createTicket(
     @Req() req: any,
     @Body(
@@ -82,8 +90,13 @@ export class SupportController {
       ),
     )
     body: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.supportService.createTicket(req.user.id, body);
+    return this.supportService.createTicket(
+      req.user.id,
+      body,
+      idempotencyKey,
+    );
   }
 
   @Get('tickets')

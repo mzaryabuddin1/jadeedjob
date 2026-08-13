@@ -9,8 +9,8 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, unlink, writeFile } from 'fs/promises';
-import { dirname, extname, join, normalize } from 'path';
-import { Repository } from 'typeorm';
+import { basename, dirname, extname, join, normalize } from 'path';
+import { Like, Repository } from 'typeorm';
 import { StoredAsset } from './entities/stored-asset.entity';
 
 type StoreInput = {
@@ -38,7 +38,7 @@ export class ObjectStorageService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    if (this.provider() !== 's3') return;
+    if (this.getProvider() !== 's3') return;
     const required = [
       'S3_BUCKET',
       'S3_REGION',
@@ -67,10 +67,14 @@ export class ObjectStorageService implements OnModuleInit {
       throw new BadRequestException('Uploaded file exceeds the allowed size');
     }
     const actualType = await this.detectContentType(buffer);
+    const declaredType = this.normalizeContentType(input.file.mimetype);
+    const allowedTypes = input.allowedTypes.map((type) =>
+      this.normalizeContentType(type),
+    );
     if (
-      !input.allowedTypes.includes(input.file.mimetype) ||
-      !input.allowedTypes.includes(actualType) ||
-      input.file.mimetype !== actualType
+      !allowedTypes.includes(declaredType) ||
+      !allowedTypes.includes(actualType) ||
+      declaredType !== actualType
     ) {
       throw new BadRequestException(
         'Uploaded file type does not match its content',
@@ -79,7 +83,7 @@ export class ObjectStorageService implements OnModuleInit {
 
     const extension = this.safeExtension(input.file.originalname, actualType);
     const storageKey = `${input.purpose}/${input.ownerUserId}/${randomUUID()}${extension}`;
-    const provider = this.provider();
+    const provider = this.getProvider();
     const sha256 = createHash('sha256').update(buffer).digest('hex');
 
     if (provider === 's3') {
@@ -136,10 +140,52 @@ export class ObjectStorageService implements OnModuleInit {
       );
     }
     const base = (process.env.APP_URL || 'http://localhost:3000').replace(
-      /\/$/,
+      /\/+$/,
       '',
     );
     return `${base}/uploads/objects/${asset.storageKey}`;
+  }
+
+  async getAsset(assetId: string) {
+    return this.assetRepo.findOne({ where: { id: assetId } });
+  }
+
+  async requireOwnedAsset(
+    assetId: string,
+    ownerUserId: number,
+    purpose?: string,
+  ) {
+    const asset = await this.assetRepo.findOne({ where: { id: assetId } });
+    if (
+      !asset ||
+      asset.deletedAt ||
+      asset.ownerUserId !== ownerUserId ||
+      (purpose && asset.purpose !== purpose)
+    ) {
+      throw new BadRequestException('Stored attachment is invalid');
+    }
+    return asset;
+  }
+
+  async findKnownAssetByUrl(value: string) {
+    let fileName = '';
+    try {
+      fileName = basename(new URL(value).pathname);
+    } catch {
+      return null;
+    }
+    if (!fileName) return null;
+    const assets = await this.assetRepo.find({
+      where: { storageKey: Like(`%/${fileName}`) },
+      take: 5,
+    });
+    return (
+      assets.find(
+        (asset) =>
+          !asset.deletedAt &&
+          decodeURIComponent(new URL(value).pathname).endsWith(asset.storageKey),
+      ) || null
+    );
   }
 
   async remove(assetOrId: StoredAsset | string) {
@@ -164,7 +210,7 @@ export class ObjectStorageService implements OnModuleInit {
     await this.assetRepo.save(asset);
   }
 
-  private provider(): 'local' | 's3' {
+  getProvider(): 'local' | 's3' {
     const configured = process.env.STORAGE_PROVIDER;
     if (configured === 's3') return 's3';
     if (configured === 'local') return 'local';
@@ -200,9 +246,31 @@ export class ObjectStorageService implements OnModuleInit {
     }
     if (buffer.subarray(4, 8).toString() === 'ftyp') {
       const brand = buffer.subarray(8, 12).toString().toLowerCase();
+      if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) {
+        return 'image/heic';
+      }
+      if (['mif1', 'msf1'].includes(brand)) return 'image/heif';
+    }
+    if (buffer.subarray(4, 8).toString() === 'ftyp') {
+      const brand = buffer.subarray(8, 12).toString().toLowerCase();
       if (brand.includes('qt')) return 'video/quicktime';
       if (brand.includes('m4a')) return 'audio/mp4';
       return 'video/mp4';
+    }
+    if (
+      buffer.length >= 4 &&
+      buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+    ) {
+      return 'video/webm';
+    }
+    if (
+      buffer.length >= 4 &&
+      buffer[0] === 0x00 &&
+      buffer[1] === 0x00 &&
+      buffer[2] === 0x01 &&
+      [0xba, 0xb3].includes(buffer[3])
+    ) {
+      return 'video/mpeg';
     }
     if (
       buffer.subarray(0, 3).toString() === 'ID3' ||
@@ -218,9 +286,13 @@ export class ObjectStorageService implements OnModuleInit {
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
       'image/webp': ['.webp'],
+      'image/heic': ['.heic'],
+      'image/heif': ['.heif'],
       'application/pdf': ['.pdf'],
       'video/mp4': ['.mp4', '.m4v'],
       'video/quicktime': ['.mov'],
+      'video/webm': ['.webm'],
+      'video/mpeg': ['.mpeg', '.mpg'],
       'audio/mpeg': ['.mp3'],
       'audio/mp4': ['.m4a'],
     };
@@ -232,5 +304,9 @@ export class ObjectStorageService implements OnModuleInit {
       );
     }
     return original;
+  }
+
+  private normalizeContentType(contentType: string) {
+    return contentType === 'video/x-m4v' ? 'video/mp4' : contentType;
   }
 }

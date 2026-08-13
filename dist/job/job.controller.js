@@ -22,17 +22,23 @@ const joi_1 = __importDefault(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const optional_jwt_auth_guard_1 = require("../auth/optional-jwt-auth.guard");
+const throttler_1 = require("@nestjs/throttler");
+const moderation_service_1 = require("../moderation/moderation.service");
+const swagger_1 = require("@nestjs/swagger");
+const idempotency_decorators_1 = require("../idempotency/idempotency.decorators");
+const moderation_decorators_1 = require("../moderation/moderation.decorators");
 const JOB_TITLE_MAX_LENGTH = 35;
 const jobTitleSchema = joi_1.default.string().trim().max(JOB_TITLE_MAX_LENGTH).messages({
     'string.max': 'Title cannot exceed 35 characters',
 });
 let JobController = class JobController {
-    constructor(jobService) {
+    constructor(jobService, moderationService) {
         this.jobService = jobService;
+        this.moderationService = moderationService;
     }
-    async createJob(body, req) {
+    async createJob(body, req, idempotencyKey) {
         body.createdBy = req.user.id;
-        return this.jobService.createJob(body, req.user.id);
+        return this.jobService.createJob(body, req.user.id, idempotencyKey);
     }
     async findJobs(query, req) {
         if (query.myjobs === 'true' && !req.user?.id) {
@@ -42,6 +48,9 @@ let JobController = class JobController {
     }
     async findJob(id, req) {
         return this.jobService.findJobById(Number(id), req.user?.id);
+    }
+    reportJob(jobId, body, req) {
+        return this.moderationService.reportJob(jobId, req.user.id, body);
     }
     async patchJob(id, body, req) {
         return this.jobService.updateJob(id, body, req.user.id);
@@ -57,6 +66,9 @@ exports.JobController = JobController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         title: jobTitleSchema.required(),
         filterId: joi_1.default.number().required(),
@@ -96,8 +108,9 @@ __decorate([
     }))),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Headers)('idempotency-key')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, String]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "createJob", null);
 __decorate([
@@ -118,6 +131,25 @@ __decorate([
     __metadata("design:paramtypes", [Number, Object]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "findJob", null);
+__decorate([
+    (0, common_1.Post)(':jobId/report'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 3_600_000 } }),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, moderation_decorators_1.ApiCreateModerationReport)('Report a visible job'),
+    __param(0, (0, common_1.Param)('jobId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        reason: joi_1.default.string()
+            .trim()
+            .valid('spam', 'misleading', 'fraud', 'unsafe', 'inappropriate', 'other')
+            .required(),
+        details: joi_1.default.string().trim().max(1000).allow('', null).optional(),
+    })))),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:returntype", void 0)
+], JobController.prototype, "reportJob", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
@@ -187,6 +219,8 @@ __decorate([
 ], JobController.prototype, "deleteJob", null);
 exports.JobController = JobController = __decorate([
     (0, common_1.Controller)('job'),
-    __metadata("design:paramtypes", [job_service_1.JobService])
+    (0, swagger_1.ApiTags)('Jobs'),
+    __metadata("design:paramtypes", [job_service_1.JobService,
+        moderation_service_1.ModerationService])
 ], JobController);
 //# sourceMappingURL=job.controller.js.map

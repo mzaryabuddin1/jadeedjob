@@ -26,6 +26,9 @@ export declare class User {
     tokenVersion: number;
     systemRole: 'user' | 'admin';
     isBanned: boolean;
+    suspendedAt: Date;
+    suspendedUntil: Date;
+    suspensionReason: string;
     deletionScheduledAt: Date;
     deletedAt: Date;
     full_name: string;

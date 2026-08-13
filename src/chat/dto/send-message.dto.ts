@@ -28,9 +28,11 @@ export class SendMessageDto {
 
   @IsOptional()
   attachments?: Array<{
-    fileUrl: string;
+    assetId?: string;
+    fileUrl?: string;
     fileName?: string;
     contentType?: string;
+    sizeBytes?: number;
   }>;
 
   @IsEnum(['text', 'image', 'video', 'audio', 'file'])

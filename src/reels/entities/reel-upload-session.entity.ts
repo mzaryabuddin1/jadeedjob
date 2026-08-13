@@ -23,6 +23,7 @@ export type ReelStorageProvider = 'local' | 'object';
 @Entity('reel_upload_sessions')
 @Index(['uploadId'], { unique: true })
 @Index(['reelId', 'userId'])
+@Index('IDX_reel_upload_sessions_uploaded_asset', ['uploadedAssetId'])
 export class ReelUploadSession {
   @PrimaryGeneratedColumn()
   id: number;
@@ -81,6 +82,14 @@ export class ReelUploadSession {
 
   @Column({ nullable: true, length: 2000 })
   publicUrl: string;
+
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  uploadedAssetId: string;
 
   @Column({ type: 'int', unsigned: true, nullable: true })
   uploadedFileSizeBytes: number;

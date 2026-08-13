@@ -170,6 +170,14 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Job.prototype, "isActive", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['visible', 'hidden', 'removed'],
+        default: 'visible',
+    }),
+    __metadata("design:type", String)
+], Job.prototype, "moderationStatus", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Job.prototype, "createdAt", void 0);

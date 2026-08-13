@@ -91,6 +91,15 @@ __decorate([
     __metadata("design:type", String)
 ], ReelUploadSession.prototype, "publicUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], ReelUploadSession.prototype, "uploadedAssetId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'int', unsigned: true, nullable: true }),
     __metadata("design:type", Number)
 ], ReelUploadSession.prototype, "uploadedFileSizeBytes", void 0);
@@ -121,6 +130,7 @@ __decorate([
 exports.ReelUploadSession = ReelUploadSession = __decorate([
     (0, typeorm_1.Entity)('reel_upload_sessions'),
     (0, typeorm_1.Index)(['uploadId'], { unique: true }),
-    (0, typeorm_1.Index)(['reelId', 'userId'])
+    (0, typeorm_1.Index)(['reelId', 'userId']),
+    (0, typeorm_1.Index)('IDX_reel_upload_sessions_uploaded_asset', ['uploadedAssetId'])
 ], ReelUploadSession);
 //# sourceMappingURL=reel-upload-session.entity.js.map

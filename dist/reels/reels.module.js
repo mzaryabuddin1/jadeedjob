@@ -23,6 +23,7 @@ const reels_service_1 = require("./reels.service");
 const profile_follow_entity_1 = require("../profiles/entities/profile-follow.entity");
 const profiles_module_1 = require("../profiles/profiles.module");
 const pages_module_1 = require("../pages/pages.module");
+const notifications_module_1 = require("../notifications/notifications.module");
 let ReelsModule = class ReelsModule {
 };
 exports.ReelsModule = ReelsModule;
@@ -42,6 +43,7 @@ exports.ReelsModule = ReelsModule = __decorate([
             ]),
             pages_module_1.PagesModule,
             profiles_module_1.ProfilesModule,
+            notifications_module_1.NotificationsModule,
         ],
         controllers: [reels_controller_1.ReelsController],
         providers: [reels_service_1.ReelsService, reel_storage_service_1.ReelStorageService],

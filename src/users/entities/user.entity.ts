@@ -70,6 +70,15 @@ export class User {
   isBanned: boolean;
 
   @Column({ type: 'datetime', nullable: true })
+  suspendedAt: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  suspendedUntil: Date;
+
+  @Column({ type: 'text', nullable: true })
+  suspensionReason: string;
+
+  @Column({ type: 'datetime', nullable: true })
   deletionScheduledAt: Date;
 
   @Column({ type: 'datetime', nullable: true })

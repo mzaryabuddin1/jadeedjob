@@ -59,9 +59,11 @@ export class ChatMessage {
 
   @Column({ type: 'json', nullable: true })
   attachments: Array<{
+    assetId?: string;
     fileUrl: string;
     fileName?: string;
     contentType?: string;
+    sizeBytes?: number;
   }>;
 
   @Column({
@@ -73,6 +75,13 @@ export class ChatMessage {
 
   @Column({ type: 'datetime', nullable: true })
   readAt: Date;
+
+  @Column({
+    type: 'enum',
+    enum: ['visible', 'hidden', 'removed'],
+    default: 'visible',
+  })
+  moderationStatus: 'visible' | 'hidden' | 'removed';
 
   @CreateDateColumn()
   createdAt: Date;

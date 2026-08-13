@@ -14,6 +14,7 @@ import { User } from 'src/users/entities/user.entity';
 @Entity('idempotency_records')
 @Unique('UQ_idempotency_user_scope_key', ['userId', 'scope', 'requestKey'])
 @Index('IDX_idempotency_expiry', ['expiresAt'])
+@Index('IDX_idempotency_state_lease', ['state', 'leaseExpiresAt'])
 export class IdempotencyRecord {
   @PrimaryGeneratedColumn()
   id: number;
@@ -39,16 +40,34 @@ export class IdempotencyRecord {
 
   @Column({
     type: 'enum',
-    enum: ['processing', 'completed'],
+    enum: ['processing', 'completed', 'failed'],
     default: 'processing',
   })
-  state: 'processing' | 'completed';
+  state: 'processing' | 'completed' | 'failed';
+
+  @Column({ nullable: true, length: 36 })
+  leaseId: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  leaseExpiresAt: Date | null;
+
+  @Column({ type: 'int', unsigned: true, default: 1 })
+  attemptCount: number;
 
   @Column({ type: 'int', nullable: true })
   responseStatus: number;
 
   @Column({ type: 'json', nullable: true })
   responseBody: Record<string, unknown>;
+
+  @Column({ type: 'json', nullable: true })
+  responseHeaders: Record<string, string> | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  completedAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  lastErrorCode: string | null;
 
   @Column({ type: 'datetime' })
   expiresAt: Date;

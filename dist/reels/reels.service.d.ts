@@ -13,6 +13,8 @@ import { PagesService } from 'src/pages/pages.service';
 import { ProfilesService } from 'src/profiles/profiles.service';
 import { ModerationService } from 'src/moderation/moderation.service';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 type CreateReelPayload = {
     caption: string;
     category: ReelCategory;
@@ -56,8 +58,10 @@ export declare class ReelsService implements OnModuleInit {
     private readonly storage;
     private readonly moderationService;
     private readonly objectStorageService;
+    private readonly idempotencyService;
+    private readonly notificationsService;
     private cleanupTimer?;
-    constructor(reelRepo: Repository<Reel>, uploadSessionRepo: Repository<ReelUploadSession>, likeRepo: Repository<ReelLike>, saveRepo: Repository<ReelSave>, commentRepo: Repository<ReelComment>, profileFollowRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, pagesService: PagesService, profilesService: ProfilesService, storage: ReelStorageService, moderationService: ModerationService, objectStorageService: ObjectStorageService);
+    constructor(reelRepo: Repository<Reel>, uploadSessionRepo: Repository<ReelUploadSession>, likeRepo: Repository<ReelLike>, saveRepo: Repository<ReelSave>, commentRepo: Repository<ReelComment>, profileFollowRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, pagesService: PagesService, profilesService: ProfilesService, storage: ReelStorageService, moderationService: ModerationService, objectStorageService: ObjectStorageService, idempotencyService: IdempotencyService, notificationsService: NotificationsService);
     onModuleInit(): void;
     getPublisherOptions(userId: number): Promise<{
         data: ({
@@ -79,7 +83,7 @@ export declare class ReelsService implements OnModuleInit {
             canPublish: boolean;
         })[];
     }>;
-    createReel(data: CreateReelPayload, userId: number): Promise<{
+    createReel(data: CreateReelPayload, userId: number, idempotencyKey?: string): Promise<{
         reel: any;
         upload: {
             uploadId: string;
@@ -93,6 +97,7 @@ export declare class ReelsService implements OnModuleInit {
             expiresAt: Date;
         };
     }>;
+    private createReelInternal;
     uploadLocalVideo(reelId: number, userId: number, uploadId: string, file?: Express.Multer.File): Promise<{
         uploadId: string;
         reelId: string;
@@ -123,7 +128,7 @@ export declare class ReelsService implements OnModuleInit {
         }[];
         nextCursor: string;
     }>;
-    addComment(reelId: number, userId: number, text: string): Promise<{
+    addComment(reelId: number, userId: number, text: string, idempotencyKey?: string): Promise<{
         id: string;
         reelId: string;
         author: {
@@ -136,6 +141,12 @@ export declare class ReelsService implements OnModuleInit {
         };
         text: string;
         createdAt: Date;
+    }>;
+    private addCommentInternal;
+    deleteComment(reelId: number, commentId: number, userId: number, isSystemAdmin?: boolean): Promise<{
+        id: string;
+        reelId: string;
+        deleted: boolean;
     }>;
     likeReel(reelId: number, userId: number): Promise<any>;
     unlikeReel(reelId: number, userId: number): Promise<any>;

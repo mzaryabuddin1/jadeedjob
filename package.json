@@ -19,13 +19,16 @@
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
     "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
     "migration:show": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:show -d src/database/data-source.ts",
+    "legal:publish": "node scripts/publish-legal-document.js",
     "docs:openapi": "node -e \"fetch('http://localhost:3000/docs-json').then(async r => { if (!r.ok) throw new Error('OpenAPI endpoint returned ' + r.status); const spec = await r.json(); if (spec.openapi && spec.info && spec.paths) { console.log('OpenAPI spec ready:', spec.info.title, spec.info.version); return; } throw new Error('Invalid OpenAPI document'); }).catch(err => { console.error(err.message); process.exit(1); })\"",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e:isolated": "node scripts/run-isolated-e2e.js",
+    "test:migrations:isolated": "node scripts/test-migrations-isolated.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1097.0",

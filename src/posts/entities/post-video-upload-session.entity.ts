@@ -21,6 +21,8 @@ export type PostVideoUploadStatus =
 @Entity('community_post_video_upload_sessions')
 @Index('IDX_post_video_upload_id', ['uploadId'], { unique: true })
 @Index('IDX_post_video_upload_post_user', ['postId', 'userId'])
+@Index('IDX_post_video_upload_uploaded_asset', ['uploadedAssetId'])
+@Index('IDX_post_video_upload_thumbnail_asset', ['thumbnailAssetId'])
 export class PostVideoUploadSession {
   @PrimaryGeneratedColumn()
   id: number;
@@ -81,6 +83,22 @@ export class PostVideoUploadSession {
 
   @Column({ nullable: true, length: 2000 })
   publicUrl: string | null;
+
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  uploadedAssetId: string | null;
+
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  thumbnailAssetId: string | null;
 
   @Column({ type: 'int', unsigned: true, nullable: true })
   uploadedFileSizeBytes: number | null;

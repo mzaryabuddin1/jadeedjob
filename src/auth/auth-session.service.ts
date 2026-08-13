@@ -93,6 +93,9 @@ export class AuthSessionService {
         'isBanned',
         'tokenVersion',
         'systemRole',
+        'suspendedAt',
+        'suspendedUntil',
+        'suspensionReason',
         'deletionScheduledAt',
         'deletedAt',
       ],
@@ -311,6 +314,20 @@ export class AuthSessionService {
         HttpStatus.FORBIDDEN,
         'AUTH_ACCOUNT_BANNED',
         'Your account is blocked',
+      );
+    }
+    if (
+      user.suspendedAt &&
+      (!user.suspendedUntil || user.suspendedUntil > new Date())
+    ) {
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        'AUTH_ACCOUNT_SUSPENDED',
+        'Your account is temporarily suspended',
+        {
+          suspendedUntil: user.suspendedUntil || null,
+          reason: user.suspensionReason || null,
+        },
       );
     }
     if (user.deletedAt) {

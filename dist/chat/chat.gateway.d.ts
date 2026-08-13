@@ -4,6 +4,7 @@ import { AuthSessionService } from 'src/auth/auth-session.service';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { RealtimePresenceService } from 'src/realtime/realtime-presence.service';
+import { LegalService } from 'src/legal/legal.service';
 type Ack = {
     ok: true;
     data: unknown;
@@ -19,8 +20,9 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
     private readonly chatService;
     private readonly authSessionService;
     private readonly presenceService;
+    private readonly legalService;
     server: Server;
-    constructor(chatService: ChatService, authSessionService: AuthSessionService, presenceService: RealtimePresenceService);
+    constructor(chatService: ChatService, authSessionService: AuthSessionService, presenceService: RealtimePresenceService, legalService: LegalService);
     private readonly eventRateLimits;
     handleConnection(client: Socket): Promise<void>;
     handleDisconnect(client: Socket): void;
@@ -41,9 +43,11 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
         mediaUrl?: string;
         messageType?: 'text' | 'image' | 'video' | 'audio' | 'file';
         attachments?: Array<{
-            fileUrl: string;
+            assetId?: string;
+            fileUrl?: string;
             fileName?: string;
             contentType?: string;
+            sizeBytes?: number;
         }>;
     }): Promise<Ack>;
     read(client: Socket, body: {
@@ -73,6 +77,10 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
     }>;
     sendLegacy(client: Socket, dto: SendMessageDto): Promise<unknown>;
     emitInvitationUpdated(conversationId: string, data: unknown): void;
+    emitInvitationUpdatedForUsers(updates: Array<{
+        userId: number;
+        payload: unknown;
+    }>): void;
     private ack;
     private authenticatedUserId;
     private emitInboxUpdates;

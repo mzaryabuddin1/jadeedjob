@@ -40,7 +40,11 @@ exports.AccountDeletionModule = AccountDeletionModule = __decorate([
             twilio_module_1.TwilioModule,
             users_module_1.UsersModule,
         ],
-        controllers: [account_deletion_controller_1.AccountDeletionController, account_deletion_controller_1.AccountRecoveryController],
+        controllers: [
+            account_deletion_controller_1.AccountDeletionController,
+            account_deletion_controller_1.AccountRecoveryController,
+            account_deletion_controller_1.PublicAccountDeletionController,
+        ],
         providers: [account_deletion_service_1.AccountDeletionService],
     })
 ], AccountDeletionModule);

@@ -13,6 +13,7 @@ import { AuthSessionService } from 'src/auth/auth-session.service';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { RealtimePresenceService } from 'src/realtime/realtime-presence.service';
+import { LegalService } from 'src/legal/legal.service';
 
 const socketOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -47,6 +48,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly chatService: ChatService,
     private readonly authSessionService: AuthSessionService,
     private readonly presenceService: RealtimePresenceService,
+    private readonly legalService: LegalService,
   ) {}
 
   private readonly eventRateLimits = new Map<
@@ -139,14 +141,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       mediaUrl?: string;
       messageType?: 'text' | 'image' | 'video' | 'audio' | 'file';
       attachments?: Array<{
-        fileUrl: string;
+        assetId?: string;
+        fileUrl?: string;
         fileName?: string;
         contentType?: string;
+        sizeBytes?: number;
       }>;
     },
   ): Promise<Ack> {
     return this.ack(async (userId) => {
       this.enforceEventRateLimit(client, 'chat:message.send', 30, 10_000);
+      await this.legalService.assertCommunityAccepted(userId);
       const reference = body?.conversationId || body?.chatId;
       const message = await this.chatService.sendMessage(userId, {
         conversationId: reference,
@@ -230,6 +235,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const result = await this.ack(async (userId) => {
       this.enforceEventRateLimit(client, 'sendMessage', 30, 10_000);
+      await this.legalService.assertCommunityAccepted(userId);
       const message = await this.chatService.sendMessage(userId, dto);
       this.server
         .to(`application_${dto.jobApplicationId}`)
@@ -247,6 +253,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server
       ?.to(this.chatRoom(conversationId))
       .emit('chat:invitation.updated', data);
+  }
+
+  emitInvitationUpdatedForUsers(
+    updates: Array<{ userId: number; payload: unknown }>,
+  ) {
+    for (const update of updates) {
+      this.server
+        ?.to(this.userRoom(update.userId))
+        .emit('chat:invitation.updated', update.payload);
+    }
   }
 
   private async ack(

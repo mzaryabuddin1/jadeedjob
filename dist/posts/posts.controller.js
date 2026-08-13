@@ -28,6 +28,12 @@ const post_storage_service_1 = require("./post-storage.service");
 const post_video_storage_service_1 = require("./post-video-storage.service");
 const posts_service_1 = require("./posts.service");
 const throttler_1 = require("@nestjs/throttler");
+const community_guidelines_guard_1 = require("../legal/community-guidelines.guard");
+const moderation_service_1 = require("../moderation/moderation.service");
+const swagger_1 = require("@nestjs/swagger");
+const idempotency_decorators_1 = require("../idempotency/idempotency.decorators");
+const legal_decorators_1 = require("../legal/legal.decorators");
+const moderation_decorators_1 = require("../moderation/moderation.decorators");
 const publisherFields = {
     publisherType: joi_1.default.string().valid('user', 'company').default('user'),
     publisherId: joi_1.default.when('publisherType', {
@@ -135,8 +141,9 @@ const videoInterceptor = (0, platform_express_1.FileInterceptor)(post_video_stor
     },
 });
 let PostsController = class PostsController {
-    constructor(postsService) {
+    constructor(postsService, moderationService) {
         this.postsService = postsService;
+        this.moderationService = moderationService;
     }
     getFeed(query, req) {
         return this.postsService.getFeed(query, req.user.id);
@@ -144,11 +151,11 @@ let PostsController = class PostsController {
     search(query, req) {
         return this.postsService.searchPosts(query, req.user.id);
     }
-    createVideoUpload(body, req) {
-        return this.postsService.createVideoUpload(body, req.user.id);
+    createVideoUpload(body, req, idempotencyKey) {
+        return this.postsService.createVideoUpload(body, req.user.id, idempotencyKey);
     }
-    replaceVideoUpload(id, body, req) {
-        return this.postsService.createVideoReplacement(id, body.media, req.user.id);
+    replaceVideoUpload(id, body, req, idempotencyKey) {
+        return this.postsService.createVideoReplacement(id, body.media, req.user.id, idempotencyKey);
     }
     uploadVideo(id, uploadId, video, req) {
         if (!uploadId)
@@ -161,8 +168,8 @@ let PostsController = class PostsController {
     getPost(id, req) {
         return this.postsService.getPost(id, req.user.id);
     }
-    create(body, image, req) {
-        return this.postsService.createPost(body, image, req.user.id);
+    create(body, image, req, idempotencyKey) {
+        return this.postsService.createPost(body, image, req.user.id, idempotencyKey);
     }
     update(id, body, image, req) {
         return this.postsService.updatePost(id, body, image, req.user.id);
@@ -188,11 +195,17 @@ let PostsController = class PostsController {
     getComments(id, query, req) {
         return this.postsService.getComments(id, req.user.id, query.cursor, query.limit);
     }
-    addComment(id, body, req) {
-        return this.postsService.addComment(id, req.user.id, body.text);
+    addComment(id, body, req, idempotencyKey) {
+        return this.postsService.addComment(id, req.user.id, body.text, idempotencyKey);
     }
     report(id, body, req) {
-        return this.postsService.report(id, req.user.id, body.reason, body.details);
+        return this.moderationService.reportPost(id, req.user.id, body);
+    }
+    reportComment(postId, commentId, body, req) {
+        return this.moderationService.reportPostComment(postId, commentId, req.user.id, body);
+    }
+    deleteComment(postId, commentId, req) {
+        return this.postsService.deleteComment(postId, commentId, req.user.id, req.user.systemRole === 'admin');
     }
 };
 exports.PostsController = PostsController;
@@ -214,21 +227,29 @@ __decorate([
 ], PostsController.prototype, "search", null);
 __decorate([
     (0, common_1.Post)('video-uploads'),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
     (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(createVideoPostSchema))),
     __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Headers)('idempotency-key')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, String]),
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "createVideoUpload", null);
 __decorate([
     (0, common_1.Post)(':id/video-uploads'),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
     (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(replaceVideoSchema))),
     __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Headers)('idempotency-key')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:paramtypes", [Number, Object, Object, String]),
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "replaceVideoUpload", null);
 __decorate([
@@ -245,6 +266,8 @@ __decorate([
 ], PostsController.prototype, "uploadVideo", null);
 __decorate([
     (0, common_1.Post)(':id/complete-video-upload'),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(completeVideoUploadSchema))),
     __param(2, (0, common_1.Req)()),
@@ -262,13 +285,17 @@ __decorate([
 ], PostsController.prototype, "getPost", null);
 __decorate([
     (0, common_1.Post)(),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
     (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     (0, common_1.UseInterceptors)(imageInterceptor),
     __param(0, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(createPostSchema))),
     __param(1, (0, common_1.UploadedFile)()),
     __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Headers)('idempotency-key')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, Object, String]),
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "create", null);
 __decorate([
@@ -341,16 +368,22 @@ __decorate([
 ], PostsController.prototype, "getComments", null);
 __decorate([
     (0, common_1.Post)(':id/comments'),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
+    (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(commentSchema))),
     __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Headers)('idempotency-key')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:paramtypes", [Number, Object, Object, String]),
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "addComment", null);
 __decorate([
     (0, common_1.Post)(':id/report'),
     (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 3_600_000 } }),
+    (0, moderation_decorators_1.ApiCreateModerationReport)('Report a visible Community Post'),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(reportSchema))),
     __param(2, (0, common_1.Req)()),
@@ -358,9 +391,33 @@ __decorate([
     __metadata("design:paramtypes", [Number, Object, Object]),
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "report", null);
+__decorate([
+    (0, common_1.Post)(':postId/comments/:commentId/report'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 3_600_000 } }),
+    (0, moderation_decorators_1.ApiCreateModerationReport)('Report a visible Community Post comment'),
+    __param(0, (0, common_1.Param)('postId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Param)('commentId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(reportSchema))),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number, Object, Object]),
+    __metadata("design:returntype", void 0)
+], PostsController.prototype, "reportComment", null);
+__decorate([
+    (0, common_1.Delete)(':postId/comments/:commentId'),
+    __param(0, (0, common_1.Param)('postId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Param)('commentId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number, Object]),
+    __metadata("design:returntype", void 0)
+], PostsController.prototype, "deleteComment", null);
 exports.PostsController = PostsController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('posts'),
-    __metadata("design:paramtypes", [posts_service_1.PostsService])
+    (0, swagger_1.ApiTags)('Community posts'),
+    (0, swagger_1.ApiBearerAuth)(),
+    __metadata("design:paramtypes", [posts_service_1.PostsService,
+        moderation_service_1.ModerationService])
 ], PostsController);
 //# sourceMappingURL=posts.controller.js.map

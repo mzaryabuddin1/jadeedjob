@@ -39,6 +39,22 @@ export class PostComment {
   @Column({ type: 'text' })
   text: string;
 
+  @Column({
+    type: 'enum',
+    enum: ['visible', 'hidden', 'removed'],
+    default: 'visible',
+  })
+  moderationStatus: 'visible' | 'hidden' | 'removed';
+
+  @Column({ type: 'datetime', nullable: true })
+  deletedAt: Date | null;
+
+  @Column({ nullable: true })
+  deletedByUserId: number | null;
+
+  @Column({ nullable: true, length: 80 })
+  deletionReason: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

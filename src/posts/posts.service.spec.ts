@@ -111,6 +111,15 @@ const createService = (overrides: Record<string, any> = {}) => {
     objectStorageService: {
       getUrl: jest.fn(async () => null),
     },
+    idempotencyService: {
+      execute: jest.fn(
+        async (_userId, _scope, _key, _request, operation) => operation(),
+      ),
+      multipartRequest: jest.fn(async (body, file) => ({ body, file })),
+    },
+    notificationsService: {
+      create: jest.fn(async () => ({})),
+    },
     ...overrides,
   };
 
@@ -130,6 +139,8 @@ const createService = (overrides: Record<string, any> = {}) => {
       deps.videoStorage as any,
       deps.moderationService as any,
       deps.objectStorageService as any,
+      deps.idempotencyService as any,
+      deps.notificationsService as any,
     ),
     deps,
   };
@@ -395,7 +406,10 @@ describe('PostsService', () => {
       7,
     );
 
-    expect(storage.remove).toHaveBeenCalledWith('community-posts/old.jpg');
+    expect(storage.remove).toHaveBeenCalledWith(
+      undefined,
+      'community-posts/old.jpg',
+    );
   });
 
   it('preserves ranked and profile feed ordering and rejects cursor mode reuse', async () => {

@@ -43,6 +43,26 @@ __decorate([
     __metadata("design:type", String)
 ], ReelComment.prototype, "text", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['visible', 'hidden', 'removed'],
+        default: 'visible',
+    }),
+    __metadata("design:type", String)
+], ReelComment.prototype, "moderationStatus", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], ReelComment.prototype, "deletedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], ReelComment.prototype, "deletedByUserId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 80 }),
+    __metadata("design:type", String)
+], ReelComment.prototype, "deletionReason", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], ReelComment.prototype, "createdAt", void 0);

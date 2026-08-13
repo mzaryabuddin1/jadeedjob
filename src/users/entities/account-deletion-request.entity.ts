@@ -15,6 +15,8 @@ import { User } from './user.entity';
   'status',
   'scheduledDeletionAt',
 ])
+@Index('UQ_account_deletion_active_key', ['activeKey'], { unique: true })
+@Index('IDX_account_deletion_processing_claim', ['status', 'processingClaimedAt'])
 export class AccountDeletionRequest {
   @PrimaryGeneratedColumn()
   id: number;
@@ -47,6 +49,21 @@ export class AccountDeletionRequest {
 
   @Column({ type: 'json', nullable: true })
   blockerSnapshot: Record<string, unknown>;
+
+  @Column({ nullable: true, length: 80 })
+  activeKey: string | null;
+
+  @Column({ nullable: true, length: 36 })
+  processingClaimToken: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  processingClaimedAt: Date | null;
+
+  @Column({ type: 'int', unsigned: true, default: 0 })
+  processingAttempts: number;
+
+  @Column({ type: 'text', nullable: true })
+  lastError: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

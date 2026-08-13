@@ -82,6 +82,14 @@ __decorate([
     __metadata("design:type", Date)
 ], ChatMessage.prototype, "readAt", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['visible', 'hidden', 'removed'],
+        default: 'visible',
+    }),
+    __metadata("design:type", String)
+], ChatMessage.prototype, "moderationStatus", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], ChatMessage.prototype, "createdAt", void 0);

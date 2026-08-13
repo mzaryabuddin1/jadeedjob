@@ -17,6 +17,7 @@ import {
 } from './entities/support-ticket.entity';
 import { SupportTicketAttachment } from './entities/support-ticket-attachment.entity';
 import { SupportTicketMessage } from './entities/support-ticket-message.entity';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
 
 @Injectable()
 export class SupportService {
@@ -33,6 +34,7 @@ export class SupportService {
     private readonly userRepo: Repository<User>,
     private readonly notificationsService: NotificationsService,
     private readonly storageService: ObjectStorageService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   getContactInfo() {
@@ -83,6 +85,29 @@ export class SupportService {
       contact?: string;
       attachments?: string[];
     },
+    idempotencyKey?: string,
+  ) {
+    return this.idempotencyService.execute(
+      userId,
+      'support:ticket:create',
+      idempotencyKey,
+      body,
+      () => this.createTicketInternal(userId, body, idempotencyKey),
+    );
+  }
+
+  private async createTicketInternal(
+    userId: number,
+    body: {
+      kind: SupportTicketKind;
+      category: SupportTicketCategory;
+      subject?: string;
+      message: string;
+      preferredContact?: string;
+      contact?: string;
+      attachments?: string[];
+    },
+    idempotencyKey?: string,
   ) {
     const ticket = await this.ticketRepo.manager.transaction(
       async (manager) => {
@@ -121,6 +146,7 @@ export class SupportService {
       title: 'Support ticket created',
       message: `Ticket #${ticket.id} has been created.`,
       data: { ticketId: ticket.id },
+      dedupeKey: `support_ticket:${userId}:${idempotencyKey || ticket.id}`,
     });
     return this.formatTicketResponse(ticket, 'Ticket created successfully');
   }

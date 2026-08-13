@@ -7,6 +7,7 @@ export declare class Notification {
     title: string;
     message: string;
     data: Record<string, any>;
+    dedupeKey: string | null;
     readAt: Date;
     createdAt: Date;
     updatedAt: Date;

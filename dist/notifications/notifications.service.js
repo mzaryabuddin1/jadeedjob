@@ -16,6 +16,7 @@ exports.NotificationsService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
+const crypto_1 = require("crypto");
 const notification_entity_1 = require("./entities/notification.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const push_service_1 = require("../push/push.service");
@@ -33,34 +34,62 @@ let NotificationsService = class NotificationsService {
             message: notification.message,
             receivedAt: notification.createdAt,
             unread: !notification.readAt,
-            data: notification.data || {},
+            data: this.normalizeData(notification.type, notification.data || {}),
         };
     }
     async create(input) {
-        const notification = await this.notificationRepo.save(this.notificationRepo.create({
-            ...input,
-            data: input.data || {},
-        }));
-        await this.pushService
-            .sendToUser(input.userId, this.categoryForType(input.type), input.title, input.message, input.data || {})
-            .catch((error) => console.error('Push delivery failed', {
-            userId: input.userId,
-            type: input.type,
-            error: error.message,
-        }));
+        const data = this.normalizeData(input.type, input.data || {});
+        const dedupeKey = this.normalizeDedupeKey(input.dedupeKey);
+        let notification;
+        let inserted = true;
+        if (dedupeKey) {
+            const result = await this.notificationRepo
+                .createQueryBuilder()
+                .insert()
+                .values({
+                userId: input.userId,
+                type: input.type,
+                title: input.title,
+                message: input.message,
+                data,
+                dedupeKey,
+            })
+                .orIgnore()
+                .execute();
+            inserted = this.wasInserted(result);
+            notification = inserted
+                ? await this.notificationRepo.findOne({
+                    where: { id: Number(result.identifiers?.[0]?.id) },
+                })
+                : await this.notificationRepo.findOne({ where: { dedupeKey } });
+        }
+        else {
+            notification = await this.notificationRepo.save(this.notificationRepo.create({
+                ...input,
+                data,
+                dedupeKey: null,
+            }));
+        }
+        if (!notification) {
+            throw new Error('Failed to persist notification');
+        }
+        if (inserted) {
+            await this.pushService
+                .sendToUser(input.userId, this.categoryForType(input.type), input.title, input.message, data)
+                .catch((error) => console.error('Push delivery failed', {
+                userId: input.userId,
+                type: input.type,
+                errorCode: error?.code ||
+                    error?.name ||
+                    'PUSH_DELIVERY_FAILED',
+            }));
+        }
         return this.format(notification);
     }
     async createMany(inputs) {
         if (!inputs.length)
             return [];
-        const notifications = await this.notificationRepo.save(inputs.map((input) => this.notificationRepo.create({
-            ...input,
-            data: input.data || {},
-        })));
-        await Promise.all(inputs.map((input) => this.pushService
-            .sendToUser(input.userId, this.categoryForType(input.type), input.title, input.message, input.data || {})
-            .catch(() => undefined)));
-        return notifications.map((notification) => this.format(notification));
+        return Promise.all(inputs.map((input) => this.create(input)));
     }
     async createForFilterSubscribers(filterId, title, message, data, excludeUserId) {
         const users = await this.userRepo.find({
@@ -80,6 +109,7 @@ let NotificationsService = class NotificationsService {
             title,
             message,
             data,
+            dedupeKey: `job_match:${String(data.jobId || '')}:user:${user.id}`,
         }));
         return this.createMany(notifications);
     }
@@ -140,6 +170,33 @@ let NotificationsService = class NotificationsService {
         if (type.includes('security') || type.includes('password'))
             return 'security';
         return 'community';
+    }
+    normalizeData(type, data) {
+        return Object.entries({ ...data, schemaVersion: '1', type }).reduce((result, [key, value]) => {
+            if (value === undefined)
+                return result;
+            if (value !== null && (key === 'id' || key.endsWith('Id'))) {
+                result[key] = String(value);
+            }
+            else {
+                result[key] = value;
+            }
+            return result;
+        }, {});
+    }
+    normalizeDedupeKey(value) {
+        const key = String(value || '').trim();
+        if (!key)
+            return null;
+        if (key.length <= 255)
+            return key;
+        return `sha256:${(0, crypto_1.createHash)('sha256').update(key).digest('hex')}`;
+    }
+    wasInserted(result) {
+        if (typeof result.raw?.affectedRows === 'number') {
+            return result.raw.affectedRows > 0;
+        }
+        return Boolean(result.identifiers?.length);
     }
 };
 exports.NotificationsService = NotificationsService;

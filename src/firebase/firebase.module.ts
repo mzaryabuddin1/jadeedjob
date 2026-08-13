@@ -8,6 +8,20 @@ import { FirebaseService } from './firebase.service';
     {
       provide: 'FIREBASE_ADMIN',
       useFactory: () => {
+        if (process.env.NODE_ENV === 'test') {
+          return {
+            messaging: () => ({
+              send: async () => 'mock-message-id',
+              sendEachForMulticast: async ({ tokens }: { tokens: string[] }) => ({
+                successCount: tokens.length,
+                failureCount: 0,
+                responses: tokens.map(() => ({ success: true })),
+              }),
+              subscribeToTopic: async () => ({}),
+              unsubscribeFromTopic: async () => ({}),
+            }),
+          } as unknown as admin.app.App;
+        }
         if (admin.apps.length > 0) {
           return admin.app();
         }

@@ -44,6 +44,10 @@ __decorate([
     __metadata("design:type", Object)
 ], Notification.prototype, "data", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 255 }),
+    __metadata("design:type", String)
+], Notification.prototype, "dedupeKey", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
     __metadata("design:type", Date)
 ], Notification.prototype, "readAt", void 0);
@@ -58,6 +62,7 @@ __decorate([
 exports.Notification = Notification = __decorate([
     (0, typeorm_1.Entity)('notifications'),
     (0, typeorm_1.Index)(['userId', 'createdAt']),
-    (0, typeorm_1.Index)(['userId', 'readAt'])
+    (0, typeorm_1.Index)(['userId', 'readAt']),
+    (0, typeorm_1.Index)('UQ_notifications_dedupe_key', ['dedupeKey'], { unique: true })
 ], Notification);
 //# sourceMappingURL=notification.entity.js.map

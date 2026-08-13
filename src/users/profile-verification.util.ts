@@ -11,24 +11,43 @@ export type VerificationRequirements = {
   canSubmitForReview: boolean;
 };
 
-export function computeUserIsVerified(user: Pick<
-  User,
-  'phoneVerifiedAt' | 'id_document_front' | 'id_document_back' | 'kyc_status'
->) {
-  return Boolean(user.phoneVerifiedAt) &&
-    Boolean(user.id_document_front) &&
-    Boolean(user.id_document_back) &&
-    user.kyc_status === 'approved';
-}
-
-export function buildVerificationRequirements(user: Pick<
+type VerificationUser = Pick<
   User,
   | 'phoneVerifiedAt'
   | 'id_document_front'
+  | 'idDocumentFrontAssetId'
   | 'id_document_back'
+  | 'idDocumentBackAssetId'
   | 'kyc_status'
-  | 'rejection_reason'
->): VerificationRequirements {
+>;
+
+function hasIdDocuments(user: VerificationUser) {
+  return Boolean(
+    (user.idDocumentFrontAssetId || user.id_document_front) &&
+      (user.idDocumentBackAssetId || user.id_document_back),
+  );
+}
+
+export function computeUserIsVerified(user: VerificationUser) {
+  return (
+    Boolean(user.phoneVerifiedAt) &&
+    hasIdDocuments(user) &&
+    user.kyc_status === 'approved'
+  );
+}
+
+export function buildVerificationRequirements(
+  user: Pick<
+    User,
+    | 'phoneVerifiedAt'
+    | 'id_document_front'
+    | 'idDocumentFrontAssetId'
+    | 'id_document_back'
+    | 'idDocumentBackAssetId'
+    | 'kyc_status'
+    | 'rejection_reason'
+  >,
+): VerificationRequirements {
   const missing: VerificationRequirements['missing'] = [];
   const completed: string[] = [];
 
@@ -43,8 +62,12 @@ export function buildVerificationRequirements(user: Pick<
   }
 
   const documentMissingFields = [
-    !user.id_document_front ? 'id_document_front' : null,
-    !user.id_document_back ? 'id_document_back' : null,
+    !(user.idDocumentFrontAssetId || user.id_document_front)
+      ? 'id_document_front'
+      : null,
+    !(user.idDocumentBackAssetId || user.id_document_back)
+      ? 'id_document_back'
+      : null,
   ].filter((field): field is string => Boolean(field));
 
   if (documentMissingFields.length) {
@@ -74,7 +97,7 @@ export function buildVerificationRequirements(user: Pick<
   }
 
   const hasPhone = Boolean(user.phoneVerifiedAt);
-  const hasDocuments = Boolean(user.id_document_front && user.id_document_back);
+  const hasDocuments = hasIdDocuments(user);
   const canSubmitForReview = hasPhone && hasDocuments;
 
   let status: VerificationRequirements['status'] = 'incomplete';

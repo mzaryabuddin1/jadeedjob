@@ -14,7 +14,7 @@ export declare class SupportController {
         createdAt: Date;
         message: string;
     }>;
-    createTicket(req: any, body: any): Promise<{
+    createTicket(req: any, body: any, idempotencyKey?: string): Promise<{
         ticketId: number;
         status: string;
         createdAt: Date;

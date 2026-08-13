@@ -14,9 +14,11 @@ export declare class ChatController {
             senderAvatar: string;
             text: string;
             attachments: {
+                assetId?: string;
                 fileUrl: string;
                 fileName?: string;
                 contentType?: string;
+                sizeBytes?: number;
             }[];
             messageType: string;
             createdAt: Date;

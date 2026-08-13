@@ -8,10 +8,12 @@ import { ProfilesController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
 import { PagesModule } from 'src/pages/pages.module';
 import { ProfilePublisherOptionsController } from './profile-publisher-options.controller';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     PagesModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([
       ProfileFollow,
       ReelCreatorFollow,

@@ -16,6 +16,7 @@ describe('ChatGateway', () => {
       chatService as any,
       authSessionService as any,
       { clearSocket: jest.fn() } as any,
+      { assertCommunityAccepted: jest.fn() } as any,
     );
     const emit = jest.fn();
     const client = {

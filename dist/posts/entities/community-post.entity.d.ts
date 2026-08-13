@@ -13,12 +13,15 @@ export declare class CommunityPost {
     publisherCompany: CompanyPage | null;
     body: string | null;
     imageUrl: string | null;
+    imageAssetId: string | null;
     imageStorageKey: string | null;
     mediaType: PostMediaType;
     mediaStatus: PostMediaStatus;
     videoUrl: string | null;
+    videoAssetId: string | null;
     videoStorageKey: string | null;
     videoThumbnailUrl: string | null;
+    videoThumbnailAssetId: string | null;
     videoThumbnailStorageKey: string | null;
     videoContentType: string | null;
     videoFileSizeBytes: number | null;
@@ -31,6 +34,7 @@ export declare class CommunityPost {
     savesCount: number;
     sharesCount: number;
     deletedAt: Date | null;
+    moderationStatus: 'visible' | 'hidden' | 'removed';
     createdAt: Date;
     updatedAt: Date;
 }

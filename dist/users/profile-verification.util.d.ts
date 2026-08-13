@@ -9,5 +9,7 @@ export type VerificationRequirements = {
     completed: string[];
     canSubmitForReview: boolean;
 };
-export declare function computeUserIsVerified(user: Pick<User, 'phoneVerifiedAt' | 'id_document_front' | 'id_document_back' | 'kyc_status'>): boolean;
-export declare function buildVerificationRequirements(user: Pick<User, 'phoneVerifiedAt' | 'id_document_front' | 'id_document_back' | 'kyc_status' | 'rejection_reason'>): VerificationRequirements;
+type VerificationUser = Pick<User, 'phoneVerifiedAt' | 'id_document_front' | 'idDocumentFrontAssetId' | 'id_document_back' | 'idDocumentBackAssetId' | 'kyc_status'>;
+export declare function computeUserIsVerified(user: VerificationUser): boolean;
+export declare function buildVerificationRequirements(user: Pick<User, 'phoneVerifiedAt' | 'id_document_front' | 'idDocumentFrontAssetId' | 'id_document_back' | 'idDocumentBackAssetId' | 'kyc_status' | 'rejection_reason'>): VerificationRequirements;
+export {};

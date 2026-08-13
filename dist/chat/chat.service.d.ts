@@ -19,9 +19,11 @@ type MessageInput = {
     mediaUrl?: string;
     messageType?: 'text' | 'image' | 'video' | 'audio' | 'file';
     attachments?: Array<{
-        fileUrl: string;
+        assetId?: string;
+        fileUrl?: string;
         fileName?: string;
         contentType?: string;
+        sizeBytes?: number;
     }>;
     clientMessageId?: string;
 };
@@ -71,7 +73,9 @@ export declare class ChatService {
             };
             invitation: {
                 id: any;
+                invitationId: any;
                 status: any;
+                viewerAction: "respond" | "cancel";
             };
             lastMessage: {
                 id: number;
@@ -84,9 +88,11 @@ export declare class ChatService {
                 senderAvatar: string;
                 text: string;
                 attachments: {
+                    assetId?: string;
                     fileUrl: string;
                     fileName?: string;
                     contentType?: string;
+                    sizeBytes?: number;
                 }[];
                 messageType: string;
                 createdAt: Date;
@@ -112,9 +118,11 @@ export declare class ChatService {
             senderAvatar: string;
             text: string;
             attachments: {
+                assetId?: string;
                 fileUrl: string;
                 fileName?: string;
                 contentType?: string;
+                sizeBytes?: number;
             }[];
             messageType: string;
             createdAt: Date;
@@ -142,9 +150,11 @@ export declare class ChatService {
         senderAvatar: string;
         text: string;
         attachments: {
+            assetId?: string;
             fileUrl: string;
             fileName?: string;
             contentType?: string;
+            sizeBytes?: number;
         }[];
         messageType: string;
         createdAt: Date;
@@ -155,6 +165,26 @@ export declare class ChatService {
         conversationId: string;
         lastReadMessageId: number;
         readAt: Date;
+    }>;
+    getReportableMessage(reference: string | number, messageId: number, userId: number): Promise<{
+        targetType: "chat_message";
+        targetId: string;
+        targetOwnerUserId: number;
+        targetCompanyId: number;
+        snapshot: {
+            conversationId: string;
+            messageId: string;
+            senderId: string;
+            content: string;
+            attachments: {
+                assetId?: string;
+                fileUrl: string;
+                fileName?: string;
+                contentType?: string;
+                sizeBytes?: number;
+            }[];
+            createdAt: Date;
+        };
     }>;
     getChatOptions(viewerId: number, profileType: string, profileId: number): Promise<{
         unavailableReason?: string;
@@ -179,13 +209,17 @@ export declare class ChatService {
         participantId: string;
         invitation: {
             id: string;
+            invitationId: string;
             status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+            viewerAction: "respond" | "cancel";
         };
     }>;
     updateInvitation(invitationId: string, userId: number, action: 'accept' | 'decline' | 'cancel'): Promise<{
         invitation: {
             id: string;
+            invitationId: string;
             status: "accepted" | "declined" | "cancelled";
+            viewerAction: "respond" | "cancel";
             respondedAt: Date;
         };
         chatId: string;
@@ -213,7 +247,25 @@ export declare class ChatService {
     private recipientIds;
     private formatConversationSummary;
     private formatMessage;
+    private normalizeAttachments;
+    private normalizeLegacyMediaUrl;
+    private isPersistedLegacyAttachment;
     private contextResponse;
+    invitationRealtimePayloads(invitationId: string): Promise<{
+        userId: number;
+        conversationId: string;
+        payload: {
+            chatId: string;
+            conversationId: string;
+            invitation: {
+                id: string;
+                invitationId: string;
+                status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+                viewerAction: "respond" | "cancel";
+            };
+        };
+    }[]>;
+    private invitationViewerAction;
     private userName;
 }
 export {};

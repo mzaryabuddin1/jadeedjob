@@ -49,6 +49,26 @@ __decorate([
     __metadata("design:type", String)
 ], PostComment.prototype, "text", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['visible', 'hidden', 'removed'],
+        default: 'visible',
+    }),
+    __metadata("design:type", String)
+], PostComment.prototype, "moderationStatus", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], PostComment.prototype, "deletedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], PostComment.prototype, "deletedByUserId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 80 }),
+    __metadata("design:type", String)
+], PostComment.prototype, "deletionReason", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], PostComment.prototype, "createdAt", void 0);

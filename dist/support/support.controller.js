@@ -22,6 +22,9 @@ const joi_1 = __importDefault(require("joi"));
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const support_service_1 = require("./support.service");
+const throttler_1 = require("@nestjs/throttler");
+const swagger_1 = require("@nestjs/swagger");
+const idempotency_decorators_1 = require("../idempotency/idempotency.decorators");
 const ticketPaginationSchema = joi_1.default.object({
     page: joi_1.default.number().integer().min(1).default(1),
     limit: joi_1.default.number().integer().min(1).max(100).default(20),
@@ -36,8 +39,8 @@ let SupportController = class SupportController {
     createContactMessage(req, body) {
         return this.supportService.createContactMessage(req.user.id, body);
     }
-    createTicket(req, body) {
-        return this.supportService.createTicket(req.user.id, body);
+    createTicket(req, body, idempotencyKey) {
+        return this.supportService.createTicket(req.user.id, body, idempotencyKey);
     }
     listTickets(req, query) {
         return this.supportService.listTickets(req.user.id, query.page, query.limit);
@@ -80,6 +83,8 @@ __decorate([
 ], SupportController.prototype, "createContactMessage", null);
 __decorate([
     (0, common_1.Post)('tickets'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         kind: joi_1.default.string().valid('feedback', 'complaint').required(),
@@ -95,8 +100,9 @@ __decorate([
             .max(5)
             .optional(),
     })))),
+    __param(2, (0, common_1.Headers)('idempotency-key')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, String]),
     __metadata("design:returntype", void 0)
 ], SupportController.prototype, "createTicket", null);
 __decorate([
@@ -150,6 +156,8 @@ __decorate([
 exports.SupportController = SupportController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('support'),
+    (0, swagger_1.ApiTags)('Support'),
+    (0, swagger_1.ApiBearerAuth)(),
     __metadata("design:paramtypes", [support_service_1.SupportService])
 ], SupportController);
 //# sourceMappingURL=support.controller.js.map

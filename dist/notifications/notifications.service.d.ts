@@ -8,6 +8,7 @@ type CreateNotificationInput = {
     title: string;
     message: string;
     data?: Record<string, any>;
+    dedupeKey?: string;
 };
 export declare class NotificationsService {
     private readonly notificationRepo;
@@ -72,5 +73,8 @@ export declare class NotificationsService {
         message: string;
     }>;
     private categoryForType;
+    private normalizeData;
+    private normalizeDedupeKey;
+    private wasInserted;
 }
 export {};

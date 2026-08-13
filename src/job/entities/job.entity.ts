@@ -140,6 +140,13 @@ export class Job {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({
+    type: 'enum',
+    enum: ['visible', 'hidden', 'removed'],
+    default: 'visible',
+  })
+  moderationStatus: 'visible' | 'hidden' | 'removed';
+
   @CreateDateColumn()
   createdAt: Date;
 

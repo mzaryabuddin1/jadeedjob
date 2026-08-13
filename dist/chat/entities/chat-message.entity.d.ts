@@ -13,11 +13,14 @@ export declare class ChatMessage {
     content: string;
     mediaUrl: string;
     attachments: Array<{
+        assetId?: string;
         fileUrl: string;
         fileName?: string;
         contentType?: string;
+        sizeBytes?: number;
     }>;
     messageType: string;
     readAt: Date;
+    moderationStatus: 'visible' | 'hidden' | 'removed';
     createdAt: Date;
 }

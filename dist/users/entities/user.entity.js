@@ -83,6 +83,18 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
     __metadata("design:type", Date)
+], User.prototype, "suspendedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], User.prototype, "suspendedUntil", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "suspensionReason", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
 ], User.prototype, "deletionScheduledAt", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),

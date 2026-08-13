@@ -20,15 +20,17 @@ const auth_session_service_1 = require("../auth/auth-session.service");
 const chat_service_1 = require("./chat.service");
 const send_message_dto_1 = require("./dto/send-message.dto");
 const realtime_presence_service_1 = require("../realtime/realtime-presence.service");
+const legal_service_1 = require("../legal/legal.service");
 const socketOrigins = (process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
 let ChatGateway = class ChatGateway {
-    constructor(chatService, authSessionService, presenceService) {
+    constructor(chatService, authSessionService, presenceService, legalService) {
         this.chatService = chatService;
         this.authSessionService = authSessionService;
         this.presenceService = presenceService;
+        this.legalService = legalService;
         this.eventRateLimits = new Map();
     }
     async handleConnection(client) {
@@ -85,6 +87,7 @@ let ChatGateway = class ChatGateway {
     async send(client, body) {
         return this.ack(async (userId) => {
             this.enforceEventRateLimit(client, 'chat:message.send', 30, 10_000);
+            await this.legalService.assertCommunityAccepted(userId);
             const reference = body?.conversationId || body?.chatId;
             const message = await this.chatService.sendMessage(userId, {
                 conversationId: reference,
@@ -143,6 +146,7 @@ let ChatGateway = class ChatGateway {
     async sendLegacy(client, dto) {
         const result = await this.ack(async (userId) => {
             this.enforceEventRateLimit(client, 'sendMessage', 30, 10_000);
+            await this.legalService.assertCommunityAccepted(userId);
             const message = await this.chatService.sendMessage(userId, dto);
             this.server
                 .to(`application_${dto.jobApplicationId}`)
@@ -159,6 +163,13 @@ let ChatGateway = class ChatGateway {
         this.server
             ?.to(this.chatRoom(conversationId))
             .emit('chat:invitation.updated', data);
+    }
+    emitInvitationUpdatedForUsers(updates) {
+        for (const update of updates) {
+            this.server
+                ?.to(this.userRoom(update.userId))
+                .emit('chat:invitation.updated', update.payload);
+        }
     }
     async ack(operation, client) {
         try {
@@ -314,6 +325,7 @@ exports.ChatGateway = ChatGateway = __decorate([
     }),
     __metadata("design:paramtypes", [chat_service_1.ChatService,
         auth_session_service_1.AuthSessionService,
-        realtime_presence_service_1.RealtimePresenceService])
+        realtime_presence_service_1.RealtimePresenceService,
+        legal_service_1.LegalService])
 ], ChatGateway);
 //# sourceMappingURL=chat.gateway.js.map

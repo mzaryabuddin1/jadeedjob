@@ -1,9 +1,13 @@
 import { ObjectStorageService } from 'src/storage/object-storage.service';
 import { ChatService } from './chat.service';
+import { ChatGateway } from './chat.gateway';
+import { ModerationService } from 'src/moderation/moderation.service';
 export declare class ChatsController {
     private readonly chatService;
     private readonly storageService;
-    constructor(chatService: ChatService, storageService: ObjectStorageService);
+    private readonly chatGateway;
+    private readonly moderationService;
+    constructor(chatService: ChatService, storageService: ObjectStorageService, chatGateway: ChatGateway, moderationService: ModerationService);
     list(req: any, query: {
         page: number;
         limit: number;
@@ -28,7 +32,9 @@ export declare class ChatsController {
             };
             invitation: {
                 id: any;
+                invitationId: any;
                 status: any;
+                viewerAction: "respond" | "cancel";
             };
             lastMessage: {
                 id: number;
@@ -41,9 +47,11 @@ export declare class ChatsController {
                 senderAvatar: string;
                 text: string;
                 attachments: {
+                    assetId?: string;
                     fileUrl: string;
                     fileName?: string;
                     contentType?: string;
+                    sizeBytes?: number;
                 }[];
                 messageType: string;
                 createdAt: Date;
@@ -71,7 +79,9 @@ export declare class ChatsController {
         participantId: string;
         invitation: {
             id: string;
+            invitationId: string;
             status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+            viewerAction: "respond" | "cancel";
         };
     }>;
     getMessages(chatId: string, query: {
@@ -90,9 +100,11 @@ export declare class ChatsController {
             senderAvatar: string;
             text: string;
             attachments: {
+                assetId?: string;
                 fileUrl: string;
                 fileName?: string;
                 contentType?: string;
+                sizeBytes?: number;
             }[];
             messageType: string;
             createdAt: Date;
@@ -116,9 +128,11 @@ export declare class ChatsController {
         senderAvatar: string;
         text: string;
         attachments: {
+            assetId?: string;
             fileUrl: string;
             fileName?: string;
             contentType?: string;
+            sizeBytes?: number;
         }[];
         messageType: string;
         createdAt: Date;
@@ -139,5 +153,10 @@ export declare class ChatsController {
         conversationId: string;
         lastReadMessageId: number;
         readAt: Date;
+    }>;
+    reportMessage(conversationId: string, messageId: number, body: any, req: any): Promise<{
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
+        reported: boolean;
     }>;
 }

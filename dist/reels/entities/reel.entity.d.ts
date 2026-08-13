@@ -22,6 +22,7 @@ export declare class Reel {
     allowComments: boolean;
     allowSharing: boolean;
     videoUrl: string;
+    videoAssetId: string;
     storageKey: string;
     originalFileName: string;
     contentType: string;
@@ -34,6 +35,7 @@ export declare class Reel {
     publishedAt: Date;
     processedAt: Date;
     deletedAt: Date;
+    moderationStatus: 'visible' | 'hidden' | 'removed';
     createdAt: Date;
     updatedAt: Date;
 }

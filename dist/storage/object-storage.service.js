@@ -62,7 +62,7 @@ let ObjectStorageService = class ObjectStorageService {
         this.localRoot = process.env.LOCAL_UPLOAD_ROOT || (0, path_1.join)(process.cwd(), 'uploads', 'objects');
     }
     onModuleInit() {
-        if (this.provider() !== 's3')
+        if (this.getProvider() !== 's3')
             return;
         const required = [
             'S3_BUCKET',
@@ -92,14 +92,16 @@ let ObjectStorageService = class ObjectStorageService {
             throw new common_1.BadRequestException('Uploaded file exceeds the allowed size');
         }
         const actualType = await this.detectContentType(buffer);
-        if (!input.allowedTypes.includes(input.file.mimetype) ||
-            !input.allowedTypes.includes(actualType) ||
-            input.file.mimetype !== actualType) {
+        const declaredType = this.normalizeContentType(input.file.mimetype);
+        const allowedTypes = input.allowedTypes.map((type) => this.normalizeContentType(type));
+        if (!allowedTypes.includes(declaredType) ||
+            !allowedTypes.includes(actualType) ||
+            declaredType !== actualType) {
             throw new common_1.BadRequestException('Uploaded file type does not match its content');
         }
         const extension = this.safeExtension(input.file.originalname, actualType);
         const storageKey = `${input.purpose}/${input.ownerUserId}/${(0, crypto_1.randomUUID)()}${extension}`;
-        const provider = this.provider();
+        const provider = this.getProvider();
         const sha256 = (0, crypto_1.createHash)('sha256').update(buffer).digest('hex');
         if (provider === 's3') {
             await this.s3.send(new client_s3_1.PutObjectCommand({
@@ -145,8 +147,38 @@ let ObjectStorageService = class ObjectStorageService {
                 Key: asset.storageKey,
             }), { expiresIn });
         }
-        const base = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+        const base = (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
         return `${base}/uploads/objects/${asset.storageKey}`;
+    }
+    async getAsset(assetId) {
+        return this.assetRepo.findOne({ where: { id: assetId } });
+    }
+    async requireOwnedAsset(assetId, ownerUserId, purpose) {
+        const asset = await this.assetRepo.findOne({ where: { id: assetId } });
+        if (!asset ||
+            asset.deletedAt ||
+            asset.ownerUserId !== ownerUserId ||
+            (purpose && asset.purpose !== purpose)) {
+            throw new common_1.BadRequestException('Stored attachment is invalid');
+        }
+        return asset;
+    }
+    async findKnownAssetByUrl(value) {
+        let fileName = '';
+        try {
+            fileName = (0, path_1.basename)(new URL(value).pathname);
+        }
+        catch {
+            return null;
+        }
+        if (!fileName)
+            return null;
+        const assets = await this.assetRepo.find({
+            where: { storageKey: (0, typeorm_2.Like)(`%/${fileName}`) },
+            take: 5,
+        });
+        return (assets.find((asset) => !asset.deletedAt &&
+            decodeURIComponent(new URL(value).pathname).endsWith(asset.storageKey)) || null);
     }
     async remove(assetOrId) {
         const asset = typeof assetOrId === 'string'
@@ -167,7 +199,7 @@ let ObjectStorageService = class ObjectStorageService {
         asset.deletedAt = new Date();
         await this.assetRepo.save(asset);
     }
-    provider() {
+    getProvider() {
         const configured = process.env.STORAGE_PROVIDER;
         if (configured === 's3')
             return 's3';
@@ -202,11 +234,30 @@ let ObjectStorageService = class ObjectStorageService {
         }
         if (buffer.subarray(4, 8).toString() === 'ftyp') {
             const brand = buffer.subarray(8, 12).toString().toLowerCase();
+            if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) {
+                return 'image/heic';
+            }
+            if (['mif1', 'msf1'].includes(brand))
+                return 'image/heif';
+        }
+        if (buffer.subarray(4, 8).toString() === 'ftyp') {
+            const brand = buffer.subarray(8, 12).toString().toLowerCase();
             if (brand.includes('qt'))
                 return 'video/quicktime';
             if (brand.includes('m4a'))
                 return 'audio/mp4';
             return 'video/mp4';
+        }
+        if (buffer.length >= 4 &&
+            buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+            return 'video/webm';
+        }
+        if (buffer.length >= 4 &&
+            buffer[0] === 0x00 &&
+            buffer[1] === 0x00 &&
+            buffer[2] === 0x01 &&
+            [0xba, 0xb3].includes(buffer[3])) {
+            return 'video/mpeg';
         }
         if (buffer.subarray(0, 3).toString() === 'ID3' ||
             (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)) {
@@ -219,9 +270,13 @@ let ObjectStorageService = class ObjectStorageService {
             'image/jpeg': ['.jpg', '.jpeg'],
             'image/png': ['.png'],
             'image/webp': ['.webp'],
+            'image/heic': ['.heic'],
+            'image/heif': ['.heif'],
             'application/pdf': ['.pdf'],
             'video/mp4': ['.mp4', '.m4v'],
             'video/quicktime': ['.mov'],
+            'video/webm': ['.webm'],
+            'video/mpeg': ['.mpeg', '.mpg'],
             'audio/mpeg': ['.mp3'],
             'audio/mp4': ['.m4a'],
         };
@@ -231,6 +286,9 @@ let ObjectStorageService = class ObjectStorageService {
             throw new common_1.BadRequestException('Uploaded file extension does not match its content');
         }
         return original;
+    }
+    normalizeContentType(contentType) {
+        return contentType === 'video/x-m4v' ? 'video/mp4' : contentType;
     }
 };
 exports.ObjectStorageService = ObjectStorageService;

@@ -8,6 +8,7 @@ import { PageMember } from 'src/pages/entities/page-member.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { ModerationService } from 'src/moderation/moderation.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
 type JobStatus = 'draft' | 'active' | 'closed';
 export declare class JobService {
     private jobRepo;
@@ -19,7 +20,8 @@ export declare class JobService {
     private firebaseService;
     private notificationsService;
     private moderationService;
-    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, branchRepo: Repository<CompanyBranch>, memberRepo: Repository<PageMember>, jobApplicationRepo: Repository<JobApplication>, firebaseService: FirebaseService, notificationsService: NotificationsService, moderationService: ModerationService);
+    private readonly idempotencyService;
+    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, branchRepo: Repository<CompanyBranch>, memberRepo: Repository<PageMember>, jobApplicationRepo: Repository<JobApplication>, firebaseService: FirebaseService, notificationsService: NotificationsService, moderationService: ModerationService, idempotencyService: IdempotencyService);
     private assertCompanyPermission;
     private normalizeCompanyAndBranch;
     private assertJobUpdateAccess;
@@ -27,7 +29,7 @@ export declare class JobService {
     private parseJobStatuses;
     private normalizeJobPayload;
     private buildLocationUpdate;
-    createJob(data: any, userId: number): Promise<{
+    createJob(data: any, userId: number, idempotencyKey?: string): Promise<{
         status: "active" | "draft" | "closed";
         applicationsCount: number;
         companyId: number;
@@ -92,6 +94,7 @@ export declare class JobService {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -100,6 +103,7 @@ export declare class JobService {
         pageId?: number;
         branchId?: number;
     }>;
+    private createJobInternal;
     findNearbyJobs(query: any, userId?: number): Promise<{
         data: any;
         total: number;
@@ -178,6 +182,7 @@ export declare class JobService {
             contactPhone: string;
             postingMode: "individual" | "company";
             isActive: boolean;
+            moderationStatus: "visible" | "hidden" | "removed";
             createdAt: Date;
             updatedAt: Date;
             createdBy: number;
@@ -255,6 +260,7 @@ export declare class JobService {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -328,6 +334,7 @@ export declare class JobService {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -401,6 +408,7 @@ export declare class JobService {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -474,6 +482,7 @@ export declare class JobService {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;

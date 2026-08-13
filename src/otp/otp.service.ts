@@ -148,6 +148,28 @@ export class OtpService {
     return record;
   }
 
+  async wasRecentlyUsed(input: VerifyOtpInput, withinMs = 10 * 60 * 1000) {
+    const target = String(input.target || '').trim();
+    const otp = String(input.otp || '').trim();
+    if (!target || !otp) return false;
+    const query = this.otpRepo
+      .createQueryBuilder('otp')
+      .where('otp.purpose = :purpose', { purpose: input.purpose })
+      .andWhere('otp.target = :target', { target })
+      .andWhere('otp.usedAt IS NOT NULL')
+      .andWhere('otp.usedAt >= :cutoff', {
+        cutoff: new Date(Date.now() - withinMs),
+      });
+    const userId = this.normalizeUserId(input.userId);
+    if (userId === null) query.andWhere('otp.userId IS NULL');
+    else query.andWhere('otp.userId = :userId', { userId });
+    const record = await query.orderBy('otp.usedAt', 'DESC').getOne();
+    return Boolean(
+      record &&
+        record.codeHash === this.hashOtp(input.purpose, target, otp),
+    );
+  }
+
   shouldExposeOtp() {
     return process.env.NODE_ENV !== 'production';
   }

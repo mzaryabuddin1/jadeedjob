@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Post,
@@ -23,6 +24,10 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { ReelsService } from './reels.service';
 import { ModerationService } from 'src/moderation/moderation.service';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiOptionalIdempotencyKey } from 'src/idempotency/idempotency.decorators';
+import { ApiCommunityAcceptanceRequired } from 'src/legal/legal.decorators';
+import { ApiCreateModerationReport } from 'src/moderation/moderation.decorators';
 import {
   ensureDirectorySync,
   getReelMaxFileSizeBytes,
@@ -32,6 +37,7 @@ import {
   REEL_VIDEO_FILE_FIELD,
 } from './reel-storage.service';
 import { Throttle } from '@nestjs/throttler';
+import { CommunityGuidelinesGuard } from 'src/legal/community-guidelines.guard';
 
 const createReelSchema = Joi.object({
   caption: Joi.string().trim().min(5).max(300).required(),
@@ -77,6 +83,29 @@ const addCommentSchema = Joi.object({
   text: Joi.string().trim().min(1).max(500).required(),
 });
 
+const reportSchema = Joi.object({
+  reason: Joi.string()
+    .trim()
+    .valid(
+      'spam',
+      'harassment',
+      'misleading',
+      'inappropriate',
+      'unsafe',
+      'false_information',
+      'impersonation',
+      'fraud',
+      'other',
+    )
+    .required(),
+  details: Joi.string().trim().max(1000).allow('', null).optional(),
+});
+
+const commentsQuerySchema = Joi.object({
+  cursor: Joi.string().optional(),
+  limit: Joi.number().integer().min(1).max(50).default(20),
+});
+
 const uploadInterceptor = FileInterceptor(REEL_VIDEO_FILE_FIELD, {
   storage: diskStorage({
     destination: (_req, _file, callback) => {
@@ -111,6 +140,8 @@ const uploadInterceptor = FileInterceptor(REEL_VIDEO_FILE_FIELD, {
 
 @UseGuards(JwtAuthGuard)
 @Controller('reels')
+@ApiTags('Reels')
+@ApiBearerAuth()
 export class ReelsController {
   constructor(
     private readonly reelsService: ReelsService,
@@ -118,10 +149,17 @@ export class ReelsController {
   ) {}
 
   @Post()
+  @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @ApiOptionalIdempotencyKey()
+  @ApiCommunityAcceptanceRequired()
   @UsePipes(new JoiValidationPipe(createReelSchema))
-  create(@Body() body: any, @Req() req: any) {
-    return this.reelsService.createReel(body, req.user.id);
+  create(
+    @Body() body: any,
+    @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.reelsService.createReel(body, req.user.id, idempotencyKey);
   }
 
   @Post(':id/upload')
@@ -141,13 +179,15 @@ export class ReelsController {
   }
 
   @Post(':id/complete-upload')
-  @UsePipes(new JoiValidationPipe(completeUploadSchema))
+  @UseGuards(CommunityGuidelinesGuard)
+  @ApiCommunityAcceptanceRequired()
   completeUpload(
     @Param('id', ParseIntPipe) id: number,
-    @Body('uploadId') uploadId: string,
+    @Body(new JoiValidationPipe(completeUploadSchema))
+    body: { uploadId: string },
     @Req() req: any,
   ) {
-    return this.reelsService.completeUpload(id, req.user.id, uploadId);
+    return this.reelsService.completeUpload(id, req.user.id, body.uploadId);
   }
 
   @Get()
@@ -200,26 +240,34 @@ export class ReelsController {
   @Get(':id/comments')
   getComments(
     @Param('id', ParseIntPipe) id: number,
-    @Query('cursor') cursor: string,
-    @Query('limit') limit: number,
+    @Query(new JoiValidationPipe(commentsQuerySchema)) query: any,
     @Req() req: any,
   ) {
     return this.reelsService.getComments(
       id,
       req.user.id,
-      cursor,
-      Number(limit),
+      query.cursor,
+      query.limit,
     );
   }
 
   @Post(':id/comments')
-  @UsePipes(new JoiValidationPipe(addCommentSchema))
+  @UseGuards(CommunityGuidelinesGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOptionalIdempotencyKey()
+  @ApiCommunityAcceptanceRequired()
   addComment(
     @Param('id', ParseIntPipe) id: number,
-    @Body('text') text: string,
+    @Body(new JoiValidationPipe(addCommentSchema)) body: { text: string },
     @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.reelsService.addComment(id, req.user.id, text);
+    return this.reelsService.addComment(
+      id,
+      req.user.id,
+      body.text,
+      idempotencyKey,
+    );
   }
 
   @Post(':id/share')
@@ -229,22 +277,45 @@ export class ReelsController {
 
   @Post(':id/report')
   @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiCreateModerationReport('Report a visible Reel')
   report(
     @Param('id', ParseIntPipe) id: number,
-    @Body(
-      new JoiValidationPipe(
-        Joi.object({
-          reason: Joi.string()
-            .valid('spam', 'unsafe', 'false_information', 'other')
-            .required(),
-          details: Joi.string().trim().max(1000).allow('', null).optional(),
-        }),
-      ),
-    )
+    @Body(new JoiValidationPipe(reportSchema))
     body: any,
     @Req() req: any,
   ) {
     return this.moderationService.reportReel(id, req.user.id, body);
+  }
+
+  @Post(':reelId/comments/:commentId/report')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiCreateModerationReport('Report a visible Reel comment')
+  reportComment(
+    @Param('reelId', ParseIntPipe) reelId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Body(new JoiValidationPipe(reportSchema)) body: any,
+    @Req() req: any,
+  ) {
+    return this.moderationService.reportReelComment(
+      reelId,
+      commentId,
+      req.user.id,
+      body,
+    );
+  }
+
+  @Delete(':reelId/comments/:commentId')
+  deleteComment(
+    @Param('reelId', ParseIntPipe) reelId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Req() req: any,
+  ) {
+    return this.reelsService.deleteComment(
+      reelId,
+      commentId,
+      req.user.id,
+      req.user.systemRole === 'admin',
+    );
   }
 
   @Post('creators/:creatorId/follow')
@@ -264,6 +335,8 @@ export class ReelsController {
   }
 
   @Post(':id/publish')
+  @UseGuards(CommunityGuidelinesGuard)
+  @ApiCommunityAcceptanceRequired()
   publish(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     return this.reelsService.publishReel(id, req.user.id);
   }

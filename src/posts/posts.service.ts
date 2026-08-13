@@ -35,6 +35,8 @@ import {
 } from './post-video-storage.service';
 import { ModerationService } from 'src/moderation/moderation.service';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 type PostFeedQuery = {
   feed?: 'forYou' | 'mine';
@@ -104,6 +106,8 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     private readonly videoStorage: PostVideoStorageService,
     private readonly moderationService: ModerationService,
     private readonly objectStorageService: ObjectStorageService,
+    private readonly idempotencyService: IdempotencyService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -232,7 +236,9 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async searchPosts(query: PostSearchQuery, viewerId: number) {
-    const q = String(query.q || '').trim().toLowerCase();
+    const q = String(query.q || '')
+      .trim()
+      .toLowerCase();
     if (q.length < 2 || q.length > 80) {
       throw new BadRequestException(
         'Search query must be between 2 and 80 characters',
@@ -308,7 +314,24 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async createVideoUpload(data: CreateVideoPostBody, userId: number) {
+  async createVideoUpload(
+    data: CreateVideoPostBody,
+    userId: number,
+    idempotencyKey?: string,
+  ) {
+    return this.idempotencyService.execute(
+      userId,
+      'post:video:create',
+      idempotencyKey,
+      data,
+      () => this.createVideoUploadInternal(data, userId),
+    );
+  }
+
+  private async createVideoUploadInternal(
+    data: CreateVideoPostBody,
+    userId: number,
+  ) {
     await this.cleanupExpiredVideoUploads();
     this.validateVideoMetadata(data.media);
     const publisher = await this.resolvePublisher(
@@ -355,6 +378,21 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createVideoReplacement(
+    postId: number,
+    media: PostVideoMediaInput,
+    userId: number,
+    idempotencyKey?: string,
+  ) {
+    return this.idempotencyService.execute(
+      userId,
+      `post:video:replace:${postId}`,
+      idempotencyKey,
+      media,
+      () => this.createVideoReplacementInternal(postId, media, userId),
+    );
+  }
+
+  private async createVideoReplacementInternal(
     postId: number,
     media: PostVideoMediaInput,
     userId: number,
@@ -472,55 +510,102 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       post.id,
       session.localFilePath,
     );
+    let stored: Awaited<
+      ReturnType<PostVideoStorageService['storeCompletedMedia']>
+    > | null = null;
+    const oldImageAssetId = post.imageAssetId;
     const oldImageKey = post.imageStorageKey;
+    const oldVideoAssetId = post.videoAssetId;
     const oldVideoKey = post.videoStorageKey;
+    const oldThumbnailAssetId = post.videoThumbnailAssetId;
     const oldThumbnailKey = post.videoThumbnailStorageKey;
 
     try {
-      await this.postRepo.save({
-        ...post,
-        mediaType: 'video',
-        mediaStatus: 'published',
-        imageUrl: null,
-        imageStorageKey: null,
-        videoUrl: session.publicUrl,
-        videoStorageKey: session.uploadKey,
-        videoThumbnailUrl: thumbnail.publicUrl,
-        videoThumbnailStorageKey: thumbnail.storageKey,
-        videoContentType:
-          session.uploadedContentType || session.contentType || null,
-        videoFileSizeBytes:
-          session.uploadedFileSizeBytes ??
-          session.expectedFileSizeBytes ??
-          null,
-        videoDurationSeconds:
-          session.uploadedDurationSeconds ??
-          session.clientDurationSeconds ??
-          null,
-      });
-      await this.videoUploadRepo.save({
-        ...session,
-        status: 'completed',
-        completedAt: new Date(),
+      stored = await this.videoStorage.storeCompletedMedia(
+        post,
+        session,
+        thumbnail,
+      );
+      await this.postRepo.manager.transaction(async (manager) => {
+        await manager.save(CommunityPost, {
+          ...post,
+          mediaType: 'video',
+          mediaStatus: 'published',
+          imageUrl: null,
+          imageAssetId: null,
+          imageStorageKey: null,
+          videoUrl: null,
+          videoAssetId: stored.videoAsset.id,
+          videoStorageKey: stored.videoAsset.storageKey,
+          videoThumbnailUrl: null,
+          videoThumbnailAssetId: stored.thumbnailAsset.id,
+          videoThumbnailStorageKey: stored.thumbnailAsset.storageKey,
+          videoContentType:
+            session.uploadedContentType || session.contentType || null,
+          videoFileSizeBytes:
+            session.uploadedFileSizeBytes ??
+            session.expectedFileSizeBytes ??
+            null,
+          videoDurationSeconds:
+            session.uploadedDurationSeconds ??
+            session.clientDurationSeconds ??
+            null,
+        });
+        await manager.save(PostVideoUploadSession, {
+          ...session,
+          uploadedAssetId: stored.videoAsset.id,
+          thumbnailAssetId: stored.thumbnailAsset.id,
+          uploadKey: stored.videoAsset.storageKey,
+          status: 'completed',
+          completedAt: new Date(),
+        });
       });
     } catch (error) {
-      await this.videoStorage.remove(thumbnail.storageKey);
+      if (stored) {
+        await Promise.all([
+          this.videoStorage.remove(stored.videoAsset.id),
+          this.videoStorage.remove(stored.thumbnailAsset.id),
+        ]);
+      }
       throw error;
+    } finally {
+      await Promise.all([
+        this.videoStorage.deleteLocalFile(session.localFilePath),
+        this.videoStorage.deleteLocalFile(thumbnail.localFilePath),
+      ]);
     }
 
+    if (!stored) throw new BadRequestException('Video upload failed');
+
     await Promise.all([
-      this.storage.remove(oldImageKey),
-      oldVideoKey !== session.uploadKey
-        ? this.videoStorage.remove(oldVideoKey)
+      this.storage.remove(oldImageAssetId, oldImageKey),
+      oldVideoAssetId !== stored.videoAsset.id
+        ? this.videoStorage.remove(oldVideoAssetId, oldVideoKey)
         : Promise.resolve(),
-      oldThumbnailKey !== thumbnail.storageKey
-        ? this.videoStorage.remove(oldThumbnailKey)
+      oldThumbnailAssetId !== stored.thumbnailAsset.id
+        ? this.videoStorage.remove(oldThumbnailAssetId, oldThumbnailKey)
         : Promise.resolve(),
     ]);
     return this.formatPost(await this.getPostByIdOrThrow(postId), userId);
   }
 
   async createPost(
+    data: PostMutationBody,
+    image: Express.Multer.File | undefined,
+    userId: number,
+    idempotencyKey?: string,
+  ) {
+    const request = await this.idempotencyService.multipartRequest(data, image);
+    return this.idempotencyService.execute(
+      userId,
+      'post:create',
+      idempotencyKey,
+      request,
+      () => this.createPostInternal(data, image, userId),
+    );
+  }
+
+  private async createPostInternal(
     data: PostMutationBody,
     image: Express.Multer.File | undefined,
     userId: number,
@@ -556,8 +641,9 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
 
     if (image) {
       try {
-        const stored = await this.storage.save(post.id, image);
-        post.imageUrl = stored.publicUrl;
+        const stored = await this.storage.save(post.id, userId, image);
+        post.imageUrl = null;
+        post.imageAssetId = stored.assetId;
         post.imageStorageKey = stored.storageKey;
         await this.postRepo.save(post);
       } catch (error) {
@@ -613,13 +699,17 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       post.linkedJobId = linkedJob?.id ?? null;
     }
 
+    const oldImageAssetId = post.imageAssetId;
     const oldStorageKey = post.imageStorageKey;
+    const oldVideoAssetId = post.videoAssetId;
     const oldVideoStorageKey = post.videoStorageKey;
+    const oldVideoThumbnailAssetId = post.videoThumbnailAssetId;
     const oldVideoThumbnailStorageKey = post.videoThumbnailStorageKey;
     if (removeImage || removeMedia) {
       post.imageUrl = null;
+      post.imageAssetId = null;
       post.imageStorageKey = null;
-      if (!post.videoUrl) post.mediaType = 'none';
+      if (!post.videoAssetId && !post.videoUrl) post.mediaType = 'none';
     }
     if (removeMedia) {
       this.clearVideoMedia(post);
@@ -627,43 +717,59 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       post.mediaStatus = 'published';
     }
 
-    let newStorageKey: string | null = null;
+    let newAssetId: string | null = null;
     if (image) {
-      const stored = await this.storage.save(post.id, image);
-      newStorageKey = stored.storageKey;
-      post.imageUrl = stored.publicUrl;
+      const stored = await this.storage.save(post.id, userId, image);
+      newAssetId = stored.assetId;
+      post.imageUrl = null;
+      post.imageAssetId = stored.assetId;
       post.imageStorageKey = stored.storageKey;
       this.clearVideoMedia(post);
       post.mediaType = 'image';
       post.mediaStatus = 'published';
     }
 
-    if (!post.body && !post.imageUrl && !post.videoUrl) {
-      if (newStorageKey) await this.storage.remove(newStorageKey);
+    if (
+      !post.body &&
+      !post.imageAssetId &&
+      !post.imageUrl &&
+      !post.videoAssetId &&
+      !post.videoUrl
+    ) {
+      if (newAssetId) await this.storage.remove(newAssetId);
       throw new BadRequestException('A post needs text, a photo, or a video');
     }
 
     try {
       await this.postRepo.save(post);
     } catch (error) {
-      if (newStorageKey) await this.storage.remove(newStorageKey);
+      if (newAssetId) await this.storage.remove(newAssetId);
       throw error;
     }
 
     if (
       (removeImage || removeMedia || image) &&
-      oldStorageKey !== post.imageStorageKey
+      (oldImageAssetId !== post.imageAssetId ||
+        oldStorageKey !== post.imageStorageKey)
     ) {
-      await this.storage.remove(oldStorageKey);
-    }
-    if ((removeMedia || image) && oldVideoStorageKey !== post.videoStorageKey) {
-      await this.videoStorage.remove(oldVideoStorageKey);
+      await this.storage.remove(oldImageAssetId, oldStorageKey);
     }
     if (
       (removeMedia || image) &&
-      oldVideoThumbnailStorageKey !== post.videoThumbnailStorageKey
+      (oldVideoAssetId !== post.videoAssetId ||
+        oldVideoStorageKey !== post.videoStorageKey)
     ) {
-      await this.videoStorage.remove(oldVideoThumbnailStorageKey);
+      await this.videoStorage.remove(oldVideoAssetId, oldVideoStorageKey);
+    }
+    if (
+      (removeMedia || image) &&
+      (oldVideoThumbnailAssetId !== post.videoThumbnailAssetId ||
+        oldVideoThumbnailStorageKey !== post.videoThumbnailStorageKey)
+    ) {
+      await this.videoStorage.remove(
+        oldVideoThumbnailAssetId,
+        oldVideoThumbnailStorageKey,
+      );
     }
 
     return this.formatPost(await this.getPostByIdOrThrow(postId), userId);
@@ -675,9 +781,12 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     post.deletedAt = new Date();
     await this.postRepo.save(post);
     await Promise.all([
-      this.storage.remove(post.imageStorageKey),
-      this.videoStorage.remove(post.videoStorageKey),
-      this.videoStorage.remove(post.videoThumbnailStorageKey),
+      this.storage.remove(post.imageAssetId, post.imageStorageKey),
+      this.videoStorage.remove(post.videoAssetId, post.videoStorageKey),
+      this.videoStorage.remove(
+        post.videoThumbnailAssetId,
+        post.videoThumbnailStorageKey,
+      ),
     ]);
     return { id: String(post.id), deleted: true };
   }
@@ -743,6 +852,10 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.user', 'user')
       .where('comment.postId = :postId', { postId })
+      .andWhere('comment.deletedAt IS NULL')
+      .andWhere('comment.moderationStatus = :commentModerationStatus', {
+        commentModerationStatus: 'visible',
+      })
       .andWhere('user.isBanned = :isBanned', { isBanned: false });
 
     if (decoded) {
@@ -776,7 +889,27 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async addComment(postId: number, userId: number, text: string) {
+  async addComment(
+    postId: number,
+    userId: number,
+    text: string,
+    idempotencyKey?: string,
+  ) {
+    return this.idempotencyService.execute(
+      userId,
+      `post:comment:create:${postId}`,
+      idempotencyKey,
+      { text: String(text || '').trim() },
+      () => this.addCommentInternal(postId, userId, text, idempotencyKey),
+    );
+  }
+
+  private async addCommentInternal(
+    postId: number,
+    userId: number,
+    text: string,
+    idempotencyKey?: string,
+  ) {
     const post = await this.getViewablePostOrThrow(postId, userId);
     if (!post.allowComments) {
       throw new BadRequestException('Comments are disabled for this post');
@@ -786,12 +919,67 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       this.commentRepo.create({ postId, userId, text: text.trim() }),
     );
     await this.postRepo.increment({ id: postId }, 'commentsCount', 1);
-    return this.formatComment(
+    const formatted = await this.formatComment(
       await this.commentRepo.findOne({
         where: { id: comment.id },
         relations: ['user'],
       }),
     );
+    if (post.creatorId !== userId) {
+      await this.notificationsService.create({
+        userId: post.creatorId,
+        type: 'post_comment',
+        title: 'New post comment',
+        message: 'Someone commented on your post.',
+        data: {
+          postId: String(postId),
+          commentId: String(comment.id),
+          profileType: 'user',
+          profileId: String(userId),
+        },
+        dedupeKey: `post_comment:${postId}:${userId}:${
+          idempotencyKey || comment.id
+        }`,
+      });
+    }
+    return formatted;
+  }
+
+  async deleteComment(
+    postId: number,
+    commentId: number,
+    userId: number,
+    isSystemAdmin = false,
+  ) {
+    const comment = await this.commentRepo.findOne({
+      where: { id: commentId, postId },
+      relations: ['post', 'post.creator', 'post.publisherCompany'],
+    });
+    if (!comment || comment.deletedAt) {
+      throw new NotFoundException('Comment not found');
+    }
+    if (comment.userId !== userId && !isSystemAdmin) {
+      await this.assertCanManage(comment.post, userId);
+    }
+    comment.deletedAt = new Date();
+    comment.deletedByUserId = userId;
+    comment.deletionReason = isSystemAdmin
+      ? 'admin_removed'
+      : comment.userId === userId
+        ? 'author_removed'
+        : 'publisher_removed';
+    await this.commentRepo.save(comment);
+    await this.postRepo
+      .createQueryBuilder()
+      .update(CommunityPost)
+      .set({ commentsCount: () => 'GREATEST(commentsCount - 1, 0)' })
+      .where('id = :postId', { postId })
+      .execute();
+    return {
+      id: String(comment.id),
+      postId: String(postId),
+      deleted: true,
+    };
   }
 
   async report(
@@ -851,6 +1039,9 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       .leftJoinAndSelect('linkedJob.page', 'linkedJobPage')
       .leftJoinAndSelect('linkedJob.creator', 'linkedJobCreator')
       .where('post.deletedAt IS NULL')
+      .andWhere('post.moderationStatus = :mineModerationStatus', {
+        mineModerationStatus: 'visible',
+      })
       .andWhere(
         new Brackets((where) => {
           where.where(
@@ -877,10 +1068,10 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
           where.where('post.createdAt < :createdAt', {
             createdAt: cursor.createdAt,
           });
-          where.orWhere(
-            'post.createdAt = :createdAt AND post.id < :cursorId',
-            { createdAt: cursor.createdAt, cursorId: cursor.id },
-          );
+          where.orWhere('post.createdAt = :createdAt AND post.id < :cursorId', {
+            createdAt: cursor.createdAt,
+            cursorId: cursor.id,
+          });
         }),
       );
     }
@@ -931,6 +1122,9 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       .leftJoinAndSelect('linkedJob.page', 'linkedJobPage')
       .leftJoinAndSelect('linkedJob.creator', 'linkedJobCreator')
       .where('post.deletedAt IS NULL')
+      .andWhere('post.moderationStatus = :moderationStatus', {
+        moderationStatus: 'visible',
+      })
       .andWhere('post.mediaStatus = :publishedMediaStatus', {
         publishedMediaStatus: 'published',
       })
@@ -965,9 +1159,7 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
   private async getViewablePostOrThrow(postId: number, viewerId?: number) {
     const qb = this.createViewableQuery();
     if (viewerId) await this.applyBlockedPublisherFilters(qb, viewerId);
-    const post = await qb
-      .andWhere('post.id = :postId', { postId })
-      .getOne();
+    const post = await qb.andWhere('post.id = :postId', { postId }).getOne();
     if (!post) throw new NotFoundException('Post not found');
     return post;
   }
@@ -1263,14 +1455,38 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       this.getPublisherType(post) === 'company'
         ? post.publisherCompany?.logoAssetId
         : post.creator?.profilePhotoAssetId;
+    const [avatarUri, imageUrl, videoUrl, thumbnailUrl] = await Promise.all([
+      assetId
+        ? this.objectStorageService.getUrl(assetId)
+        : Promise.resolve(publisher.avatarUri),
+      post.imageAssetId
+        ? this.objectStorageService.getUrl(post.imageAssetId)
+        : Promise.resolve(post.imageUrl),
+      post.videoAssetId
+        ? this.objectStorageService.getUrl(post.videoAssetId)
+        : Promise.resolve(post.videoUrl),
+      post.videoThumbnailAssetId
+        ? this.objectStorageService.getUrl(post.videoThumbnailAssetId)
+        : Promise.resolve(post.videoThumbnailUrl),
+    ]);
+    const media =
+      post.mediaType === 'video' && videoUrl
+        ? {
+            type: 'video' as const,
+            url: videoUrl,
+            thumbnailUrl,
+            ...(post.videoDurationSeconds
+              ? { durationSeconds: Number(post.videoDurationSeconds) }
+              : {}),
+          }
+        : imageUrl
+          ? { type: 'image' as const, url: imageUrl }
+          : null;
     return {
       ...result,
-      publisher: assetId
-        ? {
-            ...publisher,
-            avatarUri: await this.objectStorageService.getUrl(assetId),
-          }
-        : publisher,
+      imageUrl,
+      media,
+      publisher: { ...publisher, avatarUri },
     };
   }
 
@@ -1441,6 +1657,10 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
 
   private async expireVideoUploadSession(session: PostVideoUploadSession) {
     await this.videoStorage.deleteLocalFile(session.localFilePath);
+    await Promise.all([
+      this.videoStorage.remove(session.uploadedAssetId),
+      this.videoStorage.remove(session.thumbnailAssetId),
+    ]);
     await this.videoUploadRepo.save({
       ...session,
       status: 'expired',
@@ -1470,8 +1690,10 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
 
   private clearVideoMedia(post: CommunityPost) {
     post.videoUrl = null;
+    post.videoAssetId = null;
     post.videoStorageKey = null;
     post.videoThumbnailUrl = null;
+    post.videoThumbnailAssetId = null;
     post.videoThumbnailStorageKey = null;
     post.videoContentType = null;
     post.videoFileSizeBytes = null;

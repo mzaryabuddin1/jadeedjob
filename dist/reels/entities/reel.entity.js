@@ -110,6 +110,15 @@ __decorate([
     __metadata("design:type", String)
 ], Reel.prototype, "videoUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], Reel.prototype, "videoAssetId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Reel.prototype, "storageKey", void 0);
@@ -158,6 +167,14 @@ __decorate([
     __metadata("design:type", Date)
 ], Reel.prototype, "deletedAt", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['visible', 'hidden', 'removed'],
+        default: 'visible',
+    }),
+    __metadata("design:type", String)
+], Reel.prototype, "moderationStatus", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Reel.prototype, "createdAt", void 0);
@@ -180,6 +197,7 @@ exports.Reel = Reel = __decorate([
         'publisherCompanyId',
         'status',
         'createdAt',
-    ])
+    ]),
+    (0, typeorm_1.Index)('IDX_reels_video_asset', ['videoAssetId'])
 ], Reel);
 //# sourceMappingURL=reel.entity.js.map

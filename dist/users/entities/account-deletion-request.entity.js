@@ -56,6 +56,26 @@ __decorate([
     __metadata("design:type", Object)
 ], AccountDeletionRequest.prototype, "blockerSnapshot", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 80 }),
+    __metadata("design:type", String)
+], AccountDeletionRequest.prototype, "activeKey", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 36 }),
+    __metadata("design:type", String)
+], AccountDeletionRequest.prototype, "processingClaimToken", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], AccountDeletionRequest.prototype, "processingClaimedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', unsigned: true, default: 0 }),
+    __metadata("design:type", Number)
+], AccountDeletionRequest.prototype, "processingAttempts", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], AccountDeletionRequest.prototype, "lastError", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], AccountDeletionRequest.prototype, "createdAt", void 0);
@@ -68,6 +88,8 @@ exports.AccountDeletionRequest = AccountDeletionRequest = __decorate([
     (0, typeorm_1.Index)('IDX_account_deletion_status_schedule', [
         'status',
         'scheduledDeletionAt',
-    ])
+    ]),
+    (0, typeorm_1.Index)('UQ_account_deletion_active_key', ['activeKey'], { unique: true }),
+    (0, typeorm_1.Index)('IDX_account_deletion_processing_claim', ['status', 'processingClaimedAt'])
 ], AccountDeletionRequest);
 //# sourceMappingURL=account-deletion-request.entity.js.map

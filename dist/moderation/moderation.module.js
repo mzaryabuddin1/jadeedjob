@@ -18,6 +18,16 @@ const reel_entity_1 = require("../reels/entities/reel.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const admin_reel_report_controller_1 = require("./admin-reel-report.controller");
 const moderation_service_1 = require("./moderation.service");
+const community_post_entity_1 = require("../posts/entities/community-post.entity");
+const post_comment_entity_1 = require("../posts/entities/post-comment.entity");
+const reel_comment_entity_1 = require("../reels/entities/reel-comment.entity");
+const chat_message_entity_1 = require("../chat/entities/chat-message.entity");
+const job_entity_1 = require("../job/entities/job.entity");
+const page_member_entity_1 = require("../pages/entities/page-member.entity");
+const moderation_report_entity_1 = require("./entities/moderation-report.entity");
+const moderation_audit_entity_1 = require("./entities/moderation-audit.entity");
+const admin_moderation_controller_1 = require("./admin-moderation.controller");
+const notifications_module_1 = require("../notifications/notifications.module");
 let ModerationModule = class ModerationModule {
 };
 exports.ModerationModule = ModerationModule;
@@ -33,9 +43,18 @@ exports.ModerationModule = ModerationModule = __decorate([
                 company_page_entity_1.CompanyPage,
                 reel_entity_1.Reel,
                 reel_report_entity_1.ReelReport,
+                reel_comment_entity_1.ReelComment,
+                community_post_entity_1.CommunityPost,
+                post_comment_entity_1.PostComment,
+                chat_message_entity_1.ChatMessage,
+                job_entity_1.Job,
+                page_member_entity_1.PageMember,
+                moderation_report_entity_1.ModerationReport,
+                moderation_audit_entity_1.ModerationAudit,
             ]),
+            notifications_module_1.NotificationsModule,
         ],
-        controllers: [admin_reel_report_controller_1.AdminReelReportController],
+        controllers: [admin_reel_report_controller_1.AdminReelReportController, admin_moderation_controller_1.AdminModerationController],
         providers: [moderation_service_1.ModerationService],
         exports: [moderation_service_1.ModerationService],
     })

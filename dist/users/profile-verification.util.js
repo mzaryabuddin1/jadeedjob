@@ -2,11 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeUserIsVerified = computeUserIsVerified;
 exports.buildVerificationRequirements = buildVerificationRequirements;
+function hasIdDocuments(user) {
+    return Boolean((user.idDocumentFrontAssetId || user.id_document_front) &&
+        (user.idDocumentBackAssetId || user.id_document_back));
+}
 function computeUserIsVerified(user) {
-    return Boolean(user.phoneVerifiedAt) &&
-        Boolean(user.id_document_front) &&
-        Boolean(user.id_document_back) &&
-        user.kyc_status === 'approved';
+    return (Boolean(user.phoneVerifiedAt) &&
+        hasIdDocuments(user) &&
+        user.kyc_status === 'approved');
 }
 function buildVerificationRequirements(user) {
     const missing = [];
@@ -22,8 +25,12 @@ function buildVerificationRequirements(user) {
         });
     }
     const documentMissingFields = [
-        !user.id_document_front ? 'id_document_front' : null,
-        !user.id_document_back ? 'id_document_back' : null,
+        !(user.idDocumentFrontAssetId || user.id_document_front)
+            ? 'id_document_front'
+            : null,
+        !(user.idDocumentBackAssetId || user.id_document_back)
+            ? 'id_document_back'
+            : null,
     ].filter((field) => Boolean(field));
     if (documentMissingFields.length) {
         missing.push({
@@ -53,7 +60,7 @@ function buildVerificationRequirements(user) {
         });
     }
     const hasPhone = Boolean(user.phoneVerifiedAt);
-    const hasDocuments = Boolean(user.id_document_front && user.id_document_back);
+    const hasDocuments = hasIdDocuments(user);
     const canSubmitForReview = hasPhone && hasDocuments;
     let status = 'incomplete';
     if (computeUserIsVerified(user)) {

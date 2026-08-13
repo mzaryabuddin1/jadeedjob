@@ -14,6 +14,8 @@ import { PostVideoUploadSession } from './entities/post-video-upload-session.ent
 import { PostVideoStorageService } from './post-video-storage.service';
 import { ModerationService } from 'src/moderation/moderation.service';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 type PostFeedQuery = {
     feed?: 'forYou' | 'mine';
     cursor?: string;
@@ -59,8 +61,10 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
     private readonly videoStorage;
     private readonly moderationService;
     private readonly objectStorageService;
+    private readonly idempotencyService;
+    private readonly notificationsService;
     private cleanupTimer?;
-    constructor(postRepo: Repository<CommunityPost>, likeRepo: Repository<PostLike>, saveRepo: Repository<PostSave>, commentRepo: Repository<PostComment>, reportRepo: Repository<PostReport>, followRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, videoUploadRepo: Repository<PostVideoUploadSession>, pagesService: PagesService, storage: PostStorageService, videoStorage: PostVideoStorageService, moderationService: ModerationService, objectStorageService: ObjectStorageService);
+    constructor(postRepo: Repository<CommunityPost>, likeRepo: Repository<PostLike>, saveRepo: Repository<PostSave>, commentRepo: Repository<PostComment>, reportRepo: Repository<PostReport>, followRepo: Repository<ProfileFollow>, jobRepo: Repository<Job>, userRepo: Repository<User>, videoUploadRepo: Repository<PostVideoUploadSession>, pagesService: PagesService, storage: PostStorageService, videoStorage: PostVideoStorageService, moderationService: ModerationService, objectStorageService: ObjectStorageService, idempotencyService: IdempotencyService, notificationsService: NotificationsService);
     onModuleInit(): void;
     onModuleDestroy(): void;
     getFeed(query: PostFeedQuery, viewerId: number): Promise<{
@@ -74,7 +78,7 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         currentPage: number;
     }>;
     getPost(postId: number, viewerId: number): Promise<any>;
-    createVideoUpload(data: CreateVideoPostBody, userId: number): Promise<{
+    createVideoUpload(data: CreateVideoPostBody, userId: number, idempotencyKey?: string): Promise<{
         post: any;
         upload: {
             uploadId: string;
@@ -88,7 +92,8 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
             expiresAt: Date;
         };
     }>;
-    createVideoReplacement(postId: number, media: PostVideoMediaInput, userId: number): Promise<{
+    private createVideoUploadInternal;
+    createVideoReplacement(postId: number, media: PostVideoMediaInput, userId: number, idempotencyKey?: string): Promise<{
         post: any;
         upload: {
             uploadId: string;
@@ -102,6 +107,7 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
             expiresAt: Date;
         };
     }>;
+    private createVideoReplacementInternal;
     uploadVideo(postId: number, userId: number, uploadId: string, file?: Express.Multer.File): Promise<{
         uploadId: string;
         postId: string;
@@ -111,7 +117,8 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         contentType: string;
     }>;
     completeVideoUpload(postId: number, userId: number, uploadId: string): Promise<any>;
-    createPost(data: PostMutationBody, image: Express.Multer.File | undefined, userId: number): Promise<any>;
+    createPost(data: PostMutationBody, image: Express.Multer.File | undefined, userId: number, idempotencyKey?: string): Promise<any>;
+    private createPostInternal;
     updatePost(postId: number, data: PostMutationBody, image: Express.Multer.File | undefined, userId: number): Promise<any>;
     deletePost(postId: number, userId: number): Promise<{
         id: string;
@@ -139,7 +146,7 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         }[];
         nextCursor: string;
     }>;
-    addComment(postId: number, userId: number, text: string): Promise<{
+    addComment(postId: number, userId: number, text: string, idempotencyKey?: string): Promise<{
         id: string;
         postId: string;
         author: {
@@ -152,6 +159,12 @@ export declare class PostsService implements OnModuleInit, OnModuleDestroy {
         };
         text: string;
         createdAt: Date;
+    }>;
+    private addCommentInternal;
+    deleteComment(postId: number, commentId: number, userId: number, isSystemAdmin?: boolean): Promise<{
+        id: string;
+        postId: string;
+        deleted: boolean;
     }>;
     report(postId: number, userId: number, reason?: string, details?: string): Promise<{
         reported: boolean;

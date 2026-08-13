@@ -2,9 +2,10 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
-import { rename, unlink } from 'fs/promises';
+import { rename, stat, unlink } from 'fs/promises';
 import { extname, join } from 'path';
 import { promisify } from 'util';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 import { CommunityPost } from './entities/community-post.entity';
 import { PostVideoUploadSession } from './entities/post-video-upload-session.entity';
 
@@ -49,9 +50,11 @@ const normalizedExtension = (fileName: string, contentType: string) => {
 
 @Injectable()
 export class PostVideoStorageService {
+  constructor(private readonly objectStorage: ObjectStorageService) {}
+
   getUploadInstructions(post: CommunityPost, session: PostVideoUploadSession) {
     const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(
-      /\/$/,
+      /\/+$/,
       '',
     );
     return {
@@ -87,15 +90,11 @@ export class PostVideoStorageService {
     const localFilePath = join(root, fileName);
     await rename(file.path, localFilePath);
 
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(
-      /\/$/,
-      '',
-    );
     return {
       fileName,
-      storageKey: `community-post-videos/${fileName}`,
+      storageKey: session.uploadKey,
       localFilePath,
-      publicUrl: `${appUrl}/uploads/community-post-videos/${fileName}`,
+      publicUrl: null,
     };
   }
 
@@ -166,20 +165,69 @@ export class PostVideoStorageService {
       throw new BadRequestException('Could not create a video preview');
     }
 
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(
-      /\/$/,
-      '',
-    );
     return {
-      storageKey: `community-post-videos/${fileName}`,
+      fileName,
       localFilePath: thumbnailPath,
-      publicUrl: `${appUrl}/uploads/community-post-videos/${fileName}`,
     };
   }
 
-  async remove(storageKey?: string | null) {
-    if (!storageKey) return;
-    const fileName = storageKey.split('/').pop();
+  async storeCompletedMedia(
+    post: CommunityPost,
+    session: PostVideoUploadSession,
+    thumbnail: { fileName: string; localFilePath: string },
+  ) {
+    if (!session.localFilePath) {
+      throw new BadRequestException('Uploaded video file is missing');
+    }
+
+    const videoStats = await stat(session.localFilePath);
+    const videoAsset = await this.objectStorage.store({
+      ownerUserId: session.userId,
+      purpose: 'community-posts/video',
+      file: {
+        path: session.localFilePath,
+        originalname: session.originalFileName,
+        mimetype: session.uploadedContentType || session.contentType,
+        size: videoStats.size,
+        buffer: undefined,
+      },
+      allowedTypes: [...ALLOWED_VIDEO_MIME_TYPES],
+      maxBytes: POST_VIDEO_MAX_BYTES,
+      visibility: 'private',
+      metadata: { postId: post.id, uploadId: session.uploadId },
+    });
+
+    try {
+      const thumbnailStats = await stat(thumbnail.localFilePath);
+      const thumbnailAsset = await this.objectStorage.store({
+        ownerUserId: session.userId,
+        purpose: 'community-posts/video-thumbnail',
+        file: {
+          path: thumbnail.localFilePath,
+          originalname: thumbnail.fileName,
+          mimetype: 'image/jpeg',
+          size: thumbnailStats.size,
+          buffer: undefined,
+        },
+        allowedTypes: ['image/jpeg'],
+        maxBytes: 8 * 1024 * 1024,
+        visibility: 'private',
+        metadata: { postId: post.id, uploadId: session.uploadId },
+      });
+      return { videoAsset, thumbnailAsset };
+    } catch (error) {
+      await this.objectStorage.remove(videoAsset);
+      throw error;
+    }
+  }
+
+  async remove(assetId?: string | null, legacyStorageKey?: string | null) {
+    if (assetId) {
+      await this.objectStorage.remove(assetId);
+      return;
+    }
+    if (!legacyStorageKey) return;
+    const fileName = legacyStorageKey.split('/').pop();
     if (!fileName) return;
     await this.deleteLocalFile(join(getPostVideoUploadRoot(), fileName));
   }

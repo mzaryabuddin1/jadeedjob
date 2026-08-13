@@ -19,6 +19,7 @@ export declare class ReelUploadSession {
     uploadedFileName: string;
     localFilePath: string;
     publicUrl: string;
+    uploadedAssetId: string;
     uploadedFileSizeBytes: number;
     uploadedContentType: string;
     expiresAt: Date;

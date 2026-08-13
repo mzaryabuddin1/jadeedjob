@@ -21,6 +21,10 @@ import { Response } from 'express';
 import { AuthSessionService, SessionDeviceInput } from './auth-session.service';
 import { SocialAuthService } from './social-auth.service';
 import { Throttle } from '@nestjs/throttler';
+import { LegalService } from 'src/legal/legal.service';
+import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RegisterSendOtpDto } from './dto/register-send-otp.dto';
+import { ApiRegistrationAcceptanceRequired } from 'src/legal/legal.decorators';
 
 const relationIdSchema = Joi.alternatives().try(
   Joi.number().integer().positive(),
@@ -53,7 +57,25 @@ const sessionDeviceFields = {
   locale: Joi.string().trim().max(20).allow('', null).optional(),
 };
 
+const legalAcceptanceFields = {
+  legalAcceptances: Joi.array()
+    .items(
+      Joi.object({
+        documentType: Joi.string()
+          .valid('terms', 'privacy', 'community_guidelines')
+          .required(),
+        version: Joi.string().trim().min(1).max(80).required(),
+      }),
+    )
+    .max(3)
+    .optional(),
+  clientPlatform: Joi.string()
+    .valid('ios', 'android', 'web', 'unknown')
+    .optional(),
+};
+
 @Controller('auth')
+@ApiTags('Authentication')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -62,6 +84,7 @@ export class AuthController {
     private readonly usersService: UsersService,
     private readonly authSessionService: AuthSessionService,
     private readonly socialAuthService: SocialAuthService,
+    private readonly legalService: LegalService,
   ) {}
 
   private deviceFrom(body: any): SessionDeviceInput {
@@ -109,9 +132,13 @@ export class AuthController {
         throw error;
       }
 
-      console.warn(
-        `Skipping OTP SMS delivery in dev: ${(error as Error).message}`,
-      );
+      console.warn('Skipping OTP SMS delivery in development', {
+        purpose,
+        errorCode:
+          (error as { code?: string })?.code ||
+          (error as Error)?.name ||
+          'SMS_DELIVERY_FAILED',
+      });
     }
   }
 
@@ -120,6 +147,9 @@ export class AuthController {
   // ────────────────────────────────────────────────
   @Post('register/send-otp')
   @Throttle({ default: { limit: 5, ttl: 300_000 } })
+  @ApiOperation({ summary: 'Start phone registration with optional current legal acceptances' })
+  @ApiBody({ type: RegisterSendOtpDto })
+  @ApiRegistrationAcceptanceRequired()
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -140,6 +170,7 @@ export class AuthController {
         city: optionalString(),
         latitude: Joi.number().min(-90).max(90).optional(),
         longitude: Joi.number().min(-180).max(180).optional(),
+        ...legalAcceptanceFields,
       }),
     ),
   )
@@ -159,6 +190,9 @@ export class AuthController {
     }
 
     await this.authService.validateRegistrationRelations(countryId, languageId);
+    await this.legalService.validateRegistrationAcceptances(
+      body.legalAcceptances,
+    );
 
     const countryDisplay =
       typeof body.country === 'string' && !isRelationIdLike(body.country)
@@ -181,12 +215,16 @@ export class AuthController {
     delete registrationData.languageId;
     delete registrationData.photoUri;
     delete registrationData.password;
+    delete registrationData.legalAcceptances;
+    delete registrationData.clientPlatform;
 
     const { otp } = await this.otpService.createOtp({
       purpose: 'register',
       target: body.phone,
       metadata: {
         registrationData,
+        legalAcceptances: body.legalAcceptances || [],
+        legalClientPlatform: body.clientPlatform || 'unknown',
       },
     });
     await this.deliverOtp(body.phone, otp, 'registration');
@@ -225,6 +263,12 @@ export class AuthController {
       phoneVerifiedAt: new Date(),
       isVerified: false,
     })) as any;
+
+    await this.legalService.recordRegistrationAcceptances(
+      user.id,
+      entry.metadata?.legalAcceptances,
+      entry.metadata?.legalClientPlatform || 'unknown',
+    );
 
     // 👉 Save FCM token if present
     if (fcmToken) {

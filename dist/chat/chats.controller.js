@@ -24,6 +24,14 @@ const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const object_storage_service_1 = require("../storage/object-storage.service");
 const chat_service_1 = require("./chat.service");
 const throttler_1 = require("@nestjs/throttler");
+const chat_gateway_1 = require("./chat.gateway");
+const community_guidelines_guard_1 = require("../legal/community-guidelines.guard");
+const moderation_service_1 = require("../moderation/moderation.service");
+const swagger_1 = require("@nestjs/swagger");
+const invitation_api_dto_1 = require("./dto/invitation-api.dto");
+const idempotency_decorators_1 = require("../idempotency/idempotency.decorators");
+const legal_decorators_1 = require("../legal/legal.decorators");
+const moderation_decorators_1 = require("../moderation/moderation.decorators");
 const paginationSchema = joi_1.default.object({
     page: joi_1.default.number().integer().min(1).default(1),
     limit: joi_1.default.number().integer().min(1).max(100).default(20),
@@ -43,10 +51,11 @@ const messageSchema = joi_1.default.object({
     attachments: joi_1.default.array()
         .items(joi_1.default.object({
         assetId: joi_1.default.string().guid({ version: 'uuidv4' }).optional(),
-        fileUrl: joi_1.default.string().uri().required(),
+        fileUrl: joi_1.default.string().uri().optional(),
         fileName: joi_1.default.string().allow('', null).max(255).optional(),
         contentType: joi_1.default.string().allow('', null).max(120).optional(),
-    }))
+        sizeBytes: joi_1.default.number().integer().positive().optional(),
+    }).or('assetId', 'fileUrl'))
         .max(10)
         .optional(),
     clientMessageId: joi_1.default.string().trim().max(120).optional(),
@@ -62,19 +71,33 @@ const contextSchema = joi_1.default.object({
         .required(),
     clientRequestId: joi_1.default.string().trim().max(120).required(),
 });
+const reportSchema = joi_1.default.object({
+    reason: joi_1.default.string()
+        .trim()
+        .valid('spam', 'harassment', 'unsafe', 'fraud', 'inappropriate', 'other')
+        .required(),
+    details: joi_1.default.string().trim().max(1000).allow('', null).optional(),
+});
 let ChatsController = class ChatsController {
-    constructor(chatService, storageService) {
+    constructor(chatService, storageService, chatGateway, moderationService) {
         this.chatService = chatService;
         this.storageService = storageService;
+        this.chatGateway = chatGateway;
+        this.moderationService = moderationService;
     }
     list(req, query) {
         return this.chatService.listChats(req.user.id, query.page, query.limit);
     }
-    createContext(req, idempotencyKey, body) {
-        return this.chatService.createContext(req.user.id, {
+    async createContext(req, idempotencyKey, body) {
+        const result = await this.chatService.createContext(req.user.id, {
             ...body,
             clientRequestId: String(idempotencyKey || '').trim() || body.clientRequestId,
         });
+        if (result.invitation?.invitationId || result.invitation?.id) {
+            const updates = await this.chatService.invitationRealtimePayloads(result.invitation.invitationId || result.invitation.id);
+            this.chatGateway.emitInvitationUpdatedForUsers(updates);
+        }
+        return result;
     }
     getMessages(chatId, query, req) {
         return this.chatService.getMessages(chatId, req.user.id, query.before || query.page, query.limit);
@@ -125,6 +148,10 @@ let ChatsController = class ChatsController {
     markRead(chatId, req) {
         return this.chatService.markRead(chatId, req.user.id);
     }
+    async reportMessage(conversationId, messageId, body, req) {
+        const target = await this.chatService.getReportableMessage(conversationId, messageId, req.user.id);
+        return this.moderationService.reportResolvedTarget(req.user.id, body, target);
+    }
 };
 exports.ChatsController = ChatsController;
 __decorate([
@@ -138,12 +165,13 @@ __decorate([
 __decorate([
     (0, common_1.Post)('contexts'),
     (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
+    (0, idempotency_decorators_1.ApiOptionalIdempotencyKey)(),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Headers)('idempotency-key')),
     __param(2, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(contextSchema))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, String, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ChatsController.prototype, "createContext", null);
 __decorate([
     (0, common_1.Get)(':chatId/messages'),
@@ -156,7 +184,9 @@ __decorate([
 ], ChatsController.prototype, "getMessages", null);
 __decorate([
     (0, common_1.Post)(':chatId/messages'),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
     (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     __param(0, (0, common_1.Param)('chatId')),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(messageSchema))),
     __param(2, (0, common_1.Req)()),
@@ -166,7 +196,9 @@ __decorate([
 ], ChatsController.prototype, "sendMessage", null);
 __decorate([
     (0, common_1.Post)(':chatId/attachments'),
+    (0, common_1.UseGuards)(community_guidelines_guard_1.CommunityGuidelinesGuard),
     (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 600_000 } }),
+    (0, legal_decorators_1.ApiCommunityAcceptanceRequired)(),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
         limits: { fileSize: 20 * 1024 * 1024, files: 1 },
     })),
@@ -185,10 +217,27 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], ChatsController.prototype, "markRead", null);
+__decorate([
+    (0, common_1.Post)(':conversationId/messages/:messageId/report'),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 3_600_000 } }),
+    (0, moderation_decorators_1.ApiCreateModerationReport)('Report a message in an accessible conversation'),
+    __param(0, (0, common_1.Param)('conversationId')),
+    __param(1, (0, common_1.Param)('messageId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(reportSchema))),
+    __param(3, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Object, Object]),
+    __metadata("design:returntype", Promise)
+], ChatsController.prototype, "reportMessage", null);
 exports.ChatsController = ChatsController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('chats'),
+    (0, swagger_1.ApiTags)('Chats'),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiExtraModels)(invitation_api_dto_1.InvitationProjectionDto),
     __metadata("design:paramtypes", [chat_service_1.ChatService,
-        object_storage_service_1.ObjectStorageService])
+        object_storage_service_1.ObjectStorageService,
+        chat_gateway_1.ChatGateway,
+        moderation_service_1.ModerationService])
 ], ChatsController);
 //# sourceMappingURL=chats.controller.js.map

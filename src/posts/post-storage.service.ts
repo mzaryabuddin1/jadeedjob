@@ -1,8 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { existsSync, mkdirSync } from 'fs';
-import { unlink, writeFile } from 'fs/promises';
+import { unlink } from 'fs/promises';
 import { extname, join } from 'path';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 
 export const POST_IMAGE_FIELD = 'image';
 export const POST_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
@@ -70,19 +69,11 @@ const detectImageFormat = (buffer?: Buffer): PostImageFormat | null => {
   return null;
 };
 
-const getExtension = (file: Express.Multer.File) => {
-  const extension = extname(file.originalname || '').toLowerCase();
-  if (EXTENSION_FORMATS[extension]) return extension;
-  if (file.mimetype === 'image/png') return '.png';
-  if (file.mimetype === 'image/webp') return '.webp';
-  if (file.mimetype === 'image/heic') return '.heic';
-  if (file.mimetype === 'image/heif') return '.heif';
-  return '.jpg';
-};
-
 @Injectable()
 export class PostStorageService {
-  async save(postId: number, file: Express.Multer.File) {
+  constructor(private readonly objectStorage: ObjectStorageService) {}
+
+  async save(postId: number, userId: number, file: Express.Multer.File) {
     if (file.size > POST_IMAGE_MAX_BYTES) {
       throw new BadRequestException('Post image must be 8 MB or smaller');
     }
@@ -92,26 +83,29 @@ export class PostStorageService {
       );
     }
 
-    const root = getPostUploadRoot();
-    if (!existsSync(root)) mkdirSync(root, { recursive: true });
-
-    const fileName = `${postId}-${randomUUID()}${getExtension(file)}`;
-    const path = join(root, fileName);
-    await writeFile(path, file.buffer);
-
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(
-      /\/$/,
-      '',
-    );
+    const asset = await this.objectStorage.store({
+      ownerUserId: userId,
+      purpose: 'community-posts/image',
+      file,
+      allowedTypes: Object.keys(MIME_FORMATS),
+      maxBytes: POST_IMAGE_MAX_BYTES,
+      visibility: 'private',
+      metadata: { postId },
+    });
     return {
-      storageKey: `community-posts/${fileName}`,
-      publicUrl: `${appUrl}/uploads/community-posts/${fileName}`,
+      assetId: asset.id,
+      storageKey: asset.storageKey,
+      publicUrl: await this.objectStorage.getUrl(asset),
     };
   }
 
-  async remove(storageKey?: string | null) {
-    if (!storageKey) return;
-    const fileName = storageKey.split('/').pop();
+  async remove(assetId?: string | null, legacyStorageKey?: string | null) {
+    if (assetId) {
+      await this.objectStorage.remove(assetId);
+      return;
+    }
+    if (!legacyStorageKey) return;
+    const fileName = legacyStorageKey.split('/').pop();
     if (!fileName) return;
 
     try {

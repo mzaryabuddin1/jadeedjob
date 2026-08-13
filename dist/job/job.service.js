@@ -26,6 +26,7 @@ const job_application_entity_1 = require("../job-application/entities/job-applic
 const notifications_service_1 = require("../notifications/notifications.service");
 const company_permissions_1 = require("../pages/company-permissions");
 const moderation_service_1 = require("../moderation/moderation.service");
+const idempotency_service_1 = require("../idempotency/idempotency.service");
 const JOB_SORT_COLUMNS = {
     createdAt: 'job.createdAt',
     updatedAt: 'job.updatedAt',
@@ -34,7 +35,7 @@ const JOB_SORT_COLUMNS = {
     status: 'job.status',
 };
 let JobService = class JobService {
-    constructor(jobRepo, userRepo, pageRepo, branchRepo, memberRepo, jobApplicationRepo, firebaseService, notificationsService, moderationService) {
+    constructor(jobRepo, userRepo, pageRepo, branchRepo, memberRepo, jobApplicationRepo, firebaseService, notificationsService, moderationService, idempotencyService) {
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
         this.pageRepo = pageRepo;
@@ -44,6 +45,7 @@ let JobService = class JobService {
         this.firebaseService = firebaseService;
         this.notificationsService = notificationsService;
         this.moderationService = moderationService;
+        this.idempotencyService = idempotencyService;
     }
     async assertCompanyPermission(pageId, userId, permission, requireApproval = false) {
         if (!pageId)
@@ -174,7 +176,10 @@ let JobService = class JobService {
         }
         return () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
     }
-    async createJob(data, userId) {
+    async createJob(data, userId, idempotencyKey) {
+        return this.idempotencyService.execute(userId, 'job:create', idempotencyKey, data, () => this.createJobInternal(data, userId));
+    }
+    async createJobInternal(data, userId) {
         const { pageId, branchId } = await this.normalizeCompanyAndBranch(data, userId);
         const payload = this.normalizeJobPayload(data, pageId, branchId);
         const status = payload.status;
@@ -199,9 +204,9 @@ let JobService = class JobService {
                 filterId: savedJob.filterId.toString(),
             });
             await this.notificationsService.createForFilterSubscribers(savedJob.filterId, 'New Job Posted', savedJob.title ?? 'A new job matches your preferences!', {
-                jobId: savedJob.id,
-                filterId: savedJob.filterId,
-                companyId: savedJob.pageId ?? null,
+                jobId: String(savedJob.id),
+                filterId: String(savedJob.filterId),
+                companyId: savedJob.pageId ? String(savedJob.pageId) : null,
             }, userId);
         }
         return this.formatJob(savedJob);
@@ -282,6 +287,7 @@ let JobService = class JobService {
         LEFT JOIN company_branches b ON b.id = j.branchId
         LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND COALESCE(j.moderationStatus, 'visible') = 'visible'
           AND u.isBanned = 0 AND u.deletedAt IS NULL
           AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
           ${blockedUserClause}
@@ -297,6 +303,7 @@ let JobService = class JobService {
         LEFT JOIN pages p ON p.id = j.pageId
         LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND COALESCE(j.moderationStatus, 'visible') = 'visible'
           AND u.isBanned = 0 AND u.deletedAt IS NULL
           AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
           ${blockedUserClause}
@@ -352,6 +359,7 @@ let JobService = class JobService {
             .leftJoinAndSelect('job.creator', 'creator')
             .leftJoin('page.members', 'member')
             .loadRelationCountAndMap('job.applicationsCount', 'job.applications');
+        qb.andWhere("COALESCE(job.moderationStatus, 'visible') = 'visible'");
         if (myjobs === 'true') {
             if (!userId)
                 throw new common_1.BadRequestException('User not authenticated');
@@ -424,7 +432,8 @@ let JobService = class JobService {
             .leftJoin('countJob.creator', 'countCreator')
             .select("COALESCE(countJob.status, 'active')", 'status')
             .addSelect('COUNT(DISTINCT countJob.id)', 'count')
-            .where("COALESCE(countJob.status, 'active') IN (:...countStatuses)", { countStatuses: ['active', 'closed'] });
+            .where("COALESCE(countJob.status, 'active') IN (:...countStatuses)", { countStatuses: ['active', 'closed'] })
+            .andWhere("COALESCE(countJob.moderationStatus, 'visible') = 'visible'");
         statusCountsQuery.andWhere(new typeorm_2.Brackets((inner) => {
             inner
                 .where('countJob.createdBy = :countUserId', { countUserId: userId })
@@ -470,6 +479,9 @@ let JobService = class JobService {
         const job = await this.findJobEntityForResponse(id);
         if (!job)
             throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+        if (job.moderationStatus && job.moderationStatus !== 'visible') {
+            throw new common_1.NotFoundException(`Job with ID ${id} not found`);
+        }
         const status = job.status || (job.isActive ? 'active' : 'closed');
         let canManage = job.createdBy === userId;
         if (job.pageId && userId) {
@@ -701,6 +713,7 @@ exports.JobService = JobService = __decorate([
         typeorm_2.Repository,
         firebase_service_1.FirebaseService,
         notifications_service_1.NotificationsService,
-        moderation_service_1.ModerationService])
+        moderation_service_1.ModerationService,
+        idempotency_service_1.IdempotencyService])
 ], JobService);
 //# sourceMappingURL=job.service.js.map

@@ -1,3 +1,4 @@
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 import { CommunityPost } from './entities/community-post.entity';
 import { PostVideoUploadSession } from './entities/post-video-upload-session.entity';
 export declare const POST_VIDEO_FILE_FIELD = "video";
@@ -9,6 +10,8 @@ export declare const isAllowedPostVideoMimeType: (contentType?: string) => boole
 export declare const isAllowedPostVideoFileName: (fileName?: string) => boolean;
 export declare const isAllowedPostVideoProbeFormat: (formatName?: string) => boolean;
 export declare class PostVideoStorageService {
+    private readonly objectStorage;
+    constructor(objectStorage: ObjectStorageService);
     getUploadInstructions(post: CommunityPost, session: PostVideoUploadSession): {
         uploadId: string;
         method: string;
@@ -25,16 +28,22 @@ export declare class PostVideoStorageService {
         fileName: string;
         storageKey: string;
         localFilePath: string;
-        publicUrl: string;
+        publicUrl: any;
     }>;
     inspectVideo(localFilePath: string): Promise<{
         durationSeconds: number;
     }>;
     createThumbnail(postId: number, localFilePath: string): Promise<{
-        storageKey: string;
+        fileName: string;
         localFilePath: string;
-        publicUrl: string;
     }>;
-    remove(storageKey?: string | null): Promise<void>;
+    storeCompletedMedia(post: CommunityPost, session: PostVideoUploadSession, thumbnail: {
+        fileName: string;
+        localFilePath: string;
+    }): Promise<{
+        videoAsset: import("../storage/entities/stored-asset.entity").StoredAsset;
+        thumbnailAsset: import("../storage/entities/stored-asset.entity").StoredAsset;
+    }>;
+    remove(assetId?: string | null, legacyStorageKey?: string | null): Promise<void>;
     deleteLocalFile(path?: string | null): Promise<void>;
 }

@@ -31,8 +31,10 @@ const profiles_service_1 = require("../profiles/profiles.service");
 const profile_format_util_1 = require("../profiles/profile-format.util");
 const moderation_service_1 = require("../moderation/moderation.service");
 const object_storage_service_1 = require("../storage/object-storage.service");
+const idempotency_service_1 = require("../idempotency/idempotency.service");
+const notifications_service_1 = require("../notifications/notifications.service");
 let ReelsService = class ReelsService {
-    constructor(reelRepo, uploadSessionRepo, likeRepo, saveRepo, commentRepo, profileFollowRepo, jobRepo, userRepo, pagesService, profilesService, storage, moderationService, objectStorageService) {
+    constructor(reelRepo, uploadSessionRepo, likeRepo, saveRepo, commentRepo, profileFollowRepo, jobRepo, userRepo, pagesService, profilesService, storage, moderationService, objectStorageService, idempotencyService, notificationsService) {
         this.reelRepo = reelRepo;
         this.uploadSessionRepo = uploadSessionRepo;
         this.likeRepo = likeRepo;
@@ -46,6 +48,8 @@ let ReelsService = class ReelsService {
         this.storage = storage;
         this.moderationService = moderationService;
         this.objectStorageService = objectStorageService;
+        this.idempotencyService = idempotencyService;
+        this.notificationsService = notificationsService;
     }
     onModuleInit() {
         this.cleanupExpiredUploadSessions().catch(() => undefined);
@@ -57,7 +61,10 @@ let ReelsService = class ReelsService {
     getPublisherOptions(userId) {
         return this.pagesService.getReelPublisherOptions(userId);
     }
-    async createReel(data, userId) {
+    async createReel(data, userId, idempotencyKey) {
+        return this.idempotencyService.execute(userId, 'reel:create', idempotencyKey, data, () => this.createReelInternal(data, userId));
+    }
+    async createReelInternal(data, userId) {
         await this.cleanupExpiredUploadSessions();
         this.validateCreateMedia(data.media);
         const publisher = await this.resolvePublisher(data.publisher, userId);
@@ -86,7 +93,7 @@ let ReelsService = class ReelsService {
             reelId: reel.id,
             userId,
             uploadKey: this.storage.createUploadKey(reel.id, data.media.fileName, data.media.contentType),
-            storageProvider: 'local',
+            storageProvider: 'object',
             status: 'pending',
             originalFileName: data.media.fileName,
             contentType: data.media.contentType,
@@ -116,17 +123,31 @@ let ReelsService = class ReelsService {
             await this.markSessionExpired(session);
             throw new common_1.BadRequestException('Upload session has expired');
         }
-        this.validateUploadedFile(file);
-        const stored = await this.storage.commitLocalUpload(reel, session, file);
-        await this.uploadSessionRepo.save({
-            ...session,
-            status: 'uploaded',
-            uploadedFileName: stored.fileName,
-            localFilePath: stored.localFilePath,
-            publicUrl: stored.publicUrl,
-            uploadedFileSizeBytes: file.size,
-            uploadedContentType: file.mimetype,
-        });
+        try {
+            this.validateUploadedFile(file);
+        }
+        catch (error) {
+            await this.storage.deleteLocalFile(file.path);
+            throw error;
+        }
+        const stored = await this.storage.commitUpload(reel, session, file);
+        try {
+            await this.uploadSessionRepo.save({
+                ...session,
+                status: 'uploaded',
+                uploadKey: stored.storageKey,
+                uploadedFileName: stored.fileName,
+                localFilePath: null,
+                publicUrl: null,
+                uploadedAssetId: stored.assetId,
+                uploadedFileSizeBytes: file.size,
+                uploadedContentType: file.mimetype,
+            });
+        }
+        catch (error) {
+            await this.storage.remove(stored.assetId);
+            throw error;
+        }
         return {
             uploadId: session.uploadId,
             reelId: String(reel.id),
@@ -152,21 +173,26 @@ let ReelsService = class ReelsService {
         await this.validateLinkedJob(reel.linkedJobId, userId, this.getPublisherType(reel), reel.publisherCompanyId);
         const now = new Date();
         const nextStatus = reel.visibility === 'draft' ? 'draft' : 'published';
-        await this.reelRepo.save({
-            ...reel,
-            videoUrl: session.publicUrl,
-            storageKey: session.uploadKey,
-            contentType: session.uploadedContentType || session.contentType,
-            fileSizeBytes: session.uploadedFileSizeBytes ?? session.expectedFileSizeBytes ?? null,
-            durationSeconds: session.durationSeconds ?? reel.durationSeconds ?? null,
-            status: nextStatus,
-            processedAt: now,
-            publishedAt: nextStatus === 'published' ? now : null,
-        });
-        await this.uploadSessionRepo.save({
-            ...session,
-            status: 'completed',
-            completedAt: now,
+        await this.reelRepo.manager.transaction(async (manager) => {
+            await manager.save(reel_entity_1.Reel, {
+                ...reel,
+                videoUrl: session.publicUrl || reel.videoUrl || null,
+                videoAssetId: session.uploadedAssetId || reel.videoAssetId || null,
+                storageKey: session.uploadKey,
+                contentType: session.uploadedContentType || session.contentType,
+                fileSizeBytes: session.uploadedFileSizeBytes ??
+                    session.expectedFileSizeBytes ??
+                    null,
+                durationSeconds: session.durationSeconds ?? reel.durationSeconds ?? null,
+                status: nextStatus,
+                processedAt: now,
+                publishedAt: nextStatus === 'published' ? now : null,
+            });
+            await manager.save(reel_upload_session_entity_1.ReelUploadSession, {
+                ...session,
+                status: 'completed',
+                completedAt: now,
+            });
         });
         return this.formatReel(await this.getReelByIdOrThrow(reel.id), userId);
     }
@@ -178,7 +204,10 @@ let ReelsService = class ReelsService {
             .createQueryBuilder('reel')
             .leftJoinAndSelect('reel.creator', 'creator')
             .leftJoinAndSelect('reel.publisherCompany', 'publisherCompany')
-            .where('reel.deletedAt IS NULL');
+            .where('reel.deletedAt IS NULL')
+            .andWhere('reel.moderationStatus = :moderationStatus', {
+            moderationStatus: 'visible',
+        });
         if (feed === 'mine') {
             qb.andWhere('reel.creatorId = :userId', { userId });
         }
@@ -252,7 +281,9 @@ let ReelsService = class ReelsService {
         const pageItems = hasMore ? reels.slice(0, limit) : reels;
         return {
             data: await this.formatReels(pageItems, userId),
-            nextCursor: hasMore ? this.encodeCursor(pageItems[pageItems.length - 1]) : null,
+            nextCursor: hasMore
+                ? this.encodeCursor(pageItems[pageItems.length - 1])
+                : null,
         };
     }
     async getComments(reelId, userId, cursor, limit = 20) {
@@ -262,7 +293,11 @@ let ReelsService = class ReelsService {
         const qb = this.commentRepo
             .createQueryBuilder('comment')
             .leftJoinAndSelect('comment.user', 'user')
-            .where('comment.reelId = :reelId', { reelId });
+            .where('comment.reelId = :reelId', { reelId })
+            .andWhere('comment.deletedAt IS NULL')
+            .andWhere('comment.moderationStatus = :commentModerationStatus', {
+            commentModerationStatus: 'visible',
+        });
         if (decodedCursor) {
             qb.andWhere(new typeorm_2.Brackets((cursorQb) => {
                 cursorQb.where('comment.createdAt < :cursorCreatedAt', {
@@ -283,10 +318,15 @@ let ReelsService = class ReelsService {
         const pageItems = hasMore ? comments.slice(0, safeLimit) : comments;
         return {
             data: await Promise.all(pageItems.map((comment) => this.formatComment(comment))),
-            nextCursor: hasMore ? this.encodeCursor(pageItems[pageItems.length - 1]) : null,
+            nextCursor: hasMore
+                ? this.encodeCursor(pageItems[pageItems.length - 1])
+                : null,
         };
     }
-    async addComment(reelId, userId, text) {
+    async addComment(reelId, userId, text, idempotencyKey) {
+        return this.idempotencyService.execute(userId, `reel:comment:create:${reelId}`, idempotencyKey, { text: String(text || '').trim() }, () => this.addCommentInternal(reelId, userId, text, idempotencyKey));
+    }
+    async addCommentInternal(reelId, userId, text, idempotencyKey) {
         const reel = await this.getViewableReelOrThrow(reelId, userId);
         if (!reel.allowComments) {
             throw new common_1.BadRequestException('Comments are disabled for this reel');
@@ -297,10 +337,62 @@ let ReelsService = class ReelsService {
             text: text.trim(),
         }));
         await this.incrementCounter(reelId, 'commentsCount');
-        return this.formatComment(await this.commentRepo.findOne({
+        const formatted = await this.formatComment(await this.commentRepo.findOne({
             where: { id: comment.id },
             relations: ['user'],
         }));
+        if (reel.creatorId !== userId) {
+            await this.notificationsService.create({
+                userId: reel.creatorId,
+                type: 'reel_comment',
+                title: 'New reel comment',
+                message: 'Someone commented on your reel.',
+                data: {
+                    reelId: String(reelId),
+                    commentId: String(comment.id),
+                    profileType: 'user',
+                    profileId: String(userId),
+                },
+                dedupeKey: `reel_comment:${reelId}:${userId}:${idempotencyKey || comment.id}`,
+            });
+        }
+        return formatted;
+    }
+    async deleteComment(reelId, commentId, userId, isSystemAdmin = false) {
+        const comment = await this.commentRepo.findOne({
+            where: { id: commentId, reelId },
+            relations: ['reel', 'reel.creator', 'reel.publisherCompany'],
+        });
+        if (!comment || comment.deletedAt) {
+            throw new common_1.NotFoundException('Comment not found');
+        }
+        if (comment.userId !== userId && !isSystemAdmin) {
+            const reel = comment.reel;
+            if (reel.creatorId !== userId) {
+                if (this.getPublisherType(reel) !== 'company' ||
+                    !reel.publisherCompanyId) {
+                    throw new common_1.ForbiddenException('You cannot delete this comment');
+                }
+                const access = await this.pagesService.assertCompanyCanPublish(reel.publisherCompanyId, userId);
+                if (!['owner', 'admin'].includes(access.member.role)) {
+                    throw new common_1.ForbiddenException('You cannot delete this comment');
+                }
+            }
+        }
+        comment.deletedAt = new Date();
+        comment.deletedByUserId = userId;
+        comment.deletionReason = isSystemAdmin
+            ? 'admin_removed'
+            : comment.userId === userId
+                ? 'author_removed'
+                : 'publisher_removed';
+        await this.commentRepo.save(comment);
+        await this.decrementCounter(reelId, 'commentsCount');
+        return {
+            id: String(comment.id),
+            reelId: String(reelId),
+            deleted: true,
+        };
     }
     async likeReel(reelId, userId) {
         await this.getViewableReelOrThrow(reelId, userId);
@@ -359,11 +451,12 @@ let ReelsService = class ReelsService {
         reel.status = 'deleted';
         reel.deletedAt = new Date();
         await this.reelRepo.save(reel);
+        await this.storage.remove(reel.videoAssetId, reel.storageKey);
         return { id: String(reel.id), deleted: true };
     }
     async publishReel(reelId, userId) {
         const reel = await this.getOwnedReelOrThrow(reelId, userId);
-        if (!reel.videoUrl) {
+        if (!reel.videoAssetId && !reel.videoUrl) {
             throw new common_1.BadRequestException('Reel video must be uploaded before publishing');
         }
         await this.assertPublisherCanPublish(reel, userId);
@@ -396,7 +489,8 @@ let ReelsService = class ReelsService {
         if (!(0, reel_storage_service_1.isAllowedReelFileName)(media.fileName)) {
             throw new common_1.BadRequestException('Unsupported reel video file extension');
         }
-        if (media.fileSizeBytes && media.fileSizeBytes > (0, reel_storage_service_1.getReelMaxFileSizeBytes)()) {
+        if (media.fileSizeBytes &&
+            media.fileSizeBytes > (0, reel_storage_service_1.getReelMaxFileSizeBytes)()) {
             throw new common_1.BadRequestException('Reel video exceeds the maximum file size');
         }
         if (media.durationSeconds && Number(media.durationSeconds) > 60) {
@@ -470,7 +564,10 @@ let ReelsService = class ReelsService {
             where: { id: reelId },
             relations: ['creator', 'linkedJob', 'publisherCompany'],
         });
-        if (!reel || reel.status === 'deleted' || reel.deletedAt) {
+        if (!reel ||
+            reel.status === 'deleted' ||
+            reel.deletedAt ||
+            (reel.moderationStatus && reel.moderationStatus !== 'visible')) {
             throw new common_1.NotFoundException('Reel not found');
         }
         return reel;
@@ -640,7 +737,10 @@ let ReelsService = class ReelsService {
     }
     async withPublisherAsset(result, reel) {
         const publisher = await this.publisherWithAsset(reel);
-        return { ...result, publisher, author: publisher };
+        const videoUrl = reel.videoAssetId
+            ? await this.storageAssetUrl(reel.videoAssetId)
+            : reel.videoUrl;
+        return { ...result, videoUrl, publisher, author: publisher };
     }
     async storageAssetUrl(assetId) {
         return this.objectStorageService.getUrl(assetId);
@@ -739,6 +839,9 @@ let ReelsService = class ReelsService {
             .leftJoinAndSelect('reel.creator', 'creator')
             .leftJoinAndSelect('reel.publisherCompany', 'publisherCompany')
             .where('reel.deletedAt IS NULL')
+            .andWhere('reel.moderationStatus = :moderationStatus', {
+            moderationStatus: 'visible',
+        })
             .andWhere('reel.status = :publishedStatus', {
             publishedStatus: 'published',
         })
@@ -786,6 +889,7 @@ let ReelsService = class ReelsService {
         session.errorMessage = 'Upload session expired';
         await this.uploadSessionRepo.save(session);
         await this.storage.deleteLocalFile(session.localFilePath);
+        await this.storage.remove(session.uploadedAssetId);
         const reel = await this.reelRepo.findOne({ where: { id: session.reelId } });
         if (reel?.status === 'upload_pending') {
             reel.status = 'failed';
@@ -850,6 +954,8 @@ exports.ReelsService = ReelsService = __decorate([
         profiles_service_1.ProfilesService,
         reel_storage_service_1.ReelStorageService,
         moderation_service_1.ModerationService,
-        object_storage_service_1.ObjectStorageService])
+        object_storage_service_1.ObjectStorageService,
+        idempotency_service_1.IdempotencyService,
+        notifications_service_1.NotificationsService])
 ], ReelsService);
 //# sourceMappingURL=reels.service.js.map

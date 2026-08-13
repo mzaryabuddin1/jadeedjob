@@ -6,6 +6,7 @@ import { SupportContactMessage } from './entities/support-contact-message.entity
 import { SupportTicket, SupportTicketCategory, SupportTicketKind } from './entities/support-ticket.entity';
 import { SupportTicketAttachment } from './entities/support-ticket-attachment.entity';
 import { SupportTicketMessage } from './entities/support-ticket-message.entity';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
 export declare class SupportService {
     private readonly contactMessageRepo;
     private readonly ticketRepo;
@@ -14,7 +15,8 @@ export declare class SupportService {
     private readonly userRepo;
     private readonly notificationsService;
     private readonly storageService;
-    constructor(contactMessageRepo: Repository<SupportContactMessage>, ticketRepo: Repository<SupportTicket>, attachmentRepo: Repository<SupportTicketAttachment>, messageRepo: Repository<SupportTicketMessage>, userRepo: Repository<User>, notificationsService: NotificationsService, storageService: ObjectStorageService);
+    private readonly idempotencyService;
+    constructor(contactMessageRepo: Repository<SupportContactMessage>, ticketRepo: Repository<SupportTicket>, attachmentRepo: Repository<SupportTicketAttachment>, messageRepo: Repository<SupportTicketMessage>, userRepo: Repository<User>, notificationsService: NotificationsService, storageService: ObjectStorageService, idempotencyService: IdempotencyService);
     getContactInfo(): {
         phoneDisplay: string;
         phone: string;
@@ -35,12 +37,13 @@ export declare class SupportService {
         preferredContact?: string;
         contact?: string;
         attachments?: string[];
-    }): Promise<{
+    }, idempotencyKey?: string): Promise<{
         ticketId: number;
         status: string;
         createdAt: Date;
         message: string;
     }>;
+    private createTicketInternal;
     listTickets(userId: number, page?: number, limit?: number): Promise<{
         data: {
             ticketId: number;

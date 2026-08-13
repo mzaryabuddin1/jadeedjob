@@ -8,6 +8,11 @@ export declare class AccountDeletionRequest {
     recoveredAt: Date;
     completedAt: Date;
     blockerSnapshot: Record<string, unknown>;
+    activeKey: string | null;
+    processingClaimToken: string | null;
+    processingClaimedAt: Date | null;
+    processingAttempts: number;
+    lastError: string | null;
     createdAt: Date;
     updatedAt: Date;
 }

@@ -5,6 +5,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PostVideoStorageService = exports.isAllowedPostVideoProbeFormat = exports.isAllowedPostVideoFileName = exports.isAllowedPostVideoMimeType = exports.ensurePostVideoDirectory = exports.getPostVideoTmpDir = exports.getPostVideoUploadRoot = exports.POST_VIDEO_MAX_BYTES = exports.POST_VIDEO_FILE_FIELD = void 0;
 const common_1 = require("@nestjs/common");
@@ -14,6 +17,7 @@ const fs_1 = require("fs");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const util_1 = require("util");
+const object_storage_service_1 = require("../storage/object-storage.service");
 exports.POST_VIDEO_FILE_FIELD = 'video';
 exports.POST_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
 const execFileAsync = (0, util_1.promisify)(child_process_1.execFile);
@@ -49,8 +53,11 @@ const normalizedExtension = (fileName, contentType) => {
     return contentType === 'video/quicktime' ? '.mov' : '.mp4';
 };
 let PostVideoStorageService = class PostVideoStorageService {
+    constructor(objectStorage) {
+        this.objectStorage = objectStorage;
+    }
     getUploadInstructions(post, session) {
-        const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+        const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
         return {
             uploadId: session.uploadId,
             method: 'POST',
@@ -71,12 +78,11 @@ let PostVideoStorageService = class PostVideoStorageService {
         const fileName = `${post.id}-${(0, crypto_1.randomUUID)()}${extension}`;
         const localFilePath = (0, path_1.join)(root, fileName);
         await (0, promises_1.rename)(file.path, localFilePath);
-        const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
         return {
             fileName,
-            storageKey: `community-post-videos/${fileName}`,
+            storageKey: session.uploadKey,
             localFilePath,
-            publicUrl: `${appUrl}/uploads/community-post-videos/${fileName}`,
+            publicUrl: null,
         };
     }
     async inspectVideo(localFilePath) {
@@ -139,17 +145,63 @@ let PostVideoStorageService = class PostVideoStorageService {
             await this.deleteLocalFile(thumbnailPath);
             throw new common_1.BadRequestException('Could not create a video preview');
         }
-        const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
         return {
-            storageKey: `community-post-videos/${fileName}`,
+            fileName,
             localFilePath: thumbnailPath,
-            publicUrl: `${appUrl}/uploads/community-post-videos/${fileName}`,
         };
     }
-    async remove(storageKey) {
-        if (!storageKey)
+    async storeCompletedMedia(post, session, thumbnail) {
+        if (!session.localFilePath) {
+            throw new common_1.BadRequestException('Uploaded video file is missing');
+        }
+        const videoStats = await (0, promises_1.stat)(session.localFilePath);
+        const videoAsset = await this.objectStorage.store({
+            ownerUserId: session.userId,
+            purpose: 'community-posts/video',
+            file: {
+                path: session.localFilePath,
+                originalname: session.originalFileName,
+                mimetype: session.uploadedContentType || session.contentType,
+                size: videoStats.size,
+                buffer: undefined,
+            },
+            allowedTypes: [...ALLOWED_VIDEO_MIME_TYPES],
+            maxBytes: exports.POST_VIDEO_MAX_BYTES,
+            visibility: 'private',
+            metadata: { postId: post.id, uploadId: session.uploadId },
+        });
+        try {
+            const thumbnailStats = await (0, promises_1.stat)(thumbnail.localFilePath);
+            const thumbnailAsset = await this.objectStorage.store({
+                ownerUserId: session.userId,
+                purpose: 'community-posts/video-thumbnail',
+                file: {
+                    path: thumbnail.localFilePath,
+                    originalname: thumbnail.fileName,
+                    mimetype: 'image/jpeg',
+                    size: thumbnailStats.size,
+                    buffer: undefined,
+                },
+                allowedTypes: ['image/jpeg'],
+                maxBytes: 8 * 1024 * 1024,
+                visibility: 'private',
+                metadata: { postId: post.id, uploadId: session.uploadId },
+            });
+            return { videoAsset, thumbnailAsset };
+        }
+        catch (error) {
+            await this.objectStorage.remove(videoAsset);
+            throw error;
+        }
+    }
+    async remove(assetId, legacyStorageKey) {
+        if (assetId) {
+            await this.objectStorage.remove(assetId);
             return;
-        const fileName = storageKey.split('/').pop();
+        }
+        if (!legacyStorageKey)
+            return;
+        const fileName = legacyStorageKey.split('/').pop();
         if (!fileName)
             return;
         await this.deleteLocalFile((0, path_1.join)((0, exports.getPostVideoUploadRoot)(), fileName));
@@ -166,6 +218,7 @@ let PostVideoStorageService = class PostVideoStorageService {
 };
 exports.PostVideoStorageService = PostVideoStorageService;
 exports.PostVideoStorageService = PostVideoStorageService = __decorate([
-    (0, common_1.Injectable)()
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [object_storage_service_1.ObjectStorageService])
 ], PostVideoStorageService);
 //# sourceMappingURL=post-video-storage.service.js.map

@@ -4,7 +4,7 @@ export declare class ReelsController {
     private readonly reelsService;
     private readonly moderationService;
     constructor(reelsService: ReelsService, moderationService: ModerationService);
-    create(body: any, req: any): Promise<{
+    create(body: any, req: any, idempotencyKey?: string): Promise<{
         reel: any;
         upload: {
             uploadId: string;
@@ -26,7 +26,9 @@ export declare class ReelsController {
         fileSizeBytes: number;
         contentType: string;
     }>;
-    completeUpload(id: number, uploadId: string, req: any): Promise<any>;
+    completeUpload(id: number, body: {
+        uploadId: string;
+    }, req: any): Promise<any>;
     getFeed(query: any, req: any): Promise<{
         data: any[];
         nextCursor: string;
@@ -100,7 +102,7 @@ export declare class ReelsController {
     unlike(id: number, req: any): Promise<any>;
     save(id: number, req: any): Promise<any>;
     unsave(id: number, req: any): Promise<any>;
-    getComments(id: number, cursor: string, limit: number, req: any): Promise<{
+    getComments(id: number, query: any, req: any): Promise<{
         data: {
             id: string;
             reelId: string;
@@ -117,7 +119,9 @@ export declare class ReelsController {
         }[];
         nextCursor: string;
     }>;
-    addComment(id: number, text: string, req: any): Promise<{
+    addComment(id: number, body: {
+        text: string;
+    }, req: any, idempotencyKey?: string): Promise<{
         id: string;
         reelId: string;
         author: {
@@ -133,8 +137,19 @@ export declare class ReelsController {
     }>;
     share(id: number, req: any): Promise<any>;
     report(id: number, body: any, req: any): Promise<{
-        reportId: number;
-        status: "pending" | "reviewed" | "dismissed" | "actioned";
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
+        reported: boolean;
+    }>;
+    reportComment(reelId: number, commentId: number, body: any, req: any): Promise<{
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
+        reported: boolean;
+    }>;
+    deleteComment(reelId: number, commentId: number, req: any): Promise<{
+        id: string;
+        reelId: string;
+        deleted: boolean;
     }>;
     followCreator(creatorId: number, req: any): Promise<{
         creatorId: string;

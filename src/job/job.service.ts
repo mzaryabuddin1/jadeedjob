@@ -19,6 +19,7 @@ import {
   normalizeCompanyPermissions,
 } from 'src/pages/company-permissions';
 import { ModerationService } from 'src/moderation/moderation.service';
+import { IdempotencyService } from 'src/idempotency/idempotency.service';
 
 type JobStatus = 'draft' | 'active' | 'closed';
 
@@ -55,6 +56,7 @@ export class JobService {
 
     private notificationsService: NotificationsService,
     private moderationService: ModerationService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   private async assertCompanyPermission(
@@ -239,7 +241,17 @@ export class JobService {
       `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
   }
 
-  async createJob(data: any, userId: number) {
+  async createJob(data: any, userId: number, idempotencyKey?: string) {
+    return this.idempotencyService.execute(
+      userId,
+      'job:create',
+      idempotencyKey,
+      data,
+      () => this.createJobInternal(data, userId),
+    );
+  }
+
+  private async createJobInternal(data: any, userId: number) {
     const { pageId, branchId } = await this.normalizeCompanyAndBranch(data, userId);
     const payload = this.normalizeJobPayload(data, pageId, branchId);
     const status = payload.status as JobStatus;
@@ -277,9 +289,9 @@ export class JobService {
         'New Job Posted',
         savedJob.title ?? 'A new job matches your preferences!',
         {
-          jobId: savedJob.id,
-          filterId: savedJob.filterId,
-          companyId: savedJob.pageId ?? null,
+          jobId: String(savedJob.id),
+          filterId: String(savedJob.filterId),
+          companyId: savedJob.pageId ? String(savedJob.pageId) : null,
         },
         userId,
       );
@@ -379,6 +391,7 @@ export class JobService {
         LEFT JOIN company_branches b ON b.id = j.branchId
         LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND COALESCE(j.moderationStatus, 'visible') = 'visible'
           AND u.isBanned = 0 AND u.deletedAt IS NULL
           AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
           ${blockedUserClause}
@@ -398,6 +411,7 @@ export class JobService {
         LEFT JOIN pages p ON p.id = j.pageId
         LEFT JOIN users u ON u.id = j.createdBy
         WHERE j.isActive = 1 AND COALESCE(j.status, 'active') = 'active'
+          AND COALESCE(j.moderationStatus, 'visible') = 'visible'
           AND u.isBanned = 0 AND u.deletedAt IS NULL
           AND (j.pageId IS NULL OR p.verificationStatus = 'approved')
           ${blockedUserClause}
@@ -484,6 +498,8 @@ export class JobService {
       .leftJoinAndSelect('job.creator', 'creator')
       .leftJoin('page.members', 'member')
       .loadRelationCountAndMap('job.applicationsCount', 'job.applications');
+
+    qb.andWhere("COALESCE(job.moderationStatus, 'visible') = 'visible'");
 
     if (myjobs === 'true') {
       if (!userId) throw new BadRequestException('User not authenticated');
@@ -580,7 +596,8 @@ export class JobService {
       .where(
         "COALESCE(countJob.status, 'active') IN (:...countStatuses)",
         {countStatuses: ['active', 'closed']},
-      );
+      )
+      .andWhere("COALESCE(countJob.moderationStatus, 'visible') = 'visible'");
 
     statusCountsQuery.andWhere(
       new Brackets((inner) => {
@@ -639,6 +656,9 @@ export class JobService {
   async findJobById(id: number, userId?: number) {
     const job = await this.findJobEntityForResponse(id);
     if (!job) throw new NotFoundException(`Job with ID ${id} not found`);
+    if (job.moderationStatus && job.moderationStatus !== 'visible') {
+      throw new NotFoundException(`Job with ID ${id} not found`);
+    }
 
     const status = job.status || (job.isActive ? 'active' : 'closed');
     let canManage = job.createdBy === userId;

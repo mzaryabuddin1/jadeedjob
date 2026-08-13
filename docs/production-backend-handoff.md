@@ -338,7 +338,19 @@ Idempotency-Key: <stable client request UUID>
 ```
 
 The response contains `conversationId`, `chatId`, job/profile context, and an
-invitation when the action is `invite`.
+invitation when the action is `invite`. Every invitation projection includes:
+
+```ts
+{
+  id: string; // compatibility alias
+  invitationId: string;
+  status: string;
+  viewerAction: "respond" | "cancel" | null;
+}
+```
+
+`respond` is returned only to a pending invitee, `cancel` only to the pending
+inviter, and `null` after resolution or for inbox viewers without an action.
 
 Respond to an invitation:
 
@@ -349,7 +361,13 @@ PATCH /job-invitations/:invitationId
 
 ```ts
 {
-  invitation: { id: string; status: string; respondedAt: string };
+  invitation: {
+    id: string;
+    invitationId: string;
+    status: string;
+    viewerAction: "respond" | "cancel" | null;
+    respondedAt: string;
+  };
   conversationId: string;
   chatId: string;
   applicationId: number | null;
@@ -628,7 +646,7 @@ Successful confirmation returns HTTP `202`:
 
 ```ts
 {
-  message: string;
+  status: "scheduled";
   scheduledDeletionAt: string;
 }
 ```
@@ -648,6 +666,126 @@ POST /auth/account-recovery/confirm
 
 Recovery returns a normal session response. The scheduled task anonymizes due
 accounts idempotently after 30 days.
+
+An enumeration-safe public flow is also available for account-deletion pages:
+
+```http
+POST /public/account-deletion/send-otp
+{ "phone": "..." }
+
+POST /public/account-deletion/confirm
+{ "phone": "...", "otp": "..." }
+```
+
+The send response is always generic and never returns a development OTP.
+Unknown, invalid, used outside the replay window, and expired confirmations all
+return `401 ACCOUNT_DELETION_OTP_INVALID`. Valid confirmation uses the same
+ownership blockers and schedule as the authenticated flow.
+
+## Legal Documents And Acceptance
+
+No legal content or acceptance is seeded automatically.
+
+```http
+GET  /legal/current
+GET  /users/me/legal-acceptances
+POST /users/me/legal-acceptances
+```
+
+```json
+{
+  "acceptances": [
+    { "documentType": "community_guidelines", "version": "approved-version" }
+  ],
+  "clientPlatform": "ios"
+}
+```
+
+Publish business-approved metadata explicitly:
+
+```bash
+npm run legal:publish -- \
+  --type=terms \
+  --version=<approved-version> \
+  --title=<approved-title> \
+  --content-url=<approved-url> \
+  --effective-at=<ISO-date> \
+  --confirm-db=<database>
+```
+
+Activation requires all three conditions: the relevant switch is `true`, its
+ISO activation time has arrived, and every required current document exists and
+is effective. Registration then requires current Terms and Privacy. Community
+Post, Reel, comment, chat message/attachment creation and upload completion then
+require current Community Guidelines. Missing acceptance returns
+`428 LEGAL_ACCEPTANCE_REQUIRED` with `documentType` and `version`.
+
+```env
+LEGAL_REGISTRATION_ENFORCEMENT_ENABLED=false
+LEGAL_REGISTRATION_ENFORCEMENT_AT=
+LEGAL_COMMUNITY_ENFORCEMENT_ENABLED=false
+LEGAL_COMMUNITY_ENFORCEMENT_AT=
+```
+
+Keep both switches disabled until approved documents and activation dates are
+supplied. Existing users are not assigned fabricated historical acceptance.
+
+## Unified Moderation
+
+Canonical report routes:
+
+```http
+POST   /posts/:postId/comments/:commentId/report
+DELETE /posts/:postId/comments/:commentId
+POST   /reels/:reelId/comments/:commentId/report
+DELETE /reels/:reelId/comments/:commentId
+POST   /profiles/:profileType/:profileId/report
+POST   /chats/:conversationId/messages/:messageId/report
+POST   /job/:jobId/report
+GET    /admin/moderation/reports
+GET    /admin/moderation/reports/:reportId
+PATCH  /admin/moderation/reports/:reportId
+```
+
+`POST /posts/:id/report`, `POST /reels/:id/report`, and `/admin/reel-reports`
+remain compatibility facades. Reports use `{ reason, details? }`; admin actions
+use `{ action, notes?, suspensionEndsAt? }`, where action is `dismiss`, `hide`,
+`remove`, `warn`, `suspend`, or `ban`. Duplicate active and self reports are
+rejected. Comment deletion is soft deletion, and all evidence/audits are
+retained.
+
+## Idempotency And Attachments
+
+`Idempotency-Key` remains optional. It is supported for Job, Post, Post video,
+Reel initialization, support-ticket, and Post/Reel comment creation. Reusing a
+key with the same canonical request replays the original response; a changed
+request returns `409 IDEMPOTENCY_CONFLICT`; an active lease returns
+`409 IDEMPOTENCY_IN_PROGRESS`. Multipart fingerprints include normalized body,
+file checksum, actual size, declared/detected MIME, and filename.
+
+`POST /files/upload` now requires JWT and returns the existing `message`,
+`fileName`, and `fileUrl` fields plus `assetId`, `contentType`, and `sizeBytes`.
+New chat attachments should send `assetId`. URL-only compatibility accepts only
+server-known assets or an attachment already persisted in that conversation;
+arbitrary external URLs are rejected.
+
+## Hardening Migrations
+
+The migration order is:
+
+```text
+FreshDatabaseBaseline1785000000000
+ProductionBackendCompletion1785342156433
+AddContentAssetReferences1786352400000
+AddUnifiedModerationAndLegal1786518000000
+HardenIdempotencyDeletionNotifications1786518060000
+```
+
+The fresh baseline only creates wholly missing entity tables with
+`CREATE TABLE IF NOT EXISTS`; it executes no ALTER, rename, drop, truncate, or
+data rewrite against existing tables. The later migrations are additive and
+data-bearing. Run migration and E2E validation only against disposable
+`jobsloot_e2e_*` databases before deployment.
 
 ## Community Posts Mine Feed
 
@@ -704,6 +842,12 @@ GOOGLE_CLIENT_IDS or GOOGLE_CLIENT_ID when Google auth is enabled
 FACEBOOK_APP_ID FACEBOOK_APP_SECRET when Facebook auth is enabled
 ```
 
+The canonical public backend origin is `https://jobsloot.com/`. Keep
+`http://localhost:3000` only as the commented development reference in local
+environment files. `APP_URL` controls URLs returned by the API; it does not
+change the Nest listening port. Confirm the HTTPS reverse proxy forwards both
+HTTP and WebSocket traffic before deployment.
+
 Proxy requirements:
 
 - Forward HTTPS and WebSocket upgrades.
@@ -732,9 +876,10 @@ plural `/chats` routes, and canonical `chat:*` events. Remove aliases only after
 the coordinated mobile release is deployed and the configured grace date has
 passed.
 
-## Verification Record
+## Historical Verification Record
 
-Completed locally against the populated `jobsloot_staging` database:
+The following record predates the current hardening migrations and is retained
+for deployment history. It is not evidence that this task modified staging:
 
 ```text
 Build: passed

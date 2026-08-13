@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -14,6 +15,9 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { ProfilesService } from './profiles.service';
 import { ModerationService } from 'src/moderation/moderation.service';
+import { Throttle } from '@nestjs/throttler';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiCreateModerationReport } from 'src/moderation/moderation.decorators';
 
 const profileSearchQuerySchema = Joi.object({
   profileType: Joi.string().valid('user', 'company').required(),
@@ -22,8 +26,31 @@ const profileSearchQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(30).default(20),
 });
 
+const reportSchema = Joi.object({
+  reason: Joi.string()
+    .trim()
+    .valid(
+      'spam',
+      'harassment',
+      'impersonation',
+      'fraud',
+      'unsafe',
+      'inappropriate',
+      'other',
+    )
+    .required(),
+  details: Joi.string().trim().max(1000).allow('', null).optional(),
+});
+
+const blockedPaginationSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+});
+
 @UseGuards(JwtAuthGuard)
 @Controller('profiles')
+@ApiTags('Profiles')
+@ApiBearerAuth()
 export class ProfilesController {
   constructor(
     private readonly profilesService: ProfilesService,
@@ -41,13 +68,12 @@ export class ProfilesController {
   @Get('blocked')
   getBlocked(
     @Req() req: any,
-    @Query('page') page = 1,
-    @Query('limit') limit = 20,
+    @Query(new JoiValidationPipe(blockedPaginationSchema)) query: any,
   ) {
     return this.moderationService.listBlocked(
       req.user.id,
-      Number(page),
-      Number(limit),
+      query.page,
+      query.limit,
     );
   }
 
@@ -76,6 +102,23 @@ export class ProfilesController {
     @Req() req: any,
   ) {
     return this.profilesService.getProfile(profileType, profileId, req.user.id);
+  }
+
+  @Post(':profileType/:profileId/report')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiCreateModerationReport('Report a public user or approved company profile')
+  report(
+    @Param('profileType') profileType: string,
+    @Param('profileId', ParseIntPipe) profileId: number,
+    @Body(new JoiValidationPipe(reportSchema)) body: any,
+    @Req() req: any,
+  ) {
+    return this.moderationService.reportProfile(
+      profileType,
+      profileId,
+      req.user.id,
+      body,
+    );
   }
 
   @Post(':profileType/:profileId/follow')

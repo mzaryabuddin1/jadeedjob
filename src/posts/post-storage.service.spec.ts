@@ -4,9 +4,6 @@ import {
   POST_IMAGE_MAX_BYTES,
   PostStorageService,
 } from './post-storage.service';
-import { access, mkdtemp, readdir, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 const file = (
   mimetype: string,
@@ -16,6 +13,14 @@ const file = (
 ) => ({ mimetype, originalname, buffer, size }) as Express.Multer.File;
 
 describe('PostStorageService validation', () => {
+  const objectStorage = {
+    store: jest.fn(async () => ({
+      id: 'asset-id',
+      storageKey: 'community-posts/image/1/demo.png',
+    })),
+    getUrl: jest.fn(async () => 'https://example.test/signed-image'),
+    remove: jest.fn(),
+  } as any;
   const signatures = {
     jpeg: Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     png: Buffer.from('89504e470d0a1a0a00000000', 'hex'),
@@ -57,10 +62,11 @@ describe('PostStorageService validation', () => {
   });
 
   it('rejects images larger than 8 MB before writing', async () => {
-    const service = new PostStorageService();
+    const service = new PostStorageService(objectStorage);
     await expect(
       service.save(
         1,
+        7,
         file(
           'image/jpeg',
           'photo.jpg',
@@ -71,28 +77,26 @@ describe('PostStorageService validation', () => {
     ).rejects.toThrow('Post image must be 8 MB or smaller');
   });
 
-  it('stores and removes files only in the dedicated post directory', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'community-posts-'));
-    const previousRoot = process.env.POST_IMAGE_UPLOAD_DIR;
-    process.env.POST_IMAGE_UPLOAD_DIR = root;
+  it('stores and removes images through object storage', async () => {
+    const service = new PostStorageService(objectStorage);
+    const image = file('image/png', 'photo.png', signatures.png);
+    const stored = await service.save(9, 7, image);
 
-    try {
-      const service = new PostStorageService();
-      const stored = await service.save(
-        9,
-        file('image/png', 'photo.png', signatures.png),
-      );
-      const [savedFile] = await readdir(root);
+    expect(objectStorage.store).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerUserId: 7,
+        purpose: 'community-posts/image',
+        file: image,
+        visibility: 'private',
+      }),
+    );
+    expect(stored).toEqual({
+      assetId: 'asset-id',
+      storageKey: 'community-posts/image/1/demo.png',
+      publicUrl: 'https://example.test/signed-image',
+    });
 
-      expect(stored.storageKey).toBe(`community-posts/${savedFile}`);
-      await access(join(root, savedFile));
-
-      await service.remove(stored.storageKey);
-      await expect(access(join(root, savedFile))).rejects.toThrow();
-    } finally {
-      if (previousRoot === undefined) delete process.env.POST_IMAGE_UPLOAD_DIR;
-      else process.env.POST_IMAGE_UPLOAD_DIR = previousRoot;
-      await rm(root, { recursive: true, force: true });
-    }
+    await service.remove('asset-id');
+    expect(objectStorage.remove).toHaveBeenCalledWith('asset-id');
   });
 });

@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -20,6 +21,14 @@ import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
 import { ChatService } from './chat.service';
 import { Throttle } from '@nestjs/throttler';
+import { ChatGateway } from './chat.gateway';
+import { CommunityGuidelinesGuard } from 'src/legal/community-guidelines.guard';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ApiBearerAuth, ApiExtraModels, ApiTags } from '@nestjs/swagger';
+import { InvitationProjectionDto } from './dto/invitation-api.dto';
+import { ApiOptionalIdempotencyKey } from 'src/idempotency/idempotency.decorators';
+import { ApiCommunityAcceptanceRequired } from 'src/legal/legal.decorators';
+import { ApiCreateModerationReport } from 'src/moderation/moderation.decorators';
 
 const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
@@ -43,10 +52,11 @@ const messageSchema = Joi.object({
     .items(
       Joi.object({
         assetId: Joi.string().guid({ version: 'uuidv4' }).optional(),
-        fileUrl: Joi.string().uri().required(),
+        fileUrl: Joi.string().uri().optional(),
         fileName: Joi.string().allow('', null).max(255).optional(),
         contentType: Joi.string().allow('', null).max(120).optional(),
-      }),
+        sizeBytes: Joi.number().integer().positive().optional(),
+      }).or('assetId', 'fileUrl'),
     )
     .max(10)
     .optional(),
@@ -65,12 +75,32 @@ const contextSchema = Joi.object({
   clientRequestId: Joi.string().trim().max(120).required(),
 });
 
+const reportSchema = Joi.object({
+  reason: Joi.string()
+    .trim()
+    .valid(
+      'spam',
+      'harassment',
+      'unsafe',
+      'fraud',
+      'inappropriate',
+      'other',
+    )
+    .required(),
+  details: Joi.string().trim().max(1000).allow('', null).optional(),
+});
+
 @UseGuards(JwtAuthGuard)
 @Controller('chats')
+@ApiTags('Chats')
+@ApiBearerAuth()
+@ApiExtraModels(InvitationProjectionDto)
 export class ChatsController {
   constructor(
     private readonly chatService: ChatService,
     private readonly storageService: ObjectStorageService,
+    private readonly chatGateway: ChatGateway,
+    private readonly moderationService: ModerationService,
   ) {}
 
   @Get()
@@ -84,7 +114,8 @@ export class ChatsController {
 
   @Post('contexts')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  createContext(
+  @ApiOptionalIdempotencyKey()
+  async createContext(
     @Req() req: any,
     @Headers('idempotency-key') idempotencyKey: string,
     @Body(new JoiValidationPipe(contextSchema))
@@ -96,11 +127,18 @@ export class ChatsController {
       clientRequestId: string;
     },
   ) {
-    return this.chatService.createContext(req.user.id, {
+    const result = await this.chatService.createContext(req.user.id, {
       ...body,
       clientRequestId:
         String(idempotencyKey || '').trim() || body.clientRequestId,
     });
+    if (result.invitation?.invitationId || result.invitation?.id) {
+      const updates = await this.chatService.invitationRealtimePayloads(
+        result.invitation.invitationId || result.invitation.id,
+      );
+      this.chatGateway.emitInvitationUpdatedForUsers(updates);
+    }
+    return result;
   }
 
   @Get(':chatId/messages')
@@ -119,7 +157,9 @@ export class ChatsController {
   }
 
   @Post(':chatId/messages')
+  @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @ApiCommunityAcceptanceRequired()
   sendMessage(
     @Param('chatId') chatId: string,
     @Body(new JoiValidationPipe(messageSchema)) body: any,
@@ -136,7 +176,9 @@ export class ChatsController {
   }
 
   @Post(':chatId/attachments')
+  @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @ApiCommunityAcceptanceRequired()
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 20 * 1024 * 1024, files: 1 },
@@ -183,5 +225,26 @@ export class ChatsController {
   @Patch(':chatId/read')
   markRead(@Param('chatId') chatId: string, @Req() req: any) {
     return this.chatService.markRead(chatId, req.user.id);
+  }
+
+  @Post(':conversationId/messages/:messageId/report')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiCreateModerationReport('Report a message in an accessible conversation')
+  async reportMessage(
+    @Param('conversationId') conversationId: string,
+    @Param('messageId', ParseIntPipe) messageId: number,
+    @Body(new JoiValidationPipe(reportSchema)) body: any,
+    @Req() req: any,
+  ) {
+    const target = await this.chatService.getReportableMessage(
+      conversationId,
+      messageId,
+      req.user.id,
+    );
+    return this.moderationService.reportResolvedTarget(
+      req.user.id,
+      body,
+      target,
+    );
   }
 }

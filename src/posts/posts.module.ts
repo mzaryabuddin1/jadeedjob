@@ -14,6 +14,7 @@ import { PostStorageService } from './post-storage.service';
 import { PostVideoStorageService } from './post-video-storage.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PostsService } from './posts.service';
       User,
     ]),
     PagesModule,
+    NotificationsModule,
   ],
   controllers: [PostsController],
   providers: [PostsService, PostStorageService, PostVideoStorageService],

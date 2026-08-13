@@ -34,6 +34,9 @@ const createService = (overrides: Record<string, any> = {}) => {
     storageService: {
       getUrl: jest.fn(async () => null),
     },
+    notificationsService: {
+      create: jest.fn(async () => ({})),
+    },
     ...overrides,
   };
 
@@ -45,6 +48,7 @@ const createService = (overrides: Record<string, any> = {}) => {
       repos.pageRepo as any,
       repos.moderationService as any,
       repos.storageService as any,
+      repos.notificationsService as any,
     ),
     repos,
   };

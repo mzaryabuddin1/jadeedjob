@@ -14,6 +14,7 @@ import { ReelsService } from './reels.service';
 import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
 import { ProfilesModule } from 'src/profiles/profiles.module';
 import { PagesModule } from 'src/pages/pages.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { PagesModule } from 'src/pages/pages.module';
     ]),
     PagesModule,
     ProfilesModule,
+    NotificationsModule,
   ],
   controllers: [ReelsController],
   providers: [ReelsService, ReelStorageService],

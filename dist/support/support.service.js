@@ -23,8 +23,9 @@ const support_contact_message_entity_1 = require("./entities/support-contact-mes
 const support_ticket_entity_1 = require("./entities/support-ticket.entity");
 const support_ticket_attachment_entity_1 = require("./entities/support-ticket-attachment.entity");
 const support_ticket_message_entity_1 = require("./entities/support-ticket-message.entity");
+const idempotency_service_1 = require("../idempotency/idempotency.service");
 let SupportService = class SupportService {
-    constructor(contactMessageRepo, ticketRepo, attachmentRepo, messageRepo, userRepo, notificationsService, storageService) {
+    constructor(contactMessageRepo, ticketRepo, attachmentRepo, messageRepo, userRepo, notificationsService, storageService, idempotencyService) {
         this.contactMessageRepo = contactMessageRepo;
         this.ticketRepo = ticketRepo;
         this.attachmentRepo = attachmentRepo;
@@ -32,6 +33,7 @@ let SupportService = class SupportService {
         this.userRepo = userRepo;
         this.notificationsService = notificationsService;
         this.storageService = storageService;
+        this.idempotencyService = idempotencyService;
     }
     getContactInfo() {
         return {
@@ -65,7 +67,10 @@ let SupportService = class SupportService {
             message: 'Contact message received',
         };
     }
-    async createTicket(userId, body) {
+    async createTicket(userId, body, idempotencyKey) {
+        return this.idempotencyService.execute(userId, 'support:ticket:create', idempotencyKey, body, () => this.createTicketInternal(userId, body, idempotencyKey));
+    }
+    async createTicketInternal(userId, body, idempotencyKey) {
         const ticket = await this.ticketRepo.manager.transaction(async (manager) => {
             const created = await manager.getRepository(support_ticket_entity_1.SupportTicket).save(manager.getRepository(support_ticket_entity_1.SupportTicket).create({
                 userId,
@@ -96,6 +101,7 @@ let SupportService = class SupportService {
             title: 'Support ticket created',
             message: `Ticket #${ticket.id} has been created.`,
             data: { ticketId: ticket.id },
+            dedupeKey: `support_ticket:${userId}:${idempotencyKey || ticket.id}`,
         });
         return this.formatTicketResponse(ticket, 'Ticket created successfully');
     }
@@ -376,6 +382,7 @@ exports.SupportService = SupportService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         notifications_service_1.NotificationsService,
-        object_storage_service_1.ObjectStorageService])
+        object_storage_service_1.ObjectStorageService,
+        idempotency_service_1.IdempotencyService])
 ], SupportService);
 //# sourceMappingURL=support.service.js.map

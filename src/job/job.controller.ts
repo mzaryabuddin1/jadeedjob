@@ -11,6 +11,7 @@ import {
   Patch,
   ParseIntPipe,
   Delete,
+  Headers,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JobService } from './job.service';
@@ -18,6 +19,11 @@ import Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from 'src/auth/optional-jwt-auth.guard';
+import { Throttle } from '@nestjs/throttler';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiOptionalIdempotencyKey } from 'src/idempotency/idempotency.decorators';
+import { ApiCreateModerationReport } from 'src/moderation/moderation.decorators';
 
 const JOB_TITLE_MAX_LENGTH = 35;
 const jobTitleSchema = Joi.string().trim().max(JOB_TITLE_MAX_LENGTH).messages({
@@ -25,11 +31,18 @@ const jobTitleSchema = Joi.string().trim().max(JOB_TITLE_MAX_LENGTH).messages({
 });
 
 @Controller('job')
+@ApiTags('Jobs')
 export class JobController {
-  constructor(private readonly jobService: JobService) {}
+  constructor(
+    private readonly jobService: JobService,
+    private readonly moderationService: ModerationService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOptionalIdempotencyKey()
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -92,9 +105,17 @@ export class JobController {
       }),
     ),
   )
-  async createJob(@Body() body: any, @Req() req: any) {
+  async createJob(
+    @Body() body: any,
+    @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     body.createdBy = req.user.id;
-    return this.jobService.createJob(body, req.user.id);
+    return this.jobService.createJob(
+      body,
+      req.user.id,
+      idempotencyKey,
+    );
   }
 
   @Get()
@@ -110,6 +131,41 @@ export class JobController {
   @UseGuards(OptionalJwtAuthGuard)
   async findJob(@Param('id') id: number, @Req() req: any) {
     return this.jobService.findJobById(Number(id), req.user?.id);
+  }
+
+  @Post(':jobId/report')
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiBearerAuth()
+  @ApiCreateModerationReport('Report a visible job')
+  reportJob(
+    @Param('jobId', ParseIntPipe) jobId: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          reason: Joi.string()
+            .trim()
+            .valid(
+              'spam',
+              'misleading',
+              'fraud',
+              'unsafe',
+              'inappropriate',
+              'other',
+            )
+            .required(),
+          details: Joi.string().trim().max(1000).allow('', null).optional(),
+        }),
+      ),
+    )
+    body: any,
+    @Req() req: any,
+  ) {
+    return this.moderationService.reportJob(
+      jobId,
+      req.user.id,
+      body,
+    );
   }
 
   @Patch(':id')

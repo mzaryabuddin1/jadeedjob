@@ -25,6 +25,7 @@ export declare class OtpService {
         record: OtpRecord;
     }>;
     verifyOtp(input: VerifyOtpInput): Promise<OtpRecord>;
+    wasRecentlyUsed(input: VerifyOtpInput, withinMs?: number): Promise<boolean>;
     shouldExposeOtp(): boolean;
     otpResponse(message: string, otp: string): {
         message: string;

@@ -1,7 +1,9 @@
 import { PostsService } from './posts.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 export declare class PostsController {
     private readonly postsService;
-    constructor(postsService: PostsService);
+    private readonly moderationService;
+    constructor(postsService: PostsService, moderationService: ModerationService);
     getFeed(query: any, req: any): Promise<{
         data: any[];
         nextCursor: string;
@@ -12,7 +14,7 @@ export declare class PostsController {
         totalPages: number;
         currentPage: number;
     }>;
-    createVideoUpload(body: any, req: any): Promise<{
+    createVideoUpload(body: any, req: any, idempotencyKey?: string): Promise<{
         post: any;
         upload: {
             uploadId: string;
@@ -26,7 +28,7 @@ export declare class PostsController {
             expiresAt: Date;
         };
     }>;
-    replaceVideoUpload(id: number, body: any, req: any): Promise<{
+    replaceVideoUpload(id: number, body: any, req: any, idempotencyKey?: string): Promise<{
         post: any;
         upload: {
             uploadId: string;
@@ -52,7 +54,7 @@ export declare class PostsController {
         uploadId: string;
     }, req: any): Promise<any>;
     getPost(id: number, req: any): Promise<any>;
-    create(body: any, image: Express.Multer.File, req: any): Promise<any>;
+    create(body: any, image: Express.Multer.File, req: any, idempotencyKey?: string): Promise<any>;
     update(id: number, body: any, image: Express.Multer.File, req: any): Promise<any>;
     delete(id: number, req: any): Promise<{
         id: string;
@@ -80,7 +82,7 @@ export declare class PostsController {
         }[];
         nextCursor: string;
     }>;
-    addComment(id: number, body: any, req: any): Promise<{
+    addComment(id: number, body: any, req: any, idempotencyKey?: string): Promise<{
         id: string;
         postId: string;
         author: {
@@ -95,6 +97,18 @@ export declare class PostsController {
         createdAt: Date;
     }>;
     report(id: number, body: any, req: any): Promise<{
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
         reported: boolean;
+    }>;
+    reportComment(postId: number, commentId: number, body: any, req: any): Promise<{
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
+        reported: boolean;
+    }>;
+    deleteComment(postId: number, commentId: number, req: any): Promise<{
+        id: string;
+        postId: string;
+        deleted: boolean;
     }>;
 }

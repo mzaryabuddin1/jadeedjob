@@ -214,6 +214,9 @@ let ChatService = class ChatService {
             .where('message.conversationId = :conversationId', {
             conversationId: conversation.id,
         })
+            .andWhere('message.moderationStatus = :moderationStatus', {
+            moderationStatus: 'visible',
+        })
             .orderBy('message.id', 'DESC')
             .take(take + 1);
         if (before && Number.isInteger(before) && before > 0) {
@@ -226,7 +229,10 @@ let ChatService = class ChatService {
         const hasMore = messages.length > take;
         const pageItems = (hasMore ? messages.slice(0, take) : messages).reverse();
         const total = await this.messageRepo.count({
-            where: { conversationId: conversation.id },
+            where: {
+                conversationId: conversation.id,
+                moderationStatus: 'visible',
+            },
         });
         return {
             data: await Promise.all(pageItems.map((message) => this.formatMessage(message, conversation))),
@@ -245,10 +251,13 @@ let ChatService = class ChatService {
         const conversation = await this.resolveConversation(reference);
         await this.assertCanMutate(conversation, senderId);
         const text = String(input.content ?? input.text ?? '').trim();
-        const attachments = input.attachments || [];
+        const attachments = await this.normalizeAttachments(conversation.id, senderId, input.attachments || []);
+        const mediaUrl = input.mediaUrl
+            ? await this.normalizeLegacyMediaUrl(conversation.id, senderId, input.mediaUrl)
+            : null;
         const type = input.messageType ||
-            (attachments.length || input.mediaUrl ? 'file' : 'text');
-        if (!text && !attachments.length && !input.mediaUrl) {
+            (attachments.length || mediaUrl ? 'file' : 'text');
+        if (!text && !attachments.length && !mediaUrl) {
             throw new common_1.BadRequestException('A message needs text or an attachment');
         }
         if (text.length > 2000) {
@@ -269,7 +278,7 @@ let ChatService = class ChatService {
             senderId,
             clientMessageId,
             content: text || null,
-            mediaUrl: input.mediaUrl || null,
+            mediaUrl,
             attachments: attachments.length ? attachments : null,
             messageType: type,
         }));
@@ -302,7 +311,10 @@ let ChatService = class ChatService {
             throw new common_1.ForbiddenException('You cannot update this chat');
         }
         const latest = await this.messageRepo.findOne({
-            where: { conversationId: conversation.id },
+            where: {
+                conversationId: conversation.id,
+                moderationStatus: 'visible',
+            },
             order: { id: 'DESC' },
         });
         let state = await this.readRepo.findOne({
@@ -326,6 +338,34 @@ let ChatService = class ChatService {
             conversationId: conversation.id,
             lastReadMessageId: state.lastReadMessageId,
             readAt: state.readAt,
+        };
+    }
+    async getReportableMessage(reference, messageId, userId) {
+        const conversation = await this.resolveConversation(reference);
+        if (!(await this.canAccess(conversation, userId))) {
+            throw new common_1.ForbiddenException('You cannot view this chat');
+        }
+        const message = await this.messageRepo.findOne({
+            where: { id: messageId, conversationId: conversation.id },
+            relations: ['sender'],
+        });
+        if (!message ||
+            (message.moderationStatus && message.moderationStatus !== 'visible')) {
+            throw new common_1.NotFoundException('Chat message not found');
+        }
+        return {
+            targetType: 'chat_message',
+            targetId: String(message.id),
+            targetOwnerUserId: message.senderId,
+            targetCompanyId: conversation.companyId || null,
+            snapshot: {
+                conversationId: conversation.id,
+                messageId: String(message.id),
+                senderId: String(message.senderId),
+                content: message.content,
+                attachments: message.attachments || [],
+                createdAt: message.createdAt,
+            },
         };
     }
     async getChatOptions(viewerId, profileType, profileId) {
@@ -435,7 +475,11 @@ let ChatService = class ChatService {
                 message: `The invitation is now ${invitation.status}.`,
                 data: {
                     chatId: invitation.conversationId,
+                    id: invitation.id,
                     invitationId: invitation.id,
+                    status: invitation.status,
+                    invitationStatus: invitation.status,
+                    viewerAction: null,
                     jobId: invitation.jobId,
                     applicationId: application?.id,
                 },
@@ -443,7 +487,9 @@ let ChatService = class ChatService {
             return {
                 invitation: {
                     id: invitation.id,
+                    invitationId: invitation.id,
                     status: invitation.status,
+                    viewerAction: this.invitationViewerAction(invitation, userId),
                     respondedAt: invitation.respondedAt,
                 },
                 chatId: invitation.conversationId,
@@ -498,8 +544,9 @@ let ChatService = class ChatService {
             const duplicate = await this.invitationRepo.findOne({
                 where: { jobId, inviteeUserId: profileId, status: 'pending' },
             });
-            if (duplicate)
-                return this.contextResponse(duplicate.conversationId, job, profileId, duplicate);
+            if (duplicate) {
+                return this.contextResponse(duplicate.conversationId, job, profileId, userId, duplicate);
+            }
             return this.conversationRepo.manager.transaction(async (manager) => {
                 const conversation = await manager.getRepository(chat_conversation_entity_1.ChatConversation).save(manager.getRepository(chat_conversation_entity_1.ChatConversation).create({
                     type: 'invitation',
@@ -530,12 +577,16 @@ let ChatService = class ChatService {
                     message: `You were invited to ${job.title}.`,
                     data: {
                         chatId: conversation.id,
+                        id: invitation.id,
                         invitationId: invitation.id,
+                        status: invitation.status,
+                        invitationStatus: invitation.status,
+                        viewerAction: 'respond',
                         jobId,
                         companyId: job.pageId,
                     },
                 });
-                return this.contextResponse(conversation.id, job, profileId, invitation);
+                return this.contextResponse(conversation.id, job, profileId, userId, invitation);
             });
         }
         if (input.action !== 'inquiry') {
@@ -549,8 +600,9 @@ let ChatService = class ChatService {
             throw new common_1.BadRequestException('Job does not match the selected profile');
         }
         const existing = await this.findContextConversation('inquiry', jobId, userId, job.createdBy);
-        if (existing)
-            return this.contextResponse(existing.id, job, job.createdBy);
+        if (existing) {
+            return this.contextResponse(existing.id, job, job.createdBy, userId);
+        }
         const conversation = await this.conversationRepo.manager.transaction(async (manager) => {
             const created = await manager.getRepository(chat_conversation_entity_1.ChatConversation).save(manager.getRepository(chat_conversation_entity_1.ChatConversation).create({
                 type: 'inquiry',
@@ -567,7 +619,7 @@ let ChatService = class ChatService {
             })));
             return created;
         });
-        return this.contextResponse(conversation.id, job, job.createdBy);
+        return this.contextResponse(conversation.id, job, job.createdBy, userId);
     }
     async acceptInvitationApplication(invitation, manager) {
         const job = await manager.getRepository(job_entity_1.Job).findOne({
@@ -755,7 +807,10 @@ let ChatService = class ChatService {
     async formatConversationSummary(conversation, userId) {
         const [lastMessage, state, invitation] = await Promise.all([
             this.messageRepo.findOne({
-                where: { conversationId: conversation.id },
+                where: {
+                    conversationId: conversation.id,
+                    moderationStatus: 'visible',
+                },
                 relations: ['sender'],
                 order: { id: 'DESC' },
             }),
@@ -773,6 +828,7 @@ let ChatService = class ChatService {
                 conversationId: conversation.id,
                 senderId: (0, typeorm_2.Not)(userId),
                 id: (0, typeorm_2.MoreThan)(state?.lastReadMessageId || 0),
+                moderationStatus: 'visible',
             },
         });
         const other = conversation.participants?.find((item) => item.userId !== userId)?.user;
@@ -812,7 +868,12 @@ let ChatService = class ChatService {
                 }
                 : null,
             invitation: invitation
-                ? { id: invitation.id, status: invitation.status }
+                ? {
+                    id: invitation.id,
+                    invitationId: invitation.id,
+                    status: invitation.status,
+                    viewerAction: this.invitationViewerAction(invitation, userId),
+                }
                 : null,
             lastMessage: lastMessage
                 ? await this.formatMessage(lastMessage, conversation)
@@ -844,7 +905,70 @@ let ChatService = class ChatService {
             readAt: message.readAt,
         };
     }
-    contextResponse(conversationId, job, participantUserId, invitation) {
+    async normalizeAttachments(conversationId, senderId, attachments) {
+        const normalized = [];
+        for (const attachment of attachments || []) {
+            const asset = attachment.assetId
+                ? await this.objectStorageService.requireOwnedAsset(attachment.assetId, senderId, 'chat-attachments')
+                : attachment.fileUrl
+                    ? await this.objectStorageService.findKnownAssetByUrl(attachment.fileUrl)
+                    : null;
+            if (asset) {
+                if (asset.ownerUserId !== senderId ||
+                    asset.purpose !== 'chat-attachments' ||
+                    String(asset.metadata?.conversationId || '') !== conversationId) {
+                    throw new common_1.BadRequestException('Stored attachment does not belong to this conversation');
+                }
+                if (attachment.contentType &&
+                    attachment.contentType !== asset.contentType) {
+                    throw new common_1.BadRequestException('Attachment metadata does not match');
+                }
+                normalized.push({
+                    assetId: asset.id,
+                    fileUrl: await this.objectStorageService.getUrl(asset),
+                    fileName: asset.originalName || attachment.fileName,
+                    contentType: asset.contentType,
+                    sizeBytes: Number(asset.sizeBytes),
+                });
+                continue;
+            }
+            if (!attachment.fileUrl ||
+                !(await this.isPersistedLegacyAttachment(conversationId, attachment.fileUrl))) {
+                throw new common_1.BadRequestException('Unknown chat attachment');
+            }
+            normalized.push({
+                fileUrl: attachment.fileUrl,
+                fileName: attachment.fileName,
+                contentType: attachment.contentType,
+                sizeBytes: attachment.sizeBytes,
+            });
+        }
+        return normalized;
+    }
+    async normalizeLegacyMediaUrl(conversationId, senderId, fileUrl) {
+        const asset = await this.objectStorageService.findKnownAssetByUrl(fileUrl);
+        if (asset) {
+            if (asset.ownerUserId !== senderId ||
+                asset.purpose !== 'chat-attachments' ||
+                String(asset.metadata?.conversationId || '') !== conversationId) {
+                throw new common_1.BadRequestException('Stored attachment does not belong to this conversation');
+            }
+            return this.objectStorageService.getUrl(asset);
+        }
+        if (await this.isPersistedLegacyAttachment(conversationId, fileUrl)) {
+            return fileUrl;
+        }
+        throw new common_1.BadRequestException('Unknown chat attachment');
+    }
+    async isPersistedLegacyAttachment(conversationId, fileUrl) {
+        const result = await this.messageRepo
+            .createQueryBuilder('message')
+            .where('message.conversationId = :conversationId', { conversationId })
+            .andWhere(`(message.mediaUrl = :fileUrl OR JSON_SEARCH(message.attachments, 'one', :fileUrl, NULL, '$[*].fileUrl') IS NOT NULL)`, { fileUrl })
+            .getOne();
+        return Boolean(result);
+    }
+    contextResponse(conversationId, job, participantUserId, viewerId, invitation) {
         return {
             chatId: conversationId,
             conversationId,
@@ -852,9 +976,44 @@ let ChatService = class ChatService {
             jobTitle: job.title,
             participantId: String(participantUserId),
             invitation: invitation
-                ? { id: invitation.id, status: invitation.status }
+                ? {
+                    id: invitation.id,
+                    invitationId: invitation.id,
+                    status: invitation.status,
+                    viewerAction: this.invitationViewerAction(invitation, viewerId),
+                }
                 : undefined,
         };
+    }
+    async invitationRealtimePayloads(invitationId) {
+        const invitation = await this.invitationRepo.findOne({
+            where: { id: invitationId },
+        });
+        if (!invitation)
+            return [];
+        return [invitation.inviterUserId, invitation.inviteeUserId].map((userId) => ({
+            userId,
+            conversationId: invitation.conversationId,
+            payload: {
+                chatId: invitation.conversationId,
+                conversationId: invitation.conversationId,
+                invitation: {
+                    id: invitation.id,
+                    invitationId: invitation.id,
+                    status: invitation.status,
+                    viewerAction: this.invitationViewerAction(invitation, userId),
+                },
+            },
+        }));
+    }
+    invitationViewerAction(invitation, viewerId) {
+        if (invitation.status !== 'pending')
+            return null;
+        if (invitation.inviteeUserId === viewerId)
+            return 'respond';
+        if (invitation.inviterUserId === viewerId)
+            return 'cancel';
+        return null;
     }
     userName(user) {
         return (user?.full_name ||

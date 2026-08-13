@@ -33,6 +33,9 @@ export type PostMediaStatus = 'published' | 'upload_pending' | 'failed';
   'deletedAt',
   'createdAt',
 ])
+@Index('IDX_community_posts_image_asset', ['imageAssetId'])
+@Index('IDX_community_posts_video_asset', ['videoAssetId'])
+@Index('IDX_community_posts_video_thumbnail_asset', ['videoThumbnailAssetId'])
 export class CommunityPost {
   @PrimaryGeneratedColumn()
   id: number;
@@ -66,6 +69,14 @@ export class CommunityPost {
   @Column({ nullable: true, length: 2000 })
   imageUrl: string | null;
 
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  imageAssetId: string | null;
+
   @Column({ nullable: true, length: 500 })
   imageStorageKey: string | null;
 
@@ -86,11 +97,27 @@ export class CommunityPost {
   @Column({ nullable: true, length: 2000 })
   videoUrl: string | null;
 
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  videoAssetId: string | null;
+
   @Column({ nullable: true, length: 500 })
   videoStorageKey: string | null;
 
   @Column({ nullable: true, length: 2000 })
   videoThumbnailUrl: string | null;
+
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  videoThumbnailAssetId: string | null;
 
   @Column({ nullable: true, length: 500 })
   videoThumbnailStorageKey: string | null;
@@ -131,6 +158,13 @@ export class CommunityPost {
 
   @Column({ type: 'datetime', nullable: true })
   deletedAt: Date | null;
+
+  @Column({
+    type: 'enum',
+    enum: ['visible', 'hidden', 'removed'],
+    default: 'visible',
+  })
+  moderationStatus: 'visible' | 'hidden' | 'removed';
 
   @CreateDateColumn()
   createdAt: Date;

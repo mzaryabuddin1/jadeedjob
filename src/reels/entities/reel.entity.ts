@@ -38,6 +38,7 @@ export type ReelPublisherType = 'user' | 'company';
   'status',
   'createdAt',
 ])
+@Index('IDX_reels_video_asset', ['videoAssetId'])
 export class Reel {
   @PrimaryGeneratedColumn()
   id: number;
@@ -115,6 +116,14 @@ export class Reel {
   @Column({ nullable: true, length: 2000 })
   videoUrl: string;
 
+  @Column({
+    nullable: true,
+    length: 36,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  videoAssetId: string;
+
   @Column({ nullable: true })
   storageKey: string;
 
@@ -150,6 +159,13 @@ export class Reel {
 
   @Column({ type: 'datetime', nullable: true })
   deletedAt: Date;
+
+  @Column({
+    type: 'enum',
+    enum: ['visible', 'hidden', 'removed'],
+    default: 'visible',
+  })
+  moderationStatus: 'visible' | 'hidden' | 'removed';
 
   @CreateDateColumn()
   createdAt: Date;

@@ -42,6 +42,7 @@ const push_module_1 = require("./push/push.module");
 const moderation_module_1 = require("./moderation/moderation.module");
 const account_deletion_module_1 = require("./users/account-deletion.module");
 const realtime_module_1 = require("./realtime/realtime.module");
+const legal_module_1 = require("./legal/legal.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -68,6 +69,7 @@ exports.AppModule = AppModule = __decorate([
             realtime_module_1.RealtimeModule,
             push_module_1.PushModule,
             moderation_module_1.ModerationModule,
+            legal_module_1.LegalModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             otp_module_1.OtpModule,

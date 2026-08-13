@@ -49,7 +49,8 @@ const createService = (overrides: Record<string, any> = {}) => {
         expiresAt: new Date(),
       })),
       deleteLocalFile: jest.fn(),
-      commitLocalUpload: jest.fn(),
+      commitUpload: jest.fn(),
+      remove: jest.fn(),
     },
     moderationService: {
       assertInteractionAllowed: jest.fn(),
@@ -57,6 +58,14 @@ const createService = (overrides: Record<string, any> = {}) => {
     },
     objectStorageService: {
       getUrl: jest.fn(async () => null),
+    },
+    idempotencyService: {
+      execute: jest.fn(
+        async (_userId, _scope, _key, _request, operation) => operation(),
+      ),
+    },
+    notificationsService: {
+      create: jest.fn(async () => ({})),
     },
     ...overrides,
   };
@@ -75,6 +84,8 @@ const createService = (overrides: Record<string, any> = {}) => {
     repos.storage as any,
     repos.moderationService as any,
     repos.objectStorageService as any,
+    repos.idempotencyService as any,
+    repos.notificationsService as any,
   );
 
   return { service, repos };

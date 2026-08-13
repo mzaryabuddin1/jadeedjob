@@ -24,14 +24,16 @@ const profile_follow_entity_1 = require("./entities/profile-follow.entity");
 const profile_format_util_1 = require("./profile-format.util");
 const moderation_service_1 = require("../moderation/moderation.service");
 const object_storage_service_1 = require("../storage/object-storage.service");
+const notifications_service_1 = require("../notifications/notifications.service");
 let ProfilesService = class ProfilesService {
-    constructor(followRepo, legacyFollowRepo, userRepo, pageRepo, moderationService, storageService) {
+    constructor(followRepo, legacyFollowRepo, userRepo, pageRepo, moderationService, storageService, notificationsService) {
         this.followRepo = followRepo;
         this.legacyFollowRepo = legacyFollowRepo;
         this.userRepo = userRepo;
         this.pageRepo = pageRepo;
         this.moderationService = moderationService;
         this.storageService = storageService;
+        this.notificationsService = notificationsService;
     }
     async searchProfiles(query, viewerId) {
         const profileType = this.parseProfileType(query.profileType);
@@ -58,8 +60,8 @@ let ProfilesService = class ProfilesService {
         if (type === 'user' && profileId === followerUserId) {
             throw new common_1.BadRequestException('You cannot follow yourself');
         }
-        await this.followRepo.manager.transaction(async (manager) => {
-            await manager
+        const inserted = await this.followRepo.manager.transaction(async (manager) => {
+            const result = await manager
                 .getRepository(profile_follow_entity_1.ProfileFollow)
                 .createQueryBuilder()
                 .insert()
@@ -77,7 +79,30 @@ let ProfilesService = class ProfilesService {
                     .orIgnore()
                     .execute();
             }
+            return this.wasInserted(result);
         });
+        if (inserted) {
+            const recipientId = type === 'user'
+                ? profileId
+                : (await this.pageRepo.findOne({
+                    where: { id: profileId },
+                    select: ['id', 'ownerId'],
+                }))?.ownerId;
+            if (recipientId && recipientId !== followerUserId) {
+                await this.notificationsService.create({
+                    userId: recipientId,
+                    type: 'profile_follow',
+                    title: 'New follower',
+                    message: 'Someone started following your profile.',
+                    data: {
+                        profileType: type,
+                        profileId: String(profileId),
+                        followerId: String(followerUserId),
+                    },
+                    dedupeKey: `profile_follow:${followerUserId}:${type}:${profileId}`,
+                });
+            }
+        }
         return this.followResponse(type, profileId, true);
     }
     async unfollow(profileType, profileId, followerUserId) {
@@ -172,6 +197,12 @@ let ProfilesService = class ProfilesService {
                 canManage: userId === viewerId,
             },
         };
+    }
+    wasInserted(result) {
+        if (typeof result.raw?.affectedRows === 'number') {
+            return result.raw.affectedRows > 0;
+        }
+        return Boolean(result.identifiers?.length);
     }
     async getCompanyProfile(companyId, viewerId) {
         const company = await this.pageRepo.findOne({
@@ -402,6 +433,7 @@ exports.ProfilesService = ProfilesService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         moderation_service_1.ModerationService,
-        object_storage_service_1.ObjectStorageService])
+        object_storage_service_1.ObjectStorageService,
+        notifications_service_1.NotificationsService])
 ], ProfilesService);
 //# sourceMappingURL=profiles.service.js.map

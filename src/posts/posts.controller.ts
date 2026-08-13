@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Patch,
@@ -36,6 +37,12 @@ import {
 } from './post-video-storage.service';
 import { PostsService } from './posts.service';
 import { Throttle } from '@nestjs/throttler';
+import { CommunityGuidelinesGuard } from 'src/legal/community-guidelines.guard';
+import { ModerationService } from 'src/moderation/moderation.service';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiOptionalIdempotencyKey } from 'src/idempotency/idempotency.decorators';
+import { ApiCommunityAcceptanceRequired } from 'src/legal/legal.decorators';
+import { ApiCreateModerationReport } from 'src/moderation/moderation.decorators';
 
 const publisherFields = {
   publisherType: Joi.string().valid('user', 'company').default('user'),
@@ -182,8 +189,13 @@ const videoInterceptor = FileInterceptor(POST_VIDEO_FILE_FIELD, {
 
 @UseGuards(JwtAuthGuard)
 @Controller('posts')
+@ApiTags('Community posts')
+@ApiBearerAuth()
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(
+    private readonly postsService: PostsService,
+    private readonly moderationService: ModerationService,
+  ) {}
 
   @Get()
   getFeed(
@@ -202,25 +214,38 @@ export class PostsController {
   }
 
   @Post('video-uploads')
+  @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @ApiOptionalIdempotencyKey()
+  @ApiCommunityAcceptanceRequired()
   createVideoUpload(
     @Body(new JoiValidationPipe(createVideoPostSchema)) body: any,
     @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.postsService.createVideoUpload(body, req.user.id);
+    return this.postsService.createVideoUpload(
+      body,
+      req.user.id,
+      idempotencyKey,
+    );
   }
 
   @Post(':id/video-uploads')
+  @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 10, ttl: 600_000 } })
+  @ApiOptionalIdempotencyKey()
+  @ApiCommunityAcceptanceRequired()
   replaceVideoUpload(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(replaceVideoSchema)) body: any,
     @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     return this.postsService.createVideoReplacement(
       id,
       body.media,
       req.user.id,
+      idempotencyKey,
     );
   }
 
@@ -238,6 +263,8 @@ export class PostsController {
   }
 
   @Post(':id/complete-video-upload')
+  @UseGuards(CommunityGuidelinesGuard)
+  @ApiCommunityAcceptanceRequired()
   completeVideoUpload(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(completeVideoUploadSchema))
@@ -257,14 +284,23 @@ export class PostsController {
   }
 
   @Post()
+  @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOptionalIdempotencyKey()
+  @ApiCommunityAcceptanceRequired()
   @UseInterceptors(imageInterceptor)
   create(
     @Body(new JoiValidationPipe(createPostSchema)) body: any,
     @UploadedFile() image: Express.Multer.File,
     @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.postsService.createPost(body, image, req.user.id);
+    return this.postsService.createPost(
+      body,
+      image,
+      req.user.id,
+      idempotencyKey,
+    );
   }
 
   @Patch(':id')
@@ -323,21 +359,63 @@ export class PostsController {
   }
 
   @Post(':id/comments')
+  @UseGuards(CommunityGuidelinesGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOptionalIdempotencyKey()
+  @ApiCommunityAcceptanceRequired()
   addComment(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(commentSchema)) body: any,
     @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.postsService.addComment(id, req.user.id, body.text);
+    return this.postsService.addComment(
+      id,
+      req.user.id,
+      body.text,
+      idempotencyKey,
+    );
   }
 
   @Post(':id/report')
   @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiCreateModerationReport('Report a visible Community Post')
   report(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(reportSchema)) body: any,
     @Req() req: any,
   ) {
-    return this.postsService.report(id, req.user.id, body.reason, body.details);
+    return this.moderationService.reportPost(id, req.user.id, body);
+  }
+
+  @Post(':postId/comments/:commentId/report')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiCreateModerationReport('Report a visible Community Post comment')
+  reportComment(
+    @Param('postId', ParseIntPipe) postId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Body(new JoiValidationPipe(reportSchema)) body: any,
+    @Req() req: any,
+  ) {
+    return this.moderationService.reportPostComment(
+      postId,
+      commentId,
+      req.user.id,
+      body,
+    );
+  }
+
+  @Delete(':postId/comments/:commentId')
+  deleteComment(
+    @Param('postId', ParseIntPipe) postId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Req() req: any,
+  ) {
+    return this.postsService.deleteComment(
+      postId,
+      commentId,
+      req.user.id,
+      req.user.systemRole === 'admin',
+    );
   }
 }

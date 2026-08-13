@@ -5,6 +5,7 @@ import { ReelCreatorFollow } from 'src/reels/entities/reel-creator-follow.entity
 import { ProfileFollow, ProfileType } from './entities/profile-follow.entity';
 import { ModerationService } from 'src/moderation/moderation.service';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 type ProfileSearchQuery = {
     profileType: ProfileType;
     q: string;
@@ -18,7 +19,8 @@ export declare class ProfilesService {
     private readonly pageRepo;
     private readonly moderationService;
     private readonly storageService;
-    constructor(followRepo: Repository<ProfileFollow>, legacyFollowRepo: Repository<ReelCreatorFollow>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, moderationService: ModerationService, storageService: ObjectStorageService);
+    private readonly notificationsService;
+    constructor(followRepo: Repository<ProfileFollow>, legacyFollowRepo: Repository<ReelCreatorFollow>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, moderationService: ModerationService, storageService: ObjectStorageService, notificationsService: NotificationsService);
     searchProfiles(query: ProfileSearchQuery, viewerId: number): Promise<{
         data: Record<string, any>[];
         total: number;
@@ -133,6 +135,7 @@ export declare class ProfilesService {
         following: boolean;
     }>;
     private getUserProfile;
+    private wasInserted;
     private getCompanyProfile;
     private searchUsers;
     private searchCompanies;

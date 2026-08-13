@@ -93,6 +93,24 @@ __decorate([
     __metadata("design:type", String)
 ], PostVideoUploadSession.prototype, "publicUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], PostVideoUploadSession.prototype, "uploadedAssetId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], PostVideoUploadSession.prototype, "thumbnailAssetId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'int', unsigned: true, nullable: true }),
     __metadata("design:type", Number)
 ], PostVideoUploadSession.prototype, "uploadedFileSizeBytes", void 0);
@@ -127,6 +145,8 @@ __decorate([
 exports.PostVideoUploadSession = PostVideoUploadSession = __decorate([
     (0, typeorm_1.Entity)('community_post_video_upload_sessions'),
     (0, typeorm_1.Index)('IDX_post_video_upload_id', ['uploadId'], { unique: true }),
-    (0, typeorm_1.Index)('IDX_post_video_upload_post_user', ['postId', 'userId'])
+    (0, typeorm_1.Index)('IDX_post_video_upload_post_user', ['postId', 'userId']),
+    (0, typeorm_1.Index)('IDX_post_video_upload_uploaded_asset', ['uploadedAssetId']),
+    (0, typeorm_1.Index)('IDX_post_video_upload_thumbnail_asset', ['thumbnailAssetId'])
 ], PostVideoUploadSession);
 //# sourceMappingURL=post-video-upload-session.entity.js.map

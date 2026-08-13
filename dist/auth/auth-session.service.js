@@ -100,6 +100,9 @@ let AuthSessionService = class AuthSessionService {
                 'isBanned',
                 'tokenVersion',
                 'systemRole',
+                'suspendedAt',
+                'suspendedUntil',
+                'suspensionReason',
                 'deletionScheduledAt',
                 'deletedAt',
             ],
@@ -252,6 +255,13 @@ let AuthSessionService = class AuthSessionService {
         }
         if (user.isBanned) {
             throw new api_exception_1.ApiException(common_1.HttpStatus.FORBIDDEN, 'AUTH_ACCOUNT_BANNED', 'Your account is blocked');
+        }
+        if (user.suspendedAt &&
+            (!user.suspendedUntil || user.suspendedUntil > new Date())) {
+            throw new api_exception_1.ApiException(common_1.HttpStatus.FORBIDDEN, 'AUTH_ACCOUNT_SUSPENDED', 'Your account is temporarily suspended', {
+                suspendedUntil: user.suspendedUntil || null,
+                reason: user.suspensionReason || null,
+            });
         }
         if (user.deletedAt) {
             throw new api_exception_1.ApiException(common_1.HttpStatus.UNAUTHORIZED, 'AUTH_ACCOUNT_DELETED', 'This account is no longer available');

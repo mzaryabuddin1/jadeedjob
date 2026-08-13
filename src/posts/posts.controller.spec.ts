@@ -5,6 +5,9 @@ import { AuthSessionService } from 'src/auth/auth-session.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
+import { CommunityGuidelinesGuard } from 'src/legal/community-guidelines.guard';
+import { LegalService } from 'src/legal/legal.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 
 describe('PostsController', () => {
   let app: INestApplication;
@@ -37,6 +40,10 @@ describe('PostsController', () => {
       return { id: 7 };
     }),
   };
+  const moderationService = {
+    reportPost: jest.fn(async () => response),
+    reportPostComment: jest.fn(async () => response),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -56,7 +63,16 @@ describe('PostsController', () => {
       controllers: [PostsController],
       providers: [
         JwtAuthGuard,
+        {
+          provide: CommunityGuidelinesGuard,
+          useValue: { canActivate: jest.fn(() => true) },
+        },
+        {
+          provide: LegalService,
+          useValue: { assertCommunityAccepted: jest.fn() },
+        },
         { provide: PostsService, useValue: postsService },
+        { provide: ModerationService, useValue: moderationService },
         { provide: AuthSessionService, useValue: authSessionService },
       ],
     }).compile();
@@ -66,7 +82,7 @@ describe('PostsController', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    await app?.close();
   });
 
   it('requires authentication and validates paired publisher filters', async () => {
@@ -132,6 +148,7 @@ describe('PostsController', () => {
         originalname: 'photo.png',
       }),
       7,
+      undefined,
     );
   });
 
@@ -179,6 +196,7 @@ describe('PostsController', () => {
         media: expect.objectContaining({ durationSeconds: 7200 }),
       }),
       7,
+      undefined,
     );
 
     const uploadId = '550e8400-e29b-41d4-a716-446655440000';
@@ -233,7 +251,12 @@ describe('PostsController', () => {
       .set('Authorization', 'Bearer valid-token')
       .expect(400);
 
-    expect(postsService.addComment).toHaveBeenCalledWith(1, 7, 'Useful update');
+    expect(postsService.addComment).toHaveBeenCalledWith(
+      1,
+      7,
+      'Useful update',
+      undefined,
+    );
   });
 
   it('requires a valid report reason', async () => {
@@ -248,11 +271,10 @@ describe('PostsController', () => {
       .send({ reason: 'spam', details: 'Repeated advertising' })
       .expect(201);
 
-    expect(postsService.report).toHaveBeenCalledWith(
+    expect(moderationService.reportPost).toHaveBeenCalledWith(
       1,
       7,
-      'spam',
-      'Repeated advertising',
+      { reason: 'spam', details: 'Repeated advertising' },
     );
   });
 });

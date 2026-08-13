@@ -10,7 +10,7 @@ export declare class ProfilesController {
         totalPages: number;
         currentPage: number;
     }>;
-    getBlocked(req: any, page?: number, limit?: number): Promise<{
+    getBlocked(req: any, query: any): Promise<{
         data: ({
             blockedAt: Date;
             type: "user";
@@ -138,6 +138,11 @@ export declare class ProfilesController {
             isSelf: boolean;
             canManage: boolean;
         };
+    }>;
+    report(profileType: string, profileId: number, body: any, req: any): Promise<{
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
+        reported: boolean;
     }>;
     follow(profileType: string, profileId: number, req: any): Promise<{
         profileType: import("./entities/profile-follow.entity").ProfileType;

@@ -3,9 +3,11 @@ export declare class SendMessageDto {
     content?: string;
     mediaUrl?: string;
     attachments?: Array<{
-        fileUrl: string;
+        assetId?: string;
+        fileUrl?: string;
         fileName?: string;
         contentType?: string;
+        sizeBytes?: number;
     }>;
     messageType: 'text' | 'image' | 'video' | 'audio' | 'file';
 }

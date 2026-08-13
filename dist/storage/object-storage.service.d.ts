@@ -18,10 +18,14 @@ export declare class ObjectStorageService implements OnModuleInit {
     onModuleInit(): void;
     store(input: StoreInput): Promise<StoredAsset>;
     getUrl(assetOrId: StoredAsset | string, expiresIn?: number): Promise<string>;
+    getAsset(assetId: string): Promise<StoredAsset>;
+    requireOwnedAsset(assetId: string, ownerUserId: number, purpose?: string): Promise<StoredAsset>;
+    findKnownAssetByUrl(value: string): Promise<StoredAsset>;
     remove(assetOrId: StoredAsset | string): Promise<void>;
-    private provider;
+    getProvider(): 'local' | 's3';
     private getBuffer;
     private detectContentType;
     private safeExtension;
+    private normalizeContentType;
 }
 export {};

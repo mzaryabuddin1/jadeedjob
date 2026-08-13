@@ -18,6 +18,8 @@ export declare class PostVideoUploadSession {
     uploadedFileName: string | null;
     localFilePath: string | null;
     publicUrl: string | null;
+    uploadedAssetId: string | null;
+    thumbnailAssetId: string | null;
     uploadedFileSizeBytes: number | null;
     uploadedDurationSeconds: number | null;
     uploadedContentType: string | null;

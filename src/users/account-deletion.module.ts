@@ -10,6 +10,7 @@ import { TwilioModule } from 'src/twilio/twilio.module';
 import {
   AccountDeletionController,
   AccountRecoveryController,
+  PublicAccountDeletionController,
 } from './account-deletion.controller';
 import { AccountDeletionService } from './account-deletion.service';
 import { AccountDeletionRequest } from './entities/account-deletion-request.entity';
@@ -31,7 +32,11 @@ import { UsersModule } from './users.module';
     TwilioModule,
     UsersModule,
   ],
-  controllers: [AccountDeletionController, AccountRecoveryController],
+  controllers: [
+    AccountDeletionController,
+    AccountRecoveryController,
+    PublicAccountDeletionController,
+  ],
   providers: [AccountDeletionService],
 })
 export class AccountDeletionModule {}

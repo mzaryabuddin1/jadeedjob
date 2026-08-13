@@ -39,6 +39,7 @@ import { PushModule } from './push/push.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { AccountDeletionModule } from './users/account-deletion.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { LegalModule } from './legal/legal.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     RealtimeModule,
     PushModule,
     ModerationModule,
+    LegalModule,
     // Application Modules
     AuthModule,
     UsersModule,

@@ -6,6 +6,7 @@ import { Request } from 'express';
 import { Response } from 'express';
 import { AuthSessionService } from './auth-session.service';
 import { SocialAuthService } from './social-auth.service';
+import { LegalService } from 'src/legal/legal.service';
 export declare class AuthController {
     private readonly authService;
     private readonly otpService;
@@ -13,7 +14,8 @@ export declare class AuthController {
     private readonly usersService;
     private readonly authSessionService;
     private readonly socialAuthService;
-    constructor(authService: AuthService, otpService: OtpService, twilioService: TwilioService, usersService: UsersService, authSessionService: AuthSessionService, socialAuthService: SocialAuthService);
+    private readonly legalService;
+    constructor(authService: AuthService, otpService: OtpService, twilioService: TwilioService, usersService: UsersService, authSessionService: AuthSessionService, socialAuthService: SocialAuthService, legalService: LegalService);
     private deviceFrom;
     private sessionResponse;
     private deliverOtp;

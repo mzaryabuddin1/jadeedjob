@@ -10,24 +10,16 @@ exports.FilesModule = void 0;
 const common_1 = require("@nestjs/common");
 const files_service_1 = require("./files.service");
 const platform_express_1 = require("@nestjs/platform-express");
-const multer_1 = require("multer");
-const path_1 = require("path");
 const files_controller_1 = require("./files.controller");
+const storage_module_1 = require("../storage/storage.module");
 let FilesModule = class FilesModule {
 };
 exports.FilesModule = FilesModule;
 exports.FilesModule = FilesModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            platform_express_1.MulterModule.register({
-                storage: (0, multer_1.diskStorage)({
-                    destination: './uploads',
-                    filename: (req, file, callback) => {
-                        const uniqueName = `${Date.now()}${(0, path_1.extname)(file.originalname)}`;
-                        callback(null, uniqueName);
-                    },
-                }),
-            }),
+            platform_express_1.MulterModule.register({}),
+            storage_module_1.StorageModule,
         ],
         controllers: [files_controller_1.FilesController],
         providers: [files_service_1.FilesService],

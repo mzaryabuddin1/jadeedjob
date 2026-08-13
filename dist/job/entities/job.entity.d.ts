@@ -37,6 +37,7 @@ export declare class Job {
     postingMode: 'individual' | 'company';
     status: 'draft' | 'active' | 'closed';
     isActive: boolean;
+    moderationStatus: 'visible' | 'hidden' | 'removed';
     createdAt: Date;
     updatedAt: Date;
     createdBy: number;

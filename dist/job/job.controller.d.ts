@@ -1,8 +1,10 @@
 import { JobService } from './job.service';
+import { ModerationService } from 'src/moderation/moderation.service';
 export declare class JobController {
     private readonly jobService;
-    constructor(jobService: JobService);
-    createJob(body: any, req: any): Promise<{
+    private readonly moderationService;
+    constructor(jobService: JobService, moderationService: ModerationService);
+    createJob(body: any, req: any, idempotencyKey?: string): Promise<{
         status: "active" | "draft" | "closed";
         applicationsCount: number;
         companyId: number;
@@ -67,6 +69,7 @@ export declare class JobController {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -147,6 +150,7 @@ export declare class JobController {
             contactPhone: string;
             postingMode: "individual" | "company";
             isActive: boolean;
+            moderationStatus: "visible" | "hidden" | "removed";
             createdAt: Date;
             updatedAt: Date;
             createdBy: number;
@@ -224,6 +228,7 @@ export declare class JobController {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -231,6 +236,11 @@ export declare class JobController {
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
         branchId?: number;
+    }>;
+    reportJob(jobId: number, body: any, req: any): Promise<{
+        reportId: string;
+        status: import("../moderation/entities/moderation-report.entity").ModerationReportStatus;
+        reported: boolean;
     }>;
     patchJob(id: number, body: any, req: any): Promise<{
         status: "active" | "draft" | "closed";
@@ -297,6 +307,7 @@ export declare class JobController {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -370,6 +381,7 @@ export declare class JobController {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;
@@ -443,6 +455,7 @@ export declare class JobController {
         contactPhone: string;
         postingMode: "individual" | "company";
         isActive: boolean;
+        moderationStatus: "visible" | "hidden" | "removed";
         createdAt: Date;
         updatedAt: Date;
         createdBy: number;

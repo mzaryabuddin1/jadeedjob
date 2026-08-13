@@ -27,6 +27,10 @@ const jwt_auth_guard_1 = require("./jwt-auth.guard");
 const auth_session_service_1 = require("./auth-session.service");
 const social_auth_service_1 = require("./social-auth.service");
 const throttler_1 = require("@nestjs/throttler");
+const legal_service_1 = require("../legal/legal.service");
+const swagger_1 = require("@nestjs/swagger");
+const register_send_otp_dto_1 = require("./dto/register-send-otp.dto");
+const legal_decorators_1 = require("../legal/legal.decorators");
 const relationIdSchema = joi_1.default.alternatives().try(joi_1.default.number().integer().positive(), joi_1.default.string().pattern(/^\d+$/));
 const optionalString = () => joi_1.default.string().allow('', null).optional();
 const passwordSchema = joi_1.default.string()
@@ -49,14 +53,29 @@ const sessionDeviceFields = {
     appVersion: joi_1.default.string().trim().max(40).allow('', null).optional(),
     locale: joi_1.default.string().trim().max(20).allow('', null).optional(),
 };
+const legalAcceptanceFields = {
+    legalAcceptances: joi_1.default.array()
+        .items(joi_1.default.object({
+        documentType: joi_1.default.string()
+            .valid('terms', 'privacy', 'community_guidelines')
+            .required(),
+        version: joi_1.default.string().trim().min(1).max(80).required(),
+    }))
+        .max(3)
+        .optional(),
+    clientPlatform: joi_1.default.string()
+        .valid('ios', 'android', 'web', 'unknown')
+        .optional(),
+};
 let AuthController = class AuthController {
-    constructor(authService, otpService, twilioService, usersService, authSessionService, socialAuthService) {
+    constructor(authService, otpService, twilioService, usersService, authSessionService, socialAuthService, legalService) {
         this.authService = authService;
         this.otpService = otpService;
         this.twilioService = twilioService;
         this.usersService = usersService;
         this.authSessionService = authSessionService;
         this.socialAuthService = socialAuthService;
+        this.legalService = legalService;
     }
     deviceFrom(body) {
         return {
@@ -89,7 +108,12 @@ let AuthController = class AuthController {
             if (process.env.NODE_ENV === 'production') {
                 throw error;
             }
-            console.warn(`Skipping OTP SMS delivery in dev: ${error.message}`);
+            console.warn('Skipping OTP SMS delivery in development', {
+                purpose,
+                errorCode: error?.code ||
+                    error?.name ||
+                    'SMS_DELIVERY_FAILED',
+            });
         }
     }
     async sendOtp(body) {
@@ -105,6 +129,7 @@ let AuthController = class AuthController {
             throw new common_1.BadRequestException('languageId must be a valid ID');
         }
         await this.authService.validateRegistrationRelations(countryId, languageId);
+        await this.legalService.validateRegistrationAcceptances(body.legalAcceptances);
         const countryDisplay = typeof body.country === 'string' && !isRelationIdLike(body.country)
             ? body.country
             : undefined;
@@ -123,11 +148,15 @@ let AuthController = class AuthController {
         delete registrationData.languageId;
         delete registrationData.photoUri;
         delete registrationData.password;
+        delete registrationData.legalAcceptances;
+        delete registrationData.clientPlatform;
         const { otp } = await this.otpService.createOtp({
             purpose: 'register',
             target: body.phone,
             metadata: {
                 registrationData,
+                legalAcceptances: body.legalAcceptances || [],
+                legalClientPlatform: body.clientPlatform || 'unknown',
             },
         });
         await this.deliverOtp(body.phone, otp, 'registration');
@@ -146,6 +175,7 @@ let AuthController = class AuthController {
             phoneVerifiedAt: new Date(),
             isVerified: false,
         }));
+        await this.legalService.recordRegistrationAcceptances(user.id, entry.metadata?.legalAcceptances, entry.metadata?.legalClientPlatform || 'unknown');
         if (fcmToken) {
             await this.authService.attachFcmToken(user.id, fcmToken, {
                 installationId: body.installationId,
@@ -344,6 +374,9 @@ exports.AuthController = AuthController;
 __decorate([
     (0, common_1.Post)('register/send-otp'),
     (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 300_000 } }),
+    (0, swagger_1.ApiOperation)({ summary: 'Start phone registration with optional current legal acceptances' }),
+    (0, swagger_1.ApiBody)({ type: register_send_otp_dto_1.RegisterSendOtpDto }),
+    (0, legal_decorators_1.ApiRegistrationAcceptanceRequired)(),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         firstName: joi_1.default.string().required(),
         lastName: optionalString(),
@@ -361,6 +394,7 @@ __decorate([
         city: optionalString(),
         latitude: joi_1.default.number().min(-90).max(90).optional(),
         longitude: joi_1.default.number().min(-180).max(180).optional(),
+        ...legalAcceptanceFields,
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -560,11 +594,13 @@ __decorate([
 ], AuthController.prototype, "verifySocialPhoneOtp", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
+    (0, swagger_1.ApiTags)('Authentication'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,
         otp_service_1.OtpService,
         twilio_service_1.TwilioService,
         users_service_1.UsersService,
         auth_session_service_1.AuthSessionService,
-        social_auth_service_1.SocialAuthService])
+        social_auth_service_1.SocialAuthService,
+        legal_service_1.LegalService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

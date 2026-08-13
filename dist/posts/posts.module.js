@@ -23,6 +23,7 @@ const post_storage_service_1 = require("./post-storage.service");
 const post_video_storage_service_1 = require("./post-video-storage.service");
 const posts_controller_1 = require("./posts.controller");
 const posts_service_1 = require("./posts.service");
+const notifications_module_1 = require("../notifications/notifications.module");
 let PostsModule = class PostsModule {
 };
 exports.PostsModule = PostsModule;
@@ -41,6 +42,7 @@ exports.PostsModule = PostsModule = __decorate([
                 user_entity_1.User,
             ]),
             pages_module_1.PagesModule,
+            notifications_module_1.NotificationsModule,
         ],
         controllers: [posts_controller_1.PostsController],
         providers: [posts_service_1.PostsService, post_storage_service_1.PostStorageService, post_video_storage_service_1.PostVideoStorageService],

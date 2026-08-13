@@ -7,5 +7,9 @@ export declare class PostComment {
     userId: number;
     user: User;
     text: string;
+    moderationStatus: 'visible' | 'hidden' | 'removed';
+    deletedAt: Date | null;
+    deletedByUserId: number | null;
+    deletionReason: string | null;
     createdAt: Date;
 }

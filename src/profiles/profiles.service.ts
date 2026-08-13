@@ -16,6 +16,7 @@ import {
 } from './profile-format.util';
 import { ModerationService } from 'src/moderation/moderation.service';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 type ProfileSearchQuery = {
   profileType: ProfileType;
@@ -37,6 +38,7 @@ export class ProfilesService {
     private readonly pageRepo: Repository<CompanyPage>,
     private readonly moderationService: ModerationService,
     private readonly storageService: ObjectStorageService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async searchProfiles(query: ProfileSearchQuery, viewerId: number) {
@@ -79,8 +81,8 @@ export class ProfilesService {
       throw new BadRequestException('You cannot follow yourself');
     }
 
-    await this.followRepo.manager.transaction(async (manager) => {
-      await manager
+    const inserted = await this.followRepo.manager.transaction(async (manager) => {
+      const result = await manager
         .getRepository(ProfileFollow)
         .createQueryBuilder()
         .insert()
@@ -99,7 +101,32 @@ export class ProfilesService {
           .orIgnore()
           .execute();
       }
+      return this.wasInserted(result);
     });
+
+    if (inserted) {
+      const recipientId =
+        type === 'user'
+          ? profileId
+          : (await this.pageRepo.findOne({
+              where: { id: profileId },
+              select: ['id', 'ownerId'],
+            }))?.ownerId;
+      if (recipientId && recipientId !== followerUserId) {
+        await this.notificationsService.create({
+          userId: recipientId,
+          type: 'profile_follow',
+          title: 'New follower',
+          message: 'Someone started following your profile.',
+          data: {
+            profileType: type,
+            profileId: String(profileId),
+            followerId: String(followerUserId),
+          },
+          dedupeKey: `profile_follow:${followerUserId}:${type}:${profileId}`,
+        });
+      }
+    }
 
     return this.followResponse(type, profileId, true);
   }
@@ -212,6 +239,13 @@ export class ProfilesService {
         canManage: userId === viewerId,
       },
     };
+  }
+
+  private wasInserted(result: { raw?: any; identifiers?: any[] }) {
+    if (typeof result.raw?.affectedRows === 'number') {
+      return result.raw.affectedRows > 0;
+    }
+    return Boolean(result.identifiers?.length);
   }
 
   private async getCompanyProfile(companyId: number, viewerId: number) {

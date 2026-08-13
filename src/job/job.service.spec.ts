@@ -34,6 +34,11 @@ const createService = (page: Record<string, any> | null) => {
       blockedTargets: jest.fn(async () => ({ userIds: [], companyIds: [] })),
       isInteractionBlocked: jest.fn(async () => false),
     } as any,
+    {
+      execute: jest.fn(
+        async (_userId, _scope, _key, _request, operation) => operation(),
+      ),
+    } as any,
   );
 
   return { service, pageRepo, queryBuilder };

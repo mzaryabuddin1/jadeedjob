@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { createHash } from 'crypto';
 import { Notification } from './entities/notification.entity';
 import { User } from 'src/users/entities/user.entity';
 import {
@@ -18,6 +19,7 @@ type CreateNotificationInput = {
   title: string;
   message: string;
   data?: Record<string, any>;
+  dedupeKey?: string;
 };
 
 @Injectable()
@@ -40,33 +42,70 @@ export class NotificationsService {
       message: notification.message,
       receivedAt: notification.createdAt,
       unread: !notification.readAt,
-      data: notification.data || {},
+      data: this.normalizeData(notification.type, notification.data || {}),
     };
   }
 
   async create(input: CreateNotificationInput) {
-    const notification = await this.notificationRepo.save(
-      this.notificationRepo.create({
-        ...input,
-        data: input.data || {},
-      }),
-    );
+    const data = this.normalizeData(input.type, input.data || {});
+    const dedupeKey = this.normalizeDedupeKey(input.dedupeKey);
+    let notification: Notification;
+    let inserted = true;
 
-    await this.pushService
-      .sendToUser(
-        input.userId,
-        this.categoryForType(input.type),
-        input.title,
-        input.message,
-        input.data || {},
-      )
-      .catch((error) =>
-        console.error('Push delivery failed', {
+    if (dedupeKey) {
+      const result = await this.notificationRepo
+        .createQueryBuilder()
+        .insert()
+        .values({
           userId: input.userId,
           type: input.type,
-          error: (error as Error).message,
+          title: input.title,
+          message: input.message,
+          data,
+          dedupeKey,
+        })
+        .orIgnore()
+        .execute();
+      inserted = this.wasInserted(result);
+      notification = inserted
+        ? await this.notificationRepo.findOne({
+            where: { id: Number(result.identifiers?.[0]?.id) },
+          })
+        : await this.notificationRepo.findOne({ where: { dedupeKey } });
+    } else {
+      notification = await this.notificationRepo.save(
+        this.notificationRepo.create({
+          ...input,
+          data,
+          dedupeKey: null,
         }),
       );
+    }
+
+    if (!notification) {
+      throw new Error('Failed to persist notification');
+    }
+
+    if (inserted) {
+      await this.pushService
+        .sendToUser(
+          input.userId,
+          this.categoryForType(input.type),
+          input.title,
+          input.message,
+          data,
+        )
+        .catch((error) =>
+          console.error('Push delivery failed', {
+            userId: input.userId,
+            type: input.type,
+            errorCode:
+              (error as { code?: string })?.code ||
+              (error as Error)?.name ||
+              'PUSH_DELIVERY_FAILED',
+          }),
+        );
+    }
 
     return this.format(notification);
   }
@@ -74,30 +113,7 @@ export class NotificationsService {
   async createMany(inputs: CreateNotificationInput[]) {
     if (!inputs.length) return [];
 
-    const notifications = await this.notificationRepo.save(
-      inputs.map((input) =>
-        this.notificationRepo.create({
-          ...input,
-          data: input.data || {},
-        }),
-      ),
-    );
-
-    await Promise.all(
-      inputs.map((input) =>
-        this.pushService
-          .sendToUser(
-            input.userId,
-            this.categoryForType(input.type),
-            input.title,
-            input.message,
-            input.data || {},
-          )
-          .catch(() => undefined),
-      ),
-    );
-
-    return notifications.map((notification) => this.format(notification));
+    return Promise.all(inputs.map((input) => this.create(input)));
   }
 
   async createForFilterSubscribers(
@@ -125,6 +141,7 @@ export class NotificationsService {
         title,
         message,
         data,
+        dedupeKey: `job_match:${String(data.jobId || '')}:user:${user.id}`,
       }));
 
     return this.createMany(notifications);
@@ -193,5 +210,33 @@ export class NotificationsService {
     if (type.includes('reel') || type.includes('video')) return 'videos';
     if (type.includes('security') || type.includes('password')) return 'security';
     return 'community';
+  }
+
+  private normalizeData(type: string, data: Record<string, any>) {
+    return Object.entries({ ...data, schemaVersion: '1', type }).reduce<
+      Record<string, any>
+    >((result, [key, value]) => {
+      if (value === undefined) return result;
+      if (value !== null && (key === 'id' || key.endsWith('Id'))) {
+        result[key] = String(value);
+      } else {
+        result[key] = value;
+      }
+      return result;
+    }, {});
+  }
+
+  private normalizeDedupeKey(value?: string) {
+    const key = String(value || '').trim();
+    if (!key) return null;
+    if (key.length <= 255) return key;
+    return `sha256:${createHash('sha256').update(key).digest('hex')}`;
+  }
+
+  private wasInserted(result: { raw?: any; identifiers?: any[] }) {
+    if (typeof result.raw?.affectedRows === 'number') {
+      return result.raw.affectedRows > 0;
+    }
+    return Boolean(result.identifiers?.length);
   }
 }

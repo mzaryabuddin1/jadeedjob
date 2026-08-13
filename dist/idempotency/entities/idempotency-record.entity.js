@@ -46,11 +46,23 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: ['processing', 'completed'],
+        enum: ['processing', 'completed', 'failed'],
         default: 'processing',
     }),
     __metadata("design:type", String)
 ], IdempotencyRecord.prototype, "state", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 36 }),
+    __metadata("design:type", String)
+], IdempotencyRecord.prototype, "leaseId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], IdempotencyRecord.prototype, "leaseExpiresAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', unsigned: true, default: 1 }),
+    __metadata("design:type", Number)
+], IdempotencyRecord.prototype, "attemptCount", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'int', nullable: true }),
     __metadata("design:type", Number)
@@ -59,6 +71,18 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'json', nullable: true }),
     __metadata("design:type", Object)
 ], IdempotencyRecord.prototype, "responseBody", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'json', nullable: true }),
+    __metadata("design:type", Object)
+], IdempotencyRecord.prototype, "responseHeaders", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], IdempotencyRecord.prototype, "completedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], IdempotencyRecord.prototype, "lastErrorCode", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'datetime' }),
     __metadata("design:type", Date)
@@ -74,6 +98,7 @@ __decorate([
 exports.IdempotencyRecord = IdempotencyRecord = __decorate([
     (0, typeorm_1.Entity)('idempotency_records'),
     (0, typeorm_1.Unique)('UQ_idempotency_user_scope_key', ['userId', 'scope', 'requestKey']),
-    (0, typeorm_1.Index)('IDX_idempotency_expiry', ['expiresAt'])
+    (0, typeorm_1.Index)('IDX_idempotency_expiry', ['expiresAt']),
+    (0, typeorm_1.Index)('IDX_idempotency_state_lease', ['state', 'leaseExpiresAt'])
 ], IdempotencyRecord);
 //# sourceMappingURL=idempotency-record.entity.js.map

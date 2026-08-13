@@ -17,6 +17,7 @@ const profiles_controller_1 = require("./profiles.controller");
 const profiles_service_1 = require("./profiles.service");
 const pages_module_1 = require("../pages/pages.module");
 const profile_publisher_options_controller_1 = require("./profile-publisher-options.controller");
+const notifications_module_1 = require("../notifications/notifications.module");
 let ProfilesModule = class ProfilesModule {
 };
 exports.ProfilesModule = ProfilesModule;
@@ -24,6 +25,7 @@ exports.ProfilesModule = ProfilesModule = __decorate([
     (0, common_1.Module)({
         imports: [
             pages_module_1.PagesModule,
+            notifications_module_1.NotificationsModule,
             typeorm_1.TypeOrmModule.forFeature([
                 profile_follow_entity_1.ProfileFollow,
                 reel_creator_follow_entity_1.ReelCreatorFollow,

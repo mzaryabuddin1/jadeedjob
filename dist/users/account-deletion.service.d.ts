@@ -26,7 +26,6 @@ export declare class AccountDeletionService {
     private readonly pushService;
     private readonly storageService;
     private readonly usersService;
-    private finalizerRunning;
     constructor(userRepo: Repository<User>, deletionRepo: Repository<AccountDeletionRequest>, companyRepo: Repository<CompanyPage>, sessionRepo: Repository<AuthSession>, followRepo: Repository<ProfileFollow>, blockRepo: Repository<ProfileBlock>, assetRepo: Repository<StoredAsset>, otpService: OtpService, twilioService: TwilioService, authSessionService: AuthSessionService, pushService: PushService, storageService: ObjectStorageService, usersService: UsersService);
     sendDeletionOtp(userId: number): Promise<{
         message: string;
@@ -36,7 +35,20 @@ export declare class AccountDeletionService {
         otp?: undefined;
     }>;
     confirmDeletion(userId: number, otp: string): Promise<{
+        status: "scheduled";
         scheduledDeletionAt: Date;
+    }>;
+    sendPublicDeletionOtp(phone: string): Promise<{
+        message: string;
+    }>;
+    confirmPublicDeletion(phone: string, otp: string): Promise<{
+        status: "scheduled";
+        scheduledDeletionAt: Date;
+    } | {
+        status: "blocked";
+        code: string;
+        message: any;
+        details: any;
     }>;
     sendRecoveryOtp(phone: string): Promise<{
         message: string;
@@ -49,5 +61,11 @@ export declare class AccountDeletionService {
     finalizeScheduledAccounts(): Promise<void>;
     private finalizeOne;
     private requireUser;
+    private scheduleDeletion;
+    private activeDeletionRequest;
+    private scheduledResponse;
+    private publicDeletionOtpInvalid;
+    private claimDeletion;
+    private assetMustBeRetained;
     private deliverOtp;
 }

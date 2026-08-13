@@ -58,6 +58,15 @@ __decorate([
     __metadata("design:type", String)
 ], CommunityPost.prototype, "imageUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "imageAssetId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true, length: 500 }),
     __metadata("design:type", String)
 ], CommunityPost.prototype, "imageStorageKey", void 0);
@@ -82,6 +91,15 @@ __decorate([
     __metadata("design:type", String)
 ], CommunityPost.prototype, "videoUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoAssetId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true, length: 500 }),
     __metadata("design:type", String)
 ], CommunityPost.prototype, "videoStorageKey", void 0);
@@ -89,6 +107,15 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true, length: 2000 }),
     __metadata("design:type", String)
 ], CommunityPost.prototype, "videoThumbnailUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        nullable: true,
+        length: 36,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+    }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "videoThumbnailAssetId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true, length: 500 }),
     __metadata("design:type", String)
@@ -142,6 +169,14 @@ __decorate([
     __metadata("design:type", Date)
 ], CommunityPost.prototype, "deletedAt", void 0);
 __decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: ['visible', 'hidden', 'removed'],
+        default: 'visible',
+    }),
+    __metadata("design:type", String)
+], CommunityPost.prototype, "moderationStatus", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], CommunityPost.prototype, "createdAt", void 0);
@@ -166,6 +201,9 @@ exports.CommunityPost = CommunityPost = __decorate([
         'mediaStatus',
         'deletedAt',
         'createdAt',
-    ])
+    ]),
+    (0, typeorm_1.Index)('IDX_community_posts_image_asset', ['imageAssetId']),
+    (0, typeorm_1.Index)('IDX_community_posts_video_asset', ['videoAssetId']),
+    (0, typeorm_1.Index)('IDX_community_posts_video_thumbnail_asset', ['videoThumbnailAssetId'])
 ], CommunityPost);
 //# sourceMappingURL=community-post.entity.js.map

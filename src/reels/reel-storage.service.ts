@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
-import { rename, unlink } from 'fs/promises';
+import { unlink } from 'fs/promises';
 import { extname, join } from 'path';
+import { ObjectStorageService } from 'src/storage/object-storage.service';
 import { Reel } from './entities/reel.entity';
 import { ReelUploadSession } from './entities/reel-upload-session.entity';
 
@@ -19,7 +20,14 @@ const ALLOWED_REEL_MIME_TYPES = new Set([
   'video/mpeg',
 ]);
 
-const ALLOWED_REEL_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.webm', '.mpeg', '.mpg']);
+const ALLOWED_REEL_EXTENSIONS = new Set([
+  '.mp4',
+  '.mov',
+  '.m4v',
+  '.webm',
+  '.mpeg',
+  '.mpg',
+]);
 
 const asPositiveNumber = (value: string | undefined, fallback: number) => {
   const parsed = Number(value);
@@ -27,10 +35,16 @@ const asPositiveNumber = (value: string | undefined, fallback: number) => {
 };
 
 export const getReelMaxFileSizeBytes = () =>
-  asPositiveNumber(process.env.REEL_MAX_FILE_SIZE_BYTES, DEFAULT_REEL_MAX_FILE_SIZE_BYTES);
+  asPositiveNumber(
+    process.env.REEL_MAX_FILE_SIZE_BYTES,
+    DEFAULT_REEL_MAX_FILE_SIZE_BYTES,
+  );
 
 export const getReelUploadTtlMinutes = () =>
-  asPositiveNumber(process.env.REEL_UPLOAD_TTL_MINUTES, DEFAULT_REEL_UPLOAD_TTL_MINUTES);
+  asPositiveNumber(
+    process.env.REEL_UPLOAD_TTL_MINUTES,
+    DEFAULT_REEL_UPLOAD_TTL_MINUTES,
+  );
 
 export const getReelUploadRoot = () =>
   process.env.REEL_UPLOAD_DIR || join(process.cwd(), 'uploads', 'reels');
@@ -51,7 +65,10 @@ export const isAllowedReelFileName = (fileName?: string) => {
   return Boolean(extension && ALLOWED_REEL_EXTENSIONS.has(extension));
 };
 
-export const normalizeReelExtension = (fileName?: string, contentType?: string) => {
+export const normalizeReelExtension = (
+  fileName?: string,
+  contentType?: string,
+) => {
   const extension = extname(fileName || '').toLowerCase();
 
   if (extension && ALLOWED_REEL_EXTENSIONS.has(extension)) {
@@ -75,15 +92,19 @@ export const normalizeReelExtension = (fileName?: string, contentType?: string) 
 
 type StoredReelFile = {
   fileName: string;
+  assetId: string;
   storageKey: string;
-  localFilePath: string;
-  publicUrl: string;
 };
 
 @Injectable()
 export class ReelStorageService {
+  constructor(private readonly objectStorage: ObjectStorageService) {}
+
   getUploadInstructions(reel: Reel, session: ReelUploadSession) {
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(
+      /\/+$/,
+      '',
+    );
 
     return {
       uploadId: session.uploadId,
@@ -103,30 +124,44 @@ export class ReelStorageService {
     return `reels/${reelId}/${randomUUID()}${extension}`;
   }
 
-  async commitLocalUpload(
+  async commitUpload(
     reel: Reel,
     session: ReelUploadSession,
     file: Express.Multer.File,
   ): Promise<StoredReelFile> {
-    ensureDirectorySync(getReelUploadRoot());
+    try {
+      const asset = await this.objectStorage.store({
+        ownerUserId: reel.creatorId,
+        purpose: 'reels/video',
+        file,
+        allowedTypes: [...ALLOWED_REEL_MIME_TYPES],
+        maxBytes: getReelMaxFileSizeBytes(),
+        visibility: 'private',
+        metadata: {
+          reelId: reel.id,
+          uploadId: session.uploadId,
+        },
+      });
 
-    const extension = normalizeReelExtension(
-      file.originalname || session.originalFileName,
-      file.mimetype || session.contentType,
-    );
-    const fileName = `${reel.id}-${randomUUID()}${extension}`;
-    const finalPath = join(getReelUploadRoot(), fileName);
+      return {
+        fileName: asset.originalName || file.originalname,
+        assetId: asset.id,
+        storageKey: asset.storageKey,
+      };
+    } finally {
+      await this.deleteLocalFile(file.path);
+    }
+  }
 
-    await rename(file.path, finalPath);
-
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
-
-    return {
-      fileName,
-      storageKey: `reels/${fileName}`,
-      localFilePath: finalPath,
-      publicUrl: `${appUrl}/uploads/reels/${fileName}`,
-    };
+  async remove(assetId?: string | null, legacyStorageKey?: string | null) {
+    if (assetId) {
+      await this.objectStorage.remove(assetId);
+      return;
+    }
+    if (!legacyStorageKey) return;
+    const fileName = legacyStorageKey.split('/').pop();
+    if (fileName)
+      await this.deleteLocalFile(join(getReelUploadRoot(), fileName));
   }
 
   async deleteLocalFile(filePath?: string) {
