@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const {
   DEMO_PASSWORD,
+  PRIMARY_DEMO_ACCOUNT,
   SEED_NAMESPACE,
   applicationStatusCounts,
   buildFixtures,
@@ -166,13 +167,20 @@ async function removeLegacyMedia(storageKeys) {
 }
 
 function sampleAccounts(fixtures) {
-  const keys = ['ahmed', 'sara', 'fatima', 'kamran', 'admin'];
+  const keys = [
+    PRIMARY_DEMO_ACCOUNT.key,
+    'sara',
+    'fatima',
+    'kamran',
+    'admin',
+  ];
   return keys.map((key) => {
     const user = fixtures.users.find((item) => item.key === key);
+    const primary = key === PRIMARY_DEMO_ACCOUNT.key;
     return {
       type:
-        key === 'ahmed'
-          ? 'worker'
+        primary
+          ? 'primary-worker-qa'
           : key === 'sara'
             ? 'employer'
             : key === 'fatima'
@@ -180,8 +188,10 @@ function sampleAccounts(fixtures) {
               : key === 'kamran'
                 ? 'incomplete-profile'
                 : 'admin',
+      primary,
+      identifier: user.phone,
       phone: user.phone,
-      password: DEMO_PASSWORD,
+      password: primary ? PRIMARY_DEMO_ACCOUNT.password : DEMO_PASSWORD,
     };
   });
 }
@@ -244,6 +254,7 @@ async function run(argv = process.argv.slice(2), env = process.env) {
         blocks: result.details.blocks,
         notifications: result.details.notifications,
         support: result.details.support,
+        primaryAccount: result.details.primaryAccount,
       },
     };
     console.log('JobsLoot deterministic demo seed complete.');

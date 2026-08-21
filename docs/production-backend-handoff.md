@@ -848,6 +848,35 @@ environment files. `APP_URL` controls URLs returned by the API; it does not
 change the Nest listening port. Confirm the HTTPS reverse proxy forwards both
 HTTP and WebSocket traffic before deployment.
 
+### Registration lookup deployment
+
+Country and language lookups are deployment data, not demo data. After running
+the TypeORM migrations against a new environment, seed them idempotently with:
+
+```bash
+npm run seed:registration-lookups -- --dry-run --confirm-db=<database>
+npm run seed:registration-lookups -- --confirm-db=<database>
+```
+
+The command requires `DB_SYNCHRONIZE=false`, verifies both lookup tables exist,
+and upserts only the canonical registration countries and languages. It does
+not delete lookup rows or modify users, jobs, applications, or demo data.
+
+Verify the public registration dependencies after restarting the deployed
+application:
+
+```bash
+curl -fsS 'https://jobsloot.com/countries?limit=100'
+curl -fsS 'https://jobsloot.com/languages'
+curl -fsS 'https://jobsloot.com/legal/current'
+curl -fsS 'https://jobsloot.com/docs-json'
+```
+
+`GET /legal/current` must return HTTP 200 after the hardened build is deployed.
+An empty `{ "data": [] }` response is valid while legal enforcement remains
+disabled and before approved legal documents are published; a route-level 404
+means the server is still running an older application build.
+
 Proxy requirements:
 
 - Forward HTTPS and WebSocket upgrades.

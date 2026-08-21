@@ -1,4 +1,5 @@
 import {
+  PRIMARY_DEMO_ACCOUNT,
   applicationStatusCounts,
   buildFixtures,
   deterministicUuid,
@@ -34,6 +35,37 @@ describe('deterministic demo seed plan', () => {
         ),
       ).size,
     ).toBe(60);
+  });
+
+  it('pins the primary frontend QA account with full workflow fixtures', () => {
+    const fixtures = buildFixtures();
+    const primaryUser = fixtures.users.find(
+      (user) => user.key === PRIMARY_DEMO_ACCOUNT.key,
+    );
+    expect(primaryUser).toMatchObject({
+      phone: PRIMARY_DEMO_ACCOUNT.phone,
+      verification: 'verified',
+    });
+    expect(primaryUser?.preferences).toEqual(
+      expect.arrayContaining(['Labor', 'Custom Craft']),
+    );
+    expect(
+      fixtures.jobs.some(
+        (job) =>
+          job.creatorKey === PRIMARY_DEMO_ACCOUNT.key &&
+          job.postingMode === 'individual',
+      ),
+    ).toBe(true);
+    expect(
+      new Set(
+        fixtures.applications
+          .filter(
+            (application) =>
+              application.applicantKey === PRIMARY_DEMO_ACCOUNT.key,
+          )
+          .map((application) => application.status),
+      ),
+    ).toEqual(new Set(Object.keys(applicationStatusCounts)));
   });
 
   it('generates stable valid UUIDs for canonical chats', () => {

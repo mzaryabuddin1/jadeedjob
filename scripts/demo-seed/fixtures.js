@@ -6,6 +6,12 @@ const SEED_NAMESPACE = 'jobsloot-demo-v2';
 const DEMO_PASSWORD = 'Demo@1234!';
 const DEMO_EMAIL_DOMAIN = 'demo.jobsloot.test';
 const ICON_COLOR = '#2F6F73';
+const PRIMARY_DEMO_ACCOUNT = Object.freeze({
+  key: 'ahmed',
+  identifier: '0300001001',
+  phone: '0300001001',
+  password: DEMO_PASSWORD,
+});
 
 const countries = [
   { name: 'Pakistan', code: 'PK', dial_code: '+92' },
@@ -115,18 +121,28 @@ function verificationState(index) {
 
 function buildUsers() {
   const phones = [...legacyPhones, ...newPhones];
+  let phoneIndex = 0;
   return userNames.map(([key, firstName, lastName, role], index) => {
     const [city, state] = cities[index % cities.length];
     const verification = verificationState(index);
-    const filterNames = [
-      filters[index % filters.length].name,
-      filters[(index + 3) % filters.length].name,
-      filters[(index + 7) % filters.length].name,
-    ];
+    const filterNames =
+      key === PRIMARY_DEMO_ACCOUNT.key
+        ? ['Labor', 'Delivery', 'Driver', 'Custom Craft']
+        : [
+            filters[index % filters.length].name,
+            filters[(index + 3) % filters.length].name,
+            filters[(index + 7) % filters.length].name,
+          ];
+    let phone = PRIMARY_DEMO_ACCOUNT.phone;
+    if (key !== PRIMARY_DEMO_ACCOUNT.key) {
+      while (phones[phoneIndex] === PRIMARY_DEMO_ACCOUNT.phone) phoneIndex += 1;
+      phone = phones[phoneIndex];
+      phoneIndex += 1;
+    }
     return {
       key,
       role,
-      phone: phones[index],
+      phone,
       email: `${key}@${DEMO_EMAIL_DOMAIN}`,
       firstName,
       lastName,
@@ -243,14 +259,20 @@ const employerKeys = ['sara', 'ayesha', 'zainab', 'jadeed', 'sana'];
 
 function buildJobs() {
   return jobTitles.map((title, index) => {
-    const company =
-      index % 3 === 0 ? null : companies[index % companies.length];
-    const creatorKey = company
-      ? company.owner
-      : employerKeys[index % employerKeys.length];
+    const primaryOwnedJob = index === 0;
+    const company = primaryOwnedJob
+      ? null
+      : index % 3 === 0
+        ? null
+        : companies[index % companies.length];
+    const creatorKey = primaryOwnedJob
+      ? PRIMARY_DEMO_ACCOUNT.key
+      : company
+        ? company.owner
+        : employerKeys[index % employerKeys.length];
     const status = index < 30 ? 'active' : index < 35 ? 'draft' : 'closed';
-    const noLocation = index % 7 === 0;
-    const isRemote = index % 9 === 0;
+    const noLocation = primaryOwnedJob ? false : index % 7 === 0;
+    const isRemote = primaryOwnedJob ? false : index % 9 === 0;
     return {
       key: `job${String(index + 1).padStart(2, '0')}`,
       title,
@@ -297,6 +319,19 @@ function buildApplications(users, jobs) {
   const statuses = Object.entries(applicationStatusCounts).flatMap(
     ([status, count]) => Array(count).fill(status),
   );
+  const primaryApplications = {
+    pending: 'job02',
+    accepted: 'job03',
+    rejected: 'job04',
+    withdrawn: 'job05',
+    completed: 'job06',
+  };
+  const reservedPrimaryPairs = new Set(
+    Object.values(primaryApplications).map(
+      (jobKey) => `${jobKey}:${PRIMARY_DEMO_ACCOUNT.key}`,
+    ),
+  );
+  const usedPrimaryStatuses = new Set();
   const completableJobs = jobs.filter(
     (job) =>
       job.status === 'active' &&
@@ -304,18 +339,37 @@ function buildApplications(users, jobs) {
   );
   const seen = new Set();
   return statuses.map((status, index) => {
-    const job =
-      status === 'completed'
+    const primaryJobKey = primaryApplications[status];
+    const shouldUsePrimary =
+      primaryJobKey && !usedPrimaryStatuses.has(status);
+    const job = shouldUsePrimary
+      ? jobs.find((item) => item.key === primaryJobKey)
+      : status === 'completed'
         ? completableJobs[index % completableJobs.length]
         : jobs[index % 20];
-    let userIndex = (index * 7 + 3) % users.length;
-    while (
-      users[userIndex].key === job.creatorKey ||
-      seen.has(`${job.key}:${users[userIndex].key}`)
-    ) {
-      userIndex = (userIndex + 1) % users.length;
+    let applicantKey = PRIMARY_DEMO_ACCOUNT.key;
+    if (shouldUsePrimary) {
+      if (
+        !job ||
+        job.creatorKey === PRIMARY_DEMO_ACCOUNT.key ||
+        seen.has(`${job.key}:${PRIMARY_DEMO_ACCOUNT.key}`)
+      ) {
+        throw new Error(
+          `Invalid primary demo application job: ${primaryJobKey}`,
+        );
+      }
+      usedPrimaryStatuses.add(status);
+    } else {
+      let userIndex = (index * 7 + 3) % users.length;
+      while (
+        users[userIndex].key === job.creatorKey ||
+        reservedPrimaryPairs.has(`${job.key}:${users[userIndex].key}`) ||
+        seen.has(`${job.key}:${users[userIndex].key}`)
+      ) {
+        userIndex = (userIndex + 1) % users.length;
+      }
+      applicantKey = users[userIndex].key;
     }
-    const applicantKey = users[userIndex].key;
     seen.add(`${job.key}:${applicantKey}`);
     return {
       key: `application${String(index + 1).padStart(2, '0')}`,
@@ -389,6 +443,9 @@ function deterministicUuid(label) {
 function validateFixtures(fixtures) {
   const errors = [];
   const unique = (values) => new Set(values).size === values.length;
+  const primaryUser = fixtures.users.find(
+    (user) => user.key === PRIMARY_DEMO_ACCOUNT.key,
+  );
   if (fixtures.users.length !== 24) errors.push('Expected 24 users');
   if (fixtures.companies.length !== 5) errors.push('Expected 5 companies');
   if (fixtures.jobs.length !== 40) errors.push('Expected 40 jobs');
@@ -404,6 +461,22 @@ function validateFixtures(fixtures) {
   }
   if (!unique(fixtures.users.map((user) => user.referralCode))) {
     errors.push('Demo referral codes must be unique');
+  }
+  if (!primaryUser) {
+    errors.push('Primary demo account is missing');
+  } else {
+    if (primaryUser.phone !== PRIMARY_DEMO_ACCOUNT.phone) {
+      errors.push(`Primary demo phone must be ${PRIMARY_DEMO_ACCOUNT.phone}`);
+    }
+    if (primaryUser.verification !== 'verified') {
+      errors.push('Primary demo account must be verified');
+    }
+    if (
+      !primaryUser.preferences.includes('Custom Craft') ||
+      !primaryUser.preferences.some((name) => name !== 'Custom Craft')
+    ) {
+      errors.push('Primary demo account must include library and SVG filters');
+    }
   }
   for (const job of fixtures.jobs) {
     if (job.title.trim() !== job.title || job.title.length > 35) {
@@ -427,6 +500,28 @@ function validateFixtures(fixtures) {
     JSON.stringify(actualStatuses) !== JSON.stringify(applicationStatusCounts)
   ) {
     errors.push('Application status distribution is invalid');
+  }
+  const primaryApplicationStatuses = new Set(
+    fixtures.applications
+      .filter(
+        (application) =>
+          application.applicantKey === PRIMARY_DEMO_ACCOUNT.key,
+      )
+      .map((application) => application.status),
+  );
+  for (const status of Object.keys(applicationStatusCounts)) {
+    if (!primaryApplicationStatuses.has(status)) {
+      errors.push(`Primary demo account is missing ${status} application`);
+    }
+  }
+  if (
+    !fixtures.jobs.some(
+      (job) =>
+        job.creatorKey === PRIMARY_DEMO_ACCOUNT.key &&
+        job.postingMode === 'individual',
+    )
+  ) {
+    errors.push('Primary demo account must own an individual job');
   }
   if (errors.length) throw new Error(errors.join('; '));
 }
@@ -455,6 +550,7 @@ module.exports = {
   DEMO_PASSWORD,
   DEMO_EMAIL_DOMAIN,
   ICON_COLOR,
+  PRIMARY_DEMO_ACCOUNT,
   applicationStatusCounts,
   buildFixtures,
   deterministicUuid,

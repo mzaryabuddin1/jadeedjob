@@ -6,7 +6,9 @@ require('tsconfig-paths/register');
 require('dotenv').config();
 
 const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 const mysql = require('mysql2/promise');
+const { COUNTRIES, LANGUAGES } = require('./seed-registration-lookups');
 
 const database = `jobsloot_e2e_migrations_${Date.now()}_${crypto
   .randomBytes(4)
@@ -23,7 +25,9 @@ async function main() {
     password: process.env.DB_PASSWORD || '',
   });
   try {
-    await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    await admin.query(
+      `CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    );
     process.env.NODE_ENV = 'test';
     process.env.DB_DATABASE = database;
     process.env.DB_SYNCHRONIZE = 'false';
@@ -87,7 +91,60 @@ async function main() {
       ];
       const applied = new Set(migrations.map((item) => item.name));
       const missing = required.filter((name) => !applied.has(name));
-      if (missing.length) throw new Error(`Missing migrations: ${missing.join(', ')}`);
+      if (missing.length)
+        throw new Error(`Missing migrations: ${missing.join(', ')}`);
+
+      await dataSource.query(
+        "INSERT INTO countries (name, code, dial_code) VALUES ('Sentinel Country', 'XX', '+999')",
+      );
+      await dataSource.query(
+        "INSERT INTO languages (code, name) VALUES ('zz', 'Sentinel Language')",
+      );
+      const seederArgs = [
+        require.resolve('./seed-registration-lookups'),
+        `--confirm-db=${database}`,
+      ];
+      for (let run = 0; run < 2; run += 1) {
+        const seeded = spawnSync(process.execPath, seederArgs, {
+          cwd: require('path').join(__dirname, '..'),
+          env: {
+            ...process.env,
+            NODE_ENV: 'test',
+            DB_DATABASE: database,
+            DB_SYNCHRONIZE: 'false',
+          },
+          encoding: 'utf8',
+        });
+        if (seeded.status !== 0) {
+          throw new Error(
+            `Registration lookup seed run ${run + 1} failed: ${seeded.stderr || seeded.stdout}`,
+          );
+        }
+      }
+      const lookupCounts = await dataSource.query(
+        `
+        SELECT
+          (SELECT COUNT(*) FROM countries WHERE code IN (${COUNTRIES.map(() => '?').join(', ')})) AS countries,
+          (SELECT COUNT(*) FROM languages WHERE code IN (${LANGUAGES.map(() => '?').join(', ')})) AS languages,
+          (SELECT COUNT(*) FROM countries WHERE code = 'XX' AND name = 'Sentinel Country') AS sentinelCountry,
+          (SELECT COUNT(*) FROM languages WHERE code = 'zz' AND name = 'Sentinel Language') AS sentinelLanguage
+      `,
+        [
+          ...COUNTRIES.map((item) => item.code),
+          ...LANGUAGES.map((item) => item.code),
+        ],
+      );
+      const lookupResult = lookupCounts[0] || {};
+      if (
+        Number(lookupResult.countries) !== COUNTRIES.length ||
+        Number(lookupResult.languages) !== LANGUAGES.length ||
+        Number(lookupResult.sentinelCountry) !== 1 ||
+        Number(lookupResult.sentinelLanguage) !== 1
+      ) {
+        throw new Error(
+          `Registration lookup seed was not idempotent or changed sentinel data: ${JSON.stringify(lookupResult)}`,
+        );
+      }
 
       const legacyRunner = dataSource.createQueryRunner();
       await legacyRunner.connect();
@@ -117,7 +174,8 @@ async function main() {
           [reel.insertId, reporter.insertId],
         );
 
-        const moderationMigration = new AddUnifiedModerationAndLegal1786518000000();
+        const moderationMigration =
+          new AddUnifiedModerationAndLegal1786518000000();
         await moderationMigration.up(legacyRunner);
         await moderationMigration.up(legacyRunner);
 
@@ -141,7 +199,9 @@ async function main() {
           ],
         );
         if (Number(audits[0]?.total) !== 2) {
-          throw new Error('Legacy moderation audits were not backfilled exactly once');
+          throw new Error(
+            'Legacy moderation audits were not backfilled exactly once',
+          );
         }
       } finally {
         await legacyRunner.release();
@@ -151,14 +211,17 @@ async function main() {
       await dataSource.destroy();
     }
   } finally {
-    await admin.query(`DROP DATABASE IF EXISTS \`${database}\``).catch(() => undefined);
+    await admin
+      .query(`DROP DATABASE IF EXISTS \`${database}\``)
+      .catch(() => undefined);
     await admin.end();
   }
 }
 
 main().catch((error) => {
   const code = error?.code || error?.name || 'MIGRATION_TEST_FAILED';
-  const message = error?.message || String(error || 'Unknown migration failure');
+  const message =
+    error?.message || String(error || 'Unknown migration failure');
   process.stderr.write(`${code}: ${message}\n`);
   process.exitCode = 1;
 });

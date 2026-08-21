@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const {
   DEMO_EMAIL_DOMAIN,
   DEMO_PASSWORD,
+  PRIMARY_DEMO_ACCOUNT,
   SEED_NAMESPACE,
   deterministicUuid,
 } = require('./fixtures');
@@ -883,7 +884,7 @@ async function seedCompanies(
 
     const adminKey = userKeys[(index + 5) % (userKeys.length - 1)];
     const editorKey = userKeys[(index + 11) % (userKeys.length - 1)];
-    for (const member of [
+    const members = [
       {
         key: company.owner,
         role: 'owner',
@@ -905,7 +906,19 @@ async function seedCompanies(
             ? { ...editorPermissions, publishContent: true }
             : editorPermissions,
       },
-    ]) {
+    ];
+    if (
+      company.key === 'quickship' &&
+      !members.some((member) => member.key === PRIMARY_DEMO_ACCOUNT.key)
+    ) {
+      members.push({
+        key: PRIMARY_DEMO_ACCOUNT.key,
+        role: 'editor',
+        access: true,
+        permissions: { ...editorPermissions, publishContent: true },
+      });
+    }
+    for (const member of members) {
       await insertRow(conn, 'page_members', {
         pageId: companyId,
         userId: userIds[member.key],
@@ -1889,9 +1902,24 @@ async function seedSupport(conn, fixtures, userIds, now) {
     'in_progress',
     'resolved',
   ];
+  const supportUserKeys = [
+    PRIMARY_DEMO_ACCOUNT.key,
+    'imran',
+    'fatima',
+    'omar',
+    'nadia',
+    'hamza',
+    'zainab',
+    'jadeed',
+  ];
   let messages = 0;
   for (let index = 0; index < 8; index += 1) {
-    const user = fixtures.users[index + 4];
+    const user = fixtures.users.find(
+      (item) => item.key === supportUserKeys[index],
+    );
+    if (!user) {
+      throw new Error(`Missing support demo user: ${supportUserKeys[index]}`);
+    }
     const ticket = await insertRow(conn, 'support_tickets', {
       userId: userIds[user.key],
       kind: index % 3 === 0 ? 'complaint' : 'feedback',
@@ -1948,6 +1976,144 @@ async function seedSupport(conn, fixtures, userIds, now) {
     }
   }
   return { tickets: 8, messages };
+}
+
+async function primaryCount(conn, sql, params = []) {
+  const [rows] = await conn.execute(sql, params);
+  return Number(rows[0]?.total || 0);
+}
+
+async function validatePrimaryDemoAccount(conn, userIds) {
+  const errors = [];
+  const userId = userIds[PRIMARY_DEMO_ACCOUNT.key];
+  if (!userId) {
+    throw new Error('Primary demo account postcondition failed: user id missing');
+  }
+
+  const [users] = await conn.execute(
+    `SELECT id, phone, passwordHash, passwordSalt, filter_preferences,
+            profilePhotoAssetId, idDocumentFrontAssetId, idDocumentBackAssetId,
+            kyc_status, isVerified
+     FROM users
+     WHERE id = ? AND phone = ?
+     LIMIT 1`,
+    [userId, PRIMARY_DEMO_ACCOUNT.phone],
+  );
+  const user = users[0];
+  const expectedPassword = passwordFor(PRIMARY_DEMO_ACCOUNT.phone);
+  if (!user) {
+    errors.push(`user ${PRIMARY_DEMO_ACCOUNT.phone} is missing`);
+  } else {
+    if (
+      user.passwordHash !== expectedPassword.hash ||
+      user.passwordSalt !== expectedPassword.salt
+    ) {
+      errors.push('password hash does not match the demo password path');
+    }
+    if (
+      !String(user.filter_preferences || '').split(',').filter(Boolean).length
+    ) {
+      errors.push('filter preferences are empty');
+    }
+    if (
+      !user.profilePhotoAssetId ||
+      !user.idDocumentFrontAssetId ||
+      !user.idDocumentBackAssetId
+    ) {
+      errors.push('profile and KYC assets are incomplete');
+    }
+    if (user.kyc_status !== 'approved' || !user.isVerified) {
+      errors.push('account is not verified and KYC-approved');
+    }
+  }
+
+  for (const table of ['work_experience', 'education', 'certifications']) {
+    const total = await primaryCount(
+      conn,
+      `SELECT COUNT(*) total FROM ${quoteIdentifier(table)} WHERE userId = ?`,
+      [userId],
+    );
+    if (total < 1) errors.push(`${table} is empty`);
+  }
+
+  const [statusRows] = await conn.execute(
+    `SELECT status, COUNT(*) total
+     FROM job_applications
+     WHERE applicantId = ?
+     GROUP BY status`,
+    [userId],
+  );
+  const statuses = new Set(statusRows.map((row) => row.status));
+  for (const status of [
+    'pending',
+    'accepted',
+    'rejected',
+    'withdrawn',
+    'completed',
+  ]) {
+    if (!statuses.has(status)) errors.push(`${status} application is missing`);
+  }
+
+  const checks = [
+    [
+      'owned individual job',
+      `SELECT COUNT(*) total FROM jobs
+       WHERE createdBy = ? AND postingMode = 'individual'`,
+    ],
+    [
+      'chat conversation with messages',
+      `SELECT COUNT(DISTINCT participant.conversationId) total
+       FROM chat_participants participant
+       INNER JOIN chat_messages message
+         ON message.conversationId = participant.conversationId
+       WHERE participant.userId = ?`,
+    ],
+    [
+      'rating activity',
+      `SELECT COUNT(*) total FROM ratings
+       WHERE givenBy = ? OR givenTo = ? OR targetUserId = ?`,
+      [userId, userId, userId],
+    ],
+    [
+      'page membership',
+      'SELECT COUNT(*) total FROM page_members WHERE userId = ?',
+    ],
+    [
+      'organization membership',
+      'SELECT COUNT(*) total FROM org_members WHERE userId = ?',
+    ],
+    [
+      'notifications',
+      'SELECT COUNT(*) total FROM notifications WHERE userId = ?',
+    ],
+    [
+      'support ticket',
+      'SELECT COUNT(*) total FROM support_tickets WHERE userId = ?',
+    ],
+  ];
+  const summary = {
+    identifier: PRIMARY_DEMO_ACCOUNT.identifier,
+    userId,
+    applicationStatuses: Object.fromEntries(
+      statusRows.map((row) => [row.status, Number(row.total)]),
+    ),
+  };
+  for (const [label, sql, params = [userId]] of checks) {
+    const total = await primaryCount(conn, sql, params);
+    summary[
+      label
+        .replace(/\s(.)/g, (_, character) => character.toUpperCase())
+        .replace(/\s/g, '')
+    ] = total;
+    if (total < 1) errors.push(`${label} is missing`);
+  }
+
+  if (errors.length) {
+    throw new Error(
+      `Primary demo account postcondition failed: ${errors.join('; ')}`,
+    );
+  }
+  return summary;
 }
 
 async function removeObsoleteDemoUsers(
@@ -2108,6 +2274,7 @@ async function seedAll(
     now,
   );
   const support = await seedSupport(conn, fixtures, userIds, now);
+  const primaryAccount = await validatePrimaryDemoAccount(conn, userIds);
   const obsoleteUsersRemoved = await removeObsoleteDemoUsers(
     conn,
     previous.userIds,
@@ -2127,6 +2294,7 @@ async function seedAll(
       reelInteractions: reelResult,
       notifications: notificationCount,
       support,
+      primaryAccount,
       obsoleteUsersRemoved,
     },
   };

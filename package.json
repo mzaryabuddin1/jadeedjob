@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "seed:demo": "node scripts/seed-demo-data.js",
+    "seed:registration-lookups": "node scripts/seed-registration-lookups.js",
     "migrate:reel-publishers": "node scripts/migrate-reel-company-publishing.js",
     "migrate:community-posts": "node scripts/migrate-community-posts.js",
     "migrate:community-post-videos": "node scripts/migrate-community-post-videos.js",
