@@ -58,8 +58,7 @@ exports.AppModule = AppModule = __decorate([
                 password: process.env.DB_PASSWORD,
                 database: process.env.DB_DATABASE,
                 autoLoadEntities: true,
-                synchronize: (process.env.NODE_ENV || 'development') === 'development' &&
-                    process.env.DB_SYNCHRONIZE !== 'false',
+                synchronize: process.env.DB_SYNCHRONIZE === 'true',
                 legacySpatialSupport: false,
             }),
             schedule_1.ScheduleModule.forRoot(),

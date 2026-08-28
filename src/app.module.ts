@@ -53,10 +53,8 @@ import { LegalModule } from './legal/legal.module';
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
       autoLoadEntities: true,
-      synchronize:
-        (process.env.NODE_ENV || 'development') === 'development' &&
-        process.env.DB_SYNCHRONIZE !== 'false',
-      legacySpatialSupport: false, 
+      synchronize: process.env.DB_SYNCHRONIZE === 'true',
+      legacySpatialSupport: false,
     }),
     ScheduleModule.forRoot(),
     AuthSessionModule,

@@ -16,7 +16,7 @@ const AppDataSource = new typeorm_1.DataSource({
     entities: [(0, path_1.join)(__dirname, '..', '**', '*.entity.{ts,js}')],
     migrations: [(0, path_1.join)(__dirname, 'migrations', '*.{ts,js}')],
     migrationsTableName: 'typeorm_migrations',
-    synchronize: nodeEnv === 'development' && process.env.DB_SYNCHRONIZE !== 'false',
+    synchronize: process.env.DB_SYNCHRONIZE === 'true',
     legacySpatialSupport: false,
 });
 exports.default = AppDataSource;

@@ -138,7 +138,7 @@ class AddUnifiedModerationAndLegal1786518000000 {
         UPDATE \`moderation_reports\` mr
         INNER JOIN \`community_post_reports\` pr
           ON mr.\`targetType\` = 'post'
-         AND mr.\`targetId\` = CAST(pr.\`postId\` AS CHAR)
+         AND mr.\`targetId\` COLLATE utf8mb4_unicode_ci = CAST(pr.\`postId\` AS CHAR) COLLATE utf8mb4_unicode_ci
          AND mr.\`reporterUserId\` = pr.\`userId\`
         SET mr.\`legacySourceType\` = 'post_report', mr.\`legacySourceId\` = pr.\`id\`
         WHERE mr.\`legacySourceType\` IS NULL
@@ -168,7 +168,7 @@ class AddUnifiedModerationAndLegal1786518000000 {
         UPDATE \`moderation_reports\` mr
         INNER JOIN \`reel_reports\` rr
           ON mr.\`targetType\` = 'reel'
-         AND mr.\`targetId\` = CAST(rr.\`reelId\` AS CHAR)
+         AND mr.\`targetId\` COLLATE utf8mb4_unicode_ci = CAST(rr.\`reelId\` AS CHAR) COLLATE utf8mb4_unicode_ci
          AND mr.\`reporterUserId\` = rr.\`reporterUserId\`
         SET mr.\`legacySourceType\` = 'reel_report', mr.\`legacySourceId\` = rr.\`id\`
         WHERE mr.\`legacySourceType\` IS NULL
