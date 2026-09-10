@@ -18,6 +18,7 @@ const profiles_service_1 = require("./profiles.service");
 const pages_module_1 = require("../pages/pages.module");
 const profile_publisher_options_controller_1 = require("./profile-publisher-options.controller");
 const notifications_module_1 = require("../notifications/notifications.module");
+const public_profiles_controller_1 = require("./public-profiles.controller");
 let ProfilesModule = class ProfilesModule {
 };
 exports.ProfilesModule = ProfilesModule;
@@ -33,7 +34,11 @@ exports.ProfilesModule = ProfilesModule = __decorate([
                 company_page_entity_1.CompanyPage,
             ]),
         ],
-        controllers: [profile_publisher_options_controller_1.ProfilePublisherOptionsController, profiles_controller_1.ProfilesController],
+        controllers: [
+            profile_publisher_options_controller_1.ProfilePublisherOptionsController,
+            profiles_controller_1.ProfilesController,
+            public_profiles_controller_1.PublicProfilesController,
+        ],
         providers: [profiles_service_1.ProfilesService],
         exports: [profiles_service_1.ProfilesService],
     })

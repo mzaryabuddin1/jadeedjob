@@ -15,6 +15,7 @@ import { PostVideoStorageService } from './post-video-storage.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { PublicPostsController } from './public-posts.controller';
 
 @Module({
   imports: [
@@ -32,7 +33,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     PagesModule,
     NotificationsModule,
   ],
-  controllers: [PostsController],
+  controllers: [PostsController, PublicPostsController],
   providers: [PostsService, PostStorageService, PostVideoStorageService],
   exports: [PostsService],
 })

@@ -982,7 +982,9 @@ let PostsService = class PostsService {
         if (post.mediaType === 'video' && post.videoUrl) {
             return {
                 type: 'video',
+                assetId: post.videoAssetId || null,
                 url: post.videoUrl,
+                thumbnailAssetId: post.videoThumbnailAssetId || null,
                 thumbnailUrl: post.videoThumbnailUrl,
                 ...(post.videoDurationSeconds
                     ? { durationSeconds: Number(post.videoDurationSeconds) }
@@ -990,7 +992,11 @@ let PostsService = class PostsService {
             };
         }
         if (post.imageUrl) {
-            return { type: 'image', url: post.imageUrl };
+            return {
+                type: 'image',
+                assetId: post.imageAssetId || null,
+                url: post.imageUrl,
+            };
         }
         return null;
     }
@@ -1060,14 +1066,20 @@ let PostsService = class PostsService {
         const media = post.mediaType === 'video' && videoUrl
             ? {
                 type: 'video',
+                assetId: post.videoAssetId || null,
                 url: videoUrl,
+                thumbnailAssetId: post.videoThumbnailAssetId || null,
                 thumbnailUrl,
                 ...(post.videoDurationSeconds
                     ? { durationSeconds: Number(post.videoDurationSeconds) }
                     : {}),
             }
             : imageUrl
-                ? { type: 'image', url: imageUrl }
+                ? {
+                    type: 'image',
+                    assetId: post.imageAssetId || null,
+                    url: imageUrl,
+                }
                 : null;
         return {
             ...result,

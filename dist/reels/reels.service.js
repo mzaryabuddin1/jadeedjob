@@ -286,6 +286,15 @@ let ReelsService = class ReelsService {
                 : null,
         };
     }
+    async getPublicReel(reelId, viewerId = 0) {
+        const qb = this.createViewablePublishedQuery(viewerId);
+        if (viewerId)
+            await this.applyBlockedPublisherFilters(qb, viewerId);
+        const reel = await qb.andWhere('reel.id = :reelId', { reelId }).getOne();
+        if (!reel)
+            throw new common_1.NotFoundException('Reel not found');
+        return this.formatReel(reel, viewerId);
+    }
     async getComments(reelId, userId, cursor, limit = 20) {
         await this.getViewableReelOrThrow(reelId, userId);
         const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
@@ -677,6 +686,7 @@ let ReelsService = class ReelsService {
         return {
             id: String(reel.id),
             videoUrl: reel.videoUrl,
+            videoAssetId: reel.videoAssetId || null,
             category: reel.category,
             publisher,
             author: publisher,
@@ -740,7 +750,22 @@ let ReelsService = class ReelsService {
         const videoUrl = reel.videoAssetId
             ? await this.storageAssetUrl(reel.videoAssetId)
             : reel.videoUrl;
-        return { ...result, videoUrl, publisher, author: publisher };
+        return {
+            ...result,
+            videoUrl,
+            media: {
+                type: 'video',
+                assetId: reel.videoAssetId || null,
+                url: videoUrl || null,
+                thumbnailAssetId: null,
+                thumbnailUrl: null,
+                durationSeconds: reel.durationSeconds
+                    ? Number(reel.durationSeconds)
+                    : null,
+            },
+            publisher,
+            author: publisher,
+        };
     }
     async storageAssetUrl(assetId) {
         return this.objectStorageService.getUrl(assetId);

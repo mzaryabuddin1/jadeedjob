@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -32,6 +33,11 @@ import { Reel } from 'src/reels/entities/reel.entity';
 import { User } from 'src/users/entities/user.entity';
 import { ModerationAudit } from './entities/moderation-audit.entity';
 import {
+  CHAT_MONGO_STORE,
+  ChatMongoStorePort,
+} from 'src/chat/storage/chat-mongo.store';
+import { getChatStorageMode } from 'src/chat/storage/chat-storage-mode';
+import {
   ModerationAction,
   ModerationReport,
   ModerationTargetType,
@@ -49,6 +55,8 @@ type ResolvedTarget = {
 
 @Injectable()
 export class ModerationService {
+  private readonly chatStorageMode = getChatStorageMode();
+
   constructor(
     @InjectRepository(ProfileBlock)
     private readonly blockRepo: Repository<ProfileBlock>,
@@ -81,6 +89,8 @@ export class ModerationService {
     @InjectRepository(ModerationAudit)
     private readonly auditRepo: Repository<ModerationAudit>,
     private readonly notificationsService: NotificationsService,
+    @Inject(CHAT_MONGO_STORE)
+    private readonly mongoChatStore: ChatMongoStorePort,
   ) {}
 
   parseProfileType(value: string): ProfileType {
@@ -679,6 +689,30 @@ export class ModerationService {
     if (action === 'dismiss' || action === 'warn') return;
     if (action === 'hide' || action === 'remove') {
       const status = action === 'hide' ? 'hidden' : 'removed';
+      if (report.targetType === 'chat_message') {
+        let matched = false;
+        if (this.chatStorageMode !== 'sql') {
+          matched = await this.mongoChatStore.setMessageModeration(
+            report.targetId,
+            status,
+          );
+        }
+        const legacyId = Number(report.targetId);
+        if (
+          this.chatStorageMode !== 'mongo' &&
+          Number.isInteger(legacyId) &&
+          legacyId > 0
+        ) {
+          const result = await manager.update(ChatMessage, legacyId, {
+            moderationStatus: status,
+          });
+          matched = matched || Number(result.affected || 0) > 0;
+        }
+        if (!matched) {
+          throw new BadRequestException('Moderation target is invalid');
+        }
+        return;
+      }
       const id = Number(report.targetId);
       if (!Number.isInteger(id) || id <= 0) {
         throw new BadRequestException('Moderation target is invalid');
@@ -697,10 +731,6 @@ export class ModerationService {
       }
       if (report.targetType === 'reel_comment') {
         await manager.update(ReelComment, id, { moderationStatus: status });
-        return;
-      }
-      if (report.targetType === 'chat_message') {
-        await manager.update(ChatMessage, id, { moderationStatus: status });
         return;
       }
       if (report.targetType === 'job') {

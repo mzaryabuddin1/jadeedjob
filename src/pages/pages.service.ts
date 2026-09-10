@@ -25,6 +25,7 @@ import { NotificationsService } from 'src/notifications/notifications.service';
 import { AuthService } from 'src/auth/auth.service';
 import { IdempotencyService } from 'src/idempotency/idempotency.service';
 import { ModerationService } from 'src/moderation/moderation.service';
+import { ChatAuthorizationCacheService } from 'src/chat/chat-authorization-cache.service';
 
 const COMPANY_MUTABLE_FIELDS = [
   'company_name',
@@ -89,6 +90,7 @@ export class PagesService {
     private readonly authService: AuthService,
     private readonly idempotencyService: IdempotencyService,
     private readonly moderationService: ModerationService,
+    private readonly chatAuthorizationCache: ChatAuthorizationCacheService,
   ) {}
 
   getDefaultPermissions(role: 'owner' | 'admin' | 'editor') {
@@ -920,6 +922,10 @@ export class PagesService {
         return manager.save(request);
       },
     );
+    await this.chatAuthorizationCache.invalidateCompanyUser(
+      result.companyId,
+      result.userId,
+    );
     await this.notificationsService.create({
       userId: result.userId,
       type: 'company_access_status',
@@ -1062,6 +1068,7 @@ export class PagesService {
       await manager.save([oldMember, nextMember]);
       return manager.save(company);
     });
+    await this.chatAuthorizationCache.invalidateCompany(companyId);
     await Promise.all([
       this.notificationsService.create({
         userId: newOwnerUserId,
@@ -1431,6 +1438,10 @@ export class PagesService {
 
     const saved = await this.memberRepo.save(member);
     saved.user = target;
+    await this.chatAuthorizationCache.invalidateCompanyUser(
+      companyId,
+      target.id,
+    );
 
     return {
       message: 'Team member access saved successfully',
@@ -1453,6 +1464,10 @@ export class PagesService {
 
     member.hasAccess = hasAccess;
     const saved = await this.memberRepo.save(member);
+    await this.chatAuthorizationCache.invalidateCompanyUser(
+      member.pageId,
+      member.userId,
+    );
 
     return {
       message: 'Team member access updated successfully',
@@ -1479,6 +1494,10 @@ export class PagesService {
 
     member.permissions = this.normalizePermissions(member.role, permissions);
     const saved = await this.memberRepo.save(member);
+    await this.chatAuthorizationCache.invalidateCompanyUser(
+      member.pageId,
+      member.userId,
+    );
 
     return {
       message: 'Team member permissions updated successfully',
@@ -1627,6 +1646,7 @@ export class PagesService {
       );
       return updated;
     });
+    await this.chatAuthorizationCache.invalidateCompany(companyId);
     await this.notificationsService.create({
       userId: page.ownerId,
       type: 'company_verification',

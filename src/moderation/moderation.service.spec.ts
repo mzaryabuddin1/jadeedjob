@@ -47,6 +47,10 @@ const createService = (overrides: Record<string, any> = {}) => {
     reportRepo: repository({ manager: reportManager }),
     auditRepo: repository(),
     notificationsService: { create: jest.fn(async () => ({})) },
+    mongoChatStore: {
+      enabled: false,
+      setMessageModeration: jest.fn(async () => false),
+    },
     ...overrides,
   };
   const service = new ModerationService(
@@ -66,6 +70,7 @@ const createService = (overrides: Record<string, any> = {}) => {
     deps.reportRepo as any,
     deps.auditRepo as any,
     deps.notificationsService as any,
+    deps.mongoChatStore as any,
   );
   return { service, deps, reportStore, auditStore };
 };
@@ -132,7 +137,9 @@ describe('ModerationService', () => {
         .mockResolvedValueOnce({ blockerUserId: 9, profileId: 7 }),
     });
     const { service } = createService({ blockRepo });
-    await expect(service.assertInteractionAllowed(7, 'user', 9)).rejects.toMatchObject({
+    await expect(
+      service.assertInteractionAllowed(7, 'user', 9),
+    ).rejects.toMatchObject({
       status: 403,
     });
   });

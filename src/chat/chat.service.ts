@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Brackets,
@@ -19,9 +21,7 @@ import { JobApplication } from 'src/job-application/entities/job-application.ent
 import { Job } from 'src/job/entities/job.entity';
 import { ModerationService } from 'src/moderation/moderation.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
-import {
-  normalizeCompanyPermissions,
-} from 'src/pages/company-permissions';
+import { normalizeCompanyPermissions } from 'src/pages/company-permissions';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { PageMember } from 'src/pages/entities/page-member.entity';
 import { User } from 'src/users/entities/user.entity';
@@ -31,6 +31,19 @@ import { ChatParticipant } from './entities/chat-participant.entity';
 import { ChatReadState } from './entities/chat-read-state.entity';
 import { JobInvitation } from './entities/job-invitation.entity';
 import { ObjectStorageService } from 'src/storage/object-storage.service';
+import {
+  CHAT_MONGO_STORE,
+  ChatMongoStorePort,
+} from './storage/chat-mongo.store';
+import {
+  ChatMongoConversation,
+  ChatMongoMessage,
+} from './storage/chat-mongo.types';
+import {
+  ChatStorageMode,
+  getChatStorageMode,
+} from './storage/chat-storage-mode';
+import { ChatAuthorizationCacheService } from './chat-authorization-cache.service';
 
 type MessageInput = {
   content?: string;
@@ -49,6 +62,8 @@ type MessageInput = {
 
 @Injectable()
 export class ChatService {
+  private readonly storageMode: ChatStorageMode = getChatStorageMode();
+
   constructor(
     @InjectRepository(ChatMessage)
     private readonly messageRepo: Repository<ChatMessage>,
@@ -74,18 +89,75 @@ export class ChatService {
     private readonly moderationService: ModerationService,
     private readonly idempotencyService: IdempotencyService,
     private readonly objectStorageService: ObjectStorageService,
+    @Inject(CHAT_MONGO_STORE)
+    private readonly mongoStore: ChatMongoStorePort,
+    private readonly authorizationCache: ChatAuthorizationCacheService,
   ) {}
 
   async ensureApplicationConversation(
     applicationId: number,
     manager: EntityManager = this.conversationRepo.manager,
   ) {
+    if (this.storageMode === 'mongo') {
+      const existingMongo =
+        await this.mongoStore.findConversationByApplication(applicationId);
+      if (existingMongo) return this.hydrateMongoConversation(existingMongo);
+
+      const application = await manager.getRepository(JobApplication).findOne({
+        where: { id: applicationId },
+        relations: ['job', 'job.page', 'job.creator', 'applicant'],
+      });
+      if (!application)
+        throw new NotFoundException('Job application not found');
+      const mongoConversation: ChatMongoConversation = {
+        id: randomUUID(),
+        type: 'application',
+        jobId: application.jobId,
+        applicationId: application.id,
+        createdByUserId: application.applicantId,
+        companyId: application.job.pageId || null,
+        participantUserIds: [
+          ...new Set([application.applicantId, application.job.createdBy]),
+        ],
+        writeState: this.applicationWritable(application.status)
+          ? 'active'
+          : 'read_only',
+        readOnlyReason: this.applicationWritable(application.status)
+          ? null
+          : `application_${application.status}`,
+        lastActivityAt: application.updatedAt || application.createdAt,
+      };
+      try {
+        await this.mongoStore.upsertConversation(mongoConversation);
+      } catch (error) {
+        if ((error as any)?.code !== 11000) throw error;
+        const raced =
+          await this.mongoStore.findConversationByApplication(applicationId);
+        if (!raced) throw error;
+        return this.hydrateMongoConversation(raced);
+      }
+      return this.hydrateMongoConversation(mongoConversation);
+    }
+
     const conversations = manager.getRepository(ChatConversation);
     const existing = await conversations.findOne({
       where: { applicationId },
-      relations: ['job', 'job.page', 'application', 'application.applicant', 'participants'],
+      relations: [
+        'job',
+        'job.page',
+        'application',
+        'application.applicant',
+        'participants',
+      ],
     });
-    if (existing) return existing;
+    if (existing) {
+      if (this.storageMode === 'dual') {
+        await this.mirrorSqlConversation(existing).catch((error) =>
+          this.logMongoShadowFailure('conversation', existing.id, error),
+        );
+      }
+      return existing;
+    }
 
     const application = await manager.getRepository(JobApplication).findOne({
       where: { id: applicationId },
@@ -121,10 +193,23 @@ export class ChatService {
         }),
       ),
     );
-    return conversations.findOne({
+    const hydrated = await conversations.findOne({
       where: { id: conversation.id },
-      relations: ['job', 'job.page', 'job.creator', 'application', 'application.applicant', 'participants'],
+      relations: [
+        'job',
+        'job.page',
+        'job.creator',
+        'application',
+        'application.applicant',
+        'participants',
+      ],
     });
+    if (this.storageMode === 'dual') {
+      await this.mirrorSqlConversation(hydrated).catch((error) =>
+        this.logMongoShadowFailure('conversation', hydrated.id, error),
+      );
+    }
+    return hydrated;
   }
 
   async resolveConversation(reference: string | number) {
@@ -132,6 +217,11 @@ export class ChatService {
     if (!value) throw new NotFoundException('Chat not found');
     if (/^\d+$/.test(value)) {
       return this.ensureApplicationConversation(Number(value));
+    }
+    if (this.storageMode === 'mongo') {
+      const mongoConversation = await this.mongoStore.findConversation(value);
+      if (!mongoConversation) throw new NotFoundException('Chat not found');
+      return this.hydrateMongoConversation(mongoConversation);
     }
     const conversation = await this.conversationRepo.findOne({
       where: { id: value },
@@ -146,12 +236,18 @@ export class ChatService {
       ],
     });
     if (!conversation) throw new NotFoundException('Chat not found');
+    if (this.storageMode === 'dual') {
+      await this.mirrorSqlConversation(conversation).catch((error) =>
+        this.logMongoShadowFailure('conversation', conversation.id, error),
+      );
+    }
     return conversation;
   }
 
   async userCanAccessApplication(userId: number, applicationId: number) {
     try {
-      const conversation = await this.ensureApplicationConversation(applicationId);
+      const conversation =
+        await this.ensureApplicationConversation(applicationId);
       return this.canAccess(conversation, userId);
     } catch {
       return false;
@@ -164,10 +260,7 @@ export class ChatService {
     return true;
   }
 
-  async assertCanJoinConversation(
-    userId: number,
-    reference: string | number,
-  ) {
+  async assertCanJoinConversation(userId: number, reference: string | number) {
     const conversation = await this.resolveConversation(reference);
     if (!(await this.canAccess(conversation, userId))) {
       throw new ForbiddenException('You cannot view this chat');
@@ -175,7 +268,8 @@ export class ChatService {
     if (await this.conversationBlocked(conversation, userId)) {
       throw new ForbiddenException({
         code: 'PROFILE_BLOCKED',
-        message: 'This conversation is unavailable because of a blocked relationship',
+        message:
+          'This conversation is unavailable because of a blocked relationship',
       });
     }
     return conversation;
@@ -204,6 +298,9 @@ export class ChatService {
     const currentPage = Math.max(1, Number(page) || 1);
     const take = Math.min(100, Math.max(1, Number(limit) || 20));
     const companyIds = await this.companyChatIds(userId);
+    if (this.storageMode === 'mongo') {
+      return this.listMongoChats(userId, companyIds, currentPage, take);
+    }
     const qb = this.conversationRepo
       .createQueryBuilder('conversation')
       .leftJoinAndSelect('conversation.participants', 'participant')
@@ -268,6 +365,34 @@ export class ChatService {
       typeof pageOrBefore === 'number'
         ? Math.max(1, Number(pageOrBefore) || 1)
         : 1;
+    if (this.storageMode === 'mongo') {
+      const result = await this.mongoStore.getMessages(
+        conversation.id,
+        before && Number.isInteger(before) && before > 0 ? before : null,
+        page,
+        take,
+      );
+      const senders = await this.userMap(
+        result.data.map((message) => message.senderId),
+      );
+      return {
+        data: await Promise.all(
+          result.data.map((message) =>
+            this.formatMongoMessage(
+              message,
+              conversation,
+              senders.get(message.senderId),
+            ),
+          ),
+        ),
+        nextBefore: result.nextBefore,
+        total: result.total,
+        totalPages: Math.ceil(result.total / take),
+        currentPage: page,
+        readOnly: !(await this.isWritable(conversation)),
+        readOnlyReason: conversation.readOnlyReason || null,
+      };
+    }
     const qb = this.messageRepo
       .createQueryBuilder('message')
       .leftJoinAndSelect('message.sender', 'sender')
@@ -293,14 +418,21 @@ export class ChatService {
         moderationStatus: 'visible',
       },
     });
+    if (this.storageMode === 'dual') {
+      await this.compareMongoMessagePage(
+        conversation.id,
+        pageItems,
+        before && Number.isInteger(before) && before > 0 ? before : null,
+        page,
+        take,
+        total,
+      );
+    }
     return {
       data: await Promise.all(
-        pageItems.map((message) =>
-          this.formatMessage(message, conversation),
-        ),
+        pageItems.map((message) => this.formatMessage(message, conversation)),
       ),
-      nextBefore:
-        hasMore && pageItems.length ? String(pageItems[0].id) : null,
+      nextBefore: hasMore && pageItems.length ? String(pageItems[0].id) : null,
       total,
       totalPages: Math.ceil(total / take),
       currentPage: page,
@@ -316,9 +448,7 @@ export class ChatService {
       | (MessageInput & { jobApplicationId: number }),
   ) {
     const reference =
-      'conversationId' in input
-        ? input.conversationId
-        : input.jobApplicationId;
+      'conversationId' in input ? input.conversationId : input.jobApplicationId;
     const conversation = await this.resolveConversation(reference);
     await this.assertCanMutate(conversation, senderId);
     const text = String(input.content ?? input.text ?? '').trim();
@@ -335,16 +465,44 @@ export class ChatService {
         )
       : null;
     const type =
-      input.messageType ||
-      (attachments.length || mediaUrl ? 'file' : 'text');
+      input.messageType || (attachments.length || mediaUrl ? 'file' : 'text');
     if (!text && !attachments.length && !mediaUrl) {
       throw new BadRequestException('A message needs text or an attachment');
     }
     if (text.length > 2000) {
       throw new BadRequestException('Message cannot exceed 2000 characters');
     }
-    const clientMessageId =
-      String(input.clientMessageId || '').trim() || null;
+    const clientMessageId = String(input.clientMessageId || '').trim() || null;
+    if (this.storageMode === 'mongo') {
+      const recipients = await this.recipientIds(conversation, senderId);
+      const notificationMessageKey = clientMessageId || randomUUID();
+      const message = await this.mongoStore.sendMessage({
+        conversationId: conversation.id,
+        jobApplicationId: conversation.applicationId || null,
+        senderId,
+        clientMessageId,
+        content: text || null,
+        mediaUrl,
+        attachments,
+        messageType: type,
+        notifications: recipients.map((userId) => ({
+          userId,
+          type: 'chat_message',
+          title: 'New message',
+          message: text || 'You received a new attachment.',
+          data: {
+            chatId: conversation.id,
+            conversationId: conversation.id,
+            applicationId: conversation.applicationId,
+            jobId: conversation.jobId,
+            companyId: conversation.companyId,
+          },
+          dedupeKey: `chat_message:${notificationMessageKey}:${conversation.id}:user:${userId}`,
+        })),
+      });
+      const sender = await this.userRepo.findOne({ where: { id: senderId } });
+      return this.formatMongoMessage(message, conversation, sender);
+    }
     if (clientMessageId) {
       const existing = await this.messageRepo.findOne({
         where: { conversationId: conversation.id, senderId, clientMessageId },
@@ -371,6 +529,16 @@ export class ChatService {
       where: { id: message.id },
       relations: ['sender'],
     });
+    if (this.storageMode === 'dual') {
+      await this.mirrorSqlConversation(conversation).catch((error) =>
+        this.logMongoShadowFailure('conversation', conversation.id, error),
+      );
+      await this.mongoStore
+        .mirrorSqlMessage(this.sqlMessageToMongo(saved, conversation.id))
+        .catch((error) =>
+          this.logMongoShadowFailure('message', String(saved.id), error),
+        );
+    }
     const formatted = await this.formatMessage(saved, conversation);
 
     const recipients = await this.recipientIds(conversation, senderId);
@@ -399,6 +567,16 @@ export class ChatService {
     if (!(await this.canAccess(conversation, userId))) {
       throw new ForbiddenException('You cannot update this chat');
     }
+    if (this.storageMode === 'mongo') {
+      const state = await this.mongoStore.markRead(conversation.id, userId);
+      return {
+        chatId: conversation.id,
+        conversationId: conversation.id,
+        lastReadMessageId: state.lastReadMessageId,
+        lastReadSequence: state.lastReadSequence,
+        readAt: state.readAt,
+      };
+    }
     const latest = await this.messageRepo.findOne({
       where: {
         conversationId: conversation.id,
@@ -425,25 +603,76 @@ export class ChatService {
         { readAt: state.readAt },
       );
     }
+    if (this.storageMode === 'dual') {
+      await this.mongoStore
+        .mirrorReadState({
+          conversationId: conversation.id,
+          userId,
+          lastReadMessageId: state.lastReadMessageId
+            ? String(state.lastReadMessageId)
+            : null,
+          lastReadSequence: state.lastReadMessageId || null,
+          readAt: state.readAt,
+          unreadCount: 0,
+        })
+        .catch((error) =>
+          this.logMongoShadowFailure(
+            'read_state',
+            `${conversation.id}:${userId}`,
+            error,
+          ),
+        );
+    }
     return {
       chatId: conversation.id,
       conversationId: conversation.id,
-      lastReadMessageId: state.lastReadMessageId,
+      lastReadMessageId: state.lastReadMessageId
+        ? String(state.lastReadMessageId)
+        : null,
+      lastReadSequence: state.lastReadMessageId,
       readAt: state.readAt,
     };
   }
 
   async getReportableMessage(
     reference: string | number,
-    messageId: number,
+    messageId: string | number,
     userId: number,
   ) {
     const conversation = await this.resolveConversation(reference);
     if (!(await this.canAccess(conversation, userId))) {
       throw new ForbiddenException('You cannot view this chat');
     }
+    if (this.storageMode === 'mongo') {
+      const message = await this.mongoStore.getMessage(
+        conversation.id,
+        String(messageId),
+      );
+      if (!message || message.moderationStatus !== 'visible') {
+        throw new NotFoundException('Chat message not found');
+      }
+      return {
+        targetType: 'chat_message' as const,
+        targetId: message.id,
+        targetOwnerUserId: message.senderId,
+        targetCompanyId: conversation.companyId || null,
+        snapshot: {
+          conversationId: conversation.id,
+          messageId: message.id,
+          sequence: message.sequence,
+          senderId: String(message.senderId),
+          content: message.content,
+          attachments: message.attachments || [],
+          createdAt: message.createdAt,
+        },
+      };
+    }
+    const sqlMessageId = Number(messageId);
+    if (!Number.isInteger(sqlMessageId) || sqlMessageId <= 0) {
+      throw new NotFoundException('Chat message not found');
+    }
     const message = await this.messageRepo.findOne({
-      where: { id: messageId, conversationId: conversation.id },
+      where: { id: sqlMessageId, conversationId: conversation.id },
       relations: ['sender'],
     });
     if (
@@ -488,7 +717,9 @@ export class ChatService {
       };
     }
     if (type === 'company') {
-      const company = await this.companyRepo.findOne({ where: { id: profileId } });
+      const company = await this.companyRepo.findOne({
+        where: { id: profileId },
+      });
       if (!company || company.verificationStatus !== 'approved') {
         throw new NotFoundException('Profile not found');
       }
@@ -505,7 +736,9 @@ export class ChatService {
           title: job.title,
           companyName: company.company_name,
         })),
-        ...(jobs.length ? {} : { unavailableReason: 'No active jobs are available' }),
+        ...(jobs.length
+          ? {}
+          : { unavailableReason: 'No active jobs are available' }),
       };
     }
 
@@ -522,7 +755,12 @@ export class ChatService {
       };
     }
     const targetJobs = await this.jobRepo.find({
-      where: { createdBy: profileId, pageId: IsNull(), isActive: true, status: 'active' },
+      where: {
+        createdBy: profileId,
+        pageId: IsNull(),
+        isActive: true,
+        status: 'active',
+      },
       order: { createdAt: 'DESC' },
       take: 100,
     });
@@ -530,7 +768,9 @@ export class ChatService {
       available: targetJobs.length > 0,
       action: 'inquiry',
       jobs: targetJobs.map((job) => ({ id: String(job.id), title: job.title })),
-      ...(targetJobs.length ? {} : { unavailableReason: 'No chat context is available' }),
+      ...(targetJobs.length
+        ? {}
+        : { unavailableReason: 'No chat context is available' }),
     };
   }
 
@@ -558,19 +798,31 @@ export class ChatService {
     userId: number,
     action: 'accept' | 'decline' | 'cancel',
   ) {
+    if (this.storageMode === 'mongo') {
+      return this.updateMongoInvitation(invitationId, userId, action);
+    }
     return this.invitationRepo.manager.transaction(async (manager) => {
       const invitation = await manager.getRepository(JobInvitation).findOne({
         where: { id: invitationId },
-        relations: ['conversation', 'job', 'job.page'],
+        relations: ['job', 'job.page'],
         lock: { mode: 'pessimistic_write' },
       });
       if (!invitation) throw new NotFoundException('Job invitation not found');
+      const conversation = await manager
+        .getRepository(ChatConversation)
+        .findOne({
+          where: { id: invitation.conversationId },
+          lock: { mode: 'pessimistic_write' },
+        });
+      if (!conversation) throw new NotFoundException('Chat not found');
       if (invitation.status !== 'pending') {
         throw new BadRequestException('Invitation is no longer pending');
       }
       if (action === 'cancel') {
         if (invitation.inviterUserId !== userId) {
-          throw new ForbiddenException('Only the inviter can cancel this invitation');
+          throw new ForbiddenException(
+            'Only the inviter can cancel this invitation',
+          );
         }
         invitation.status = 'cancelled';
       } else {
@@ -583,16 +835,19 @@ export class ChatService {
 
       let application: JobApplication = null;
       if (action === 'accept') {
-        application = await this.acceptInvitationApplication(invitation, manager);
-        invitation.conversation.applicationId = application.id;
-        invitation.conversation.type = 'application';
-        invitation.conversation.writeState = 'active';
-        invitation.conversation.readOnlyReason = null;
+        application = await this.acceptInvitationApplication(
+          invitation,
+          manager,
+        );
+        conversation.applicationId = application.id;
+        conversation.type = 'application';
+        conversation.writeState = 'active';
+        conversation.readOnlyReason = null;
       } else {
-        invitation.conversation.writeState = 'read_only';
-        invitation.conversation.readOnlyReason = `invitation_${invitation.status}`;
+        conversation.writeState = 'read_only';
+        conversation.readOnlyReason = `invitation_${invitation.status}`;
       }
-      await manager.save(invitation.conversation);
+      await manager.save(conversation);
       await manager.save(invitation);
 
       await this.notificationsService.create({
@@ -630,6 +885,18 @@ export class ChatService {
   }
 
   async syncApplicationConversation(applicationId: number, status: string) {
+    if (this.storageMode === 'mongo') {
+      const conversation =
+        await this.mongoStore.findConversationByApplication(applicationId);
+      if (!conversation) return;
+      await this.mongoStore.updateConversation(conversation.id, {
+        writeState: this.applicationWritable(status) ? 'active' : 'read_only',
+        readOnlyReason: this.applicationWritable(status)
+          ? null
+          : `application_${status}`,
+      });
+      return;
+    }
     const conversation = await this.conversationRepo.findOne({
       where: { applicationId },
     });
@@ -641,6 +908,11 @@ export class ChatService {
       ? null
       : `application_${status}`;
     await this.conversationRepo.save(conversation);
+    if (this.storageMode === 'dual') {
+      await this.mirrorSqlConversation(conversation).catch((error) =>
+        this.logMongoShadowFailure('conversation', conversation.id, error),
+      );
+    }
   }
 
   formatUploadedAttachment(file: Express.Multer.File, fileUrl: string) {
@@ -671,9 +943,22 @@ export class ChatService {
       throw new BadRequestException('Job is not active');
     }
 
+    if (this.storageMode === 'mongo') {
+      return this.createMongoContextInternal(
+        userId,
+        input,
+        type,
+        profileId,
+        jobId,
+        job,
+      );
+    }
+
     if (input.action === 'invite') {
       if (type !== 'user' || profileId === userId) {
-        throw new BadRequestException('Invitations require another user profile');
+        throw new BadRequestException(
+          'Invitations require another user profile',
+        );
       }
       if (!(await this.canManageJobForChat(job, userId))) {
         throw new ForbiddenException('You cannot invite workers to this job');
@@ -682,6 +967,21 @@ export class ChatService {
         where: { jobId, inviteeUserId: profileId, status: 'pending' },
       });
       if (duplicate) {
+        await this.mongoStore.upsertConversation({
+          id: duplicate.conversationId,
+          type: 'invitation',
+          jobId,
+          applicationId: null,
+          companyId: job.pageId || null,
+          createdByUserId: duplicate.inviterUserId,
+          participantUserIds: [duplicate.inviterUserId, profileId],
+          clientRequestId: duplicate.clientRequestId,
+          writeState: 'active',
+          readOnlyReason: null,
+          lastActivityAt: duplicate.createdAt,
+          createdAt: duplicate.createdAt,
+          updatedAt: duplicate.updatedAt,
+        });
         return this.contextResponse(
           duplicate.conversationId,
           job,
@@ -710,6 +1010,31 @@ export class ChatService {
             }),
           ),
         );
+        if (this.storageMode === 'dual') {
+          await this.mongoStore
+            .upsertConversation({
+              id: conversation.id,
+              type: 'invitation',
+              jobId,
+              applicationId: null,
+              companyId: job.pageId || null,
+              createdByUserId: userId,
+              participantUserIds: [userId, profileId],
+              clientRequestId: input.clientRequestId,
+              writeState: 'active',
+              readOnlyReason: null,
+              lastActivityAt: conversation.lastActivityAt,
+              createdAt: conversation.createdAt,
+              updatedAt: conversation.updatedAt,
+            })
+            .catch((error) =>
+              this.logMongoShadowFailure(
+                'conversation',
+                conversation.id,
+                error,
+              ),
+            );
+        }
         const invitation = await manager.getRepository(JobInvitation).save(
           manager.getRepository(JobInvitation).create({
             conversationId: conversation.id,
@@ -788,6 +1113,27 @@ export class ChatService {
             }),
           ),
         );
+        if (this.storageMode === 'dual') {
+          await this.mongoStore
+            .upsertConversation({
+              id: created.id,
+              type: 'inquiry',
+              jobId,
+              applicationId: null,
+              companyId: job.pageId || null,
+              createdByUserId: userId,
+              participantUserIds: [userId, job.createdBy],
+              clientRequestId: input.clientRequestId,
+              writeState: 'active',
+              readOnlyReason: null,
+              lastActivityAt: created.lastActivityAt,
+              createdAt: created.createdAt,
+              updatedAt: created.updatedAt,
+            })
+            .catch((error) =>
+              this.logMongoShadowFailure('conversation', created.id, error),
+            );
+        }
         return created;
       },
     );
@@ -826,7 +1172,10 @@ export class ChatService {
       where: { jobId: job.id, applicantId: invitation.inviteeUserId },
       lock: { mode: 'pessimistic_write' },
     });
-    if (application && !['withdrawn', 'rejected'].includes(application.status)) {
+    if (
+      application &&
+      !['withdrawn', 'rejected'].includes(application.status)
+    ) {
       throw new BadRequestException('An active application already exists');
     }
     if (!application) {
@@ -842,11 +1191,221 @@ export class ChatService {
     return manager.save(application);
   }
 
+  private async createMongoContextInternal(
+    userId: number,
+    input: any,
+    type: 'user' | 'company',
+    profileId: number,
+    jobId: number,
+    job: Job,
+  ) {
+    if (input.action === 'invite') {
+      if (type !== 'user' || profileId === userId) {
+        throw new BadRequestException(
+          'Invitations require another user profile',
+        );
+      }
+      if (!(await this.canManageJobForChat(job, userId))) {
+        throw new ForbiddenException('You cannot invite workers to this job');
+      }
+      const duplicate = await this.invitationRepo.findOne({
+        where: { jobId, inviteeUserId: profileId, status: 'pending' },
+      });
+      if (duplicate) {
+        return this.contextResponse(
+          duplicate.conversationId,
+          job,
+          profileId,
+          userId,
+          duplicate,
+        );
+      }
+      const conversationId = randomUUID();
+      const invitation = await this.invitationRepo.save(
+        this.invitationRepo.create({
+          conversationId,
+          jobId,
+          inviterUserId: userId,
+          inviteeUserId: profileId,
+          status: 'pending',
+          expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          clientRequestId: input.clientRequestId,
+        }),
+      );
+      await this.mongoStore.upsertConversation({
+        id: conversationId,
+        type: 'invitation',
+        jobId,
+        applicationId: null,
+        companyId: job.pageId || null,
+        createdByUserId: userId,
+        participantUserIds: [userId, profileId],
+        clientRequestId: input.clientRequestId,
+        writeState: 'active',
+        readOnlyReason: null,
+        lastActivityAt: invitation.createdAt,
+        createdAt: invitation.createdAt,
+        updatedAt: invitation.updatedAt,
+      });
+      await this.notificationsService.create({
+        userId: profileId,
+        type: 'job_invitation',
+        title: 'New job invitation',
+        message: `You were invited to ${job.title}.`,
+        data: {
+          chatId: conversationId,
+          id: invitation.id,
+          invitationId: invitation.id,
+          status: invitation.status,
+          invitationStatus: invitation.status,
+          viewerAction: 'respond',
+          jobId,
+          companyId: job.pageId,
+        },
+        dedupeKey: `job_invitation:${invitation.id}`,
+      });
+      return this.contextResponse(
+        conversationId,
+        job,
+        profileId,
+        userId,
+        invitation,
+      );
+    }
+
+    if (input.action !== 'inquiry') {
+      throw new BadRequestException('Invalid chat action');
+    }
+    const targetMatches =
+      type === 'company'
+        ? job.pageId === profileId &&
+          job.page?.verificationStatus === 'approved'
+        : !job.pageId && job.createdBy === profileId;
+    if (!targetMatches || job.createdBy === userId) {
+      throw new BadRequestException('Job does not match the selected profile');
+    }
+    const existing = await this.mongoStore.findContextConversation(
+      'inquiry',
+      jobId,
+      [userId, job.createdBy],
+    );
+    if (existing) {
+      return this.contextResponse(existing.id, job, job.createdBy, userId);
+    }
+    const conversationId = randomUUID();
+    await this.mongoStore.upsertConversation({
+      id: conversationId,
+      type: 'inquiry',
+      jobId,
+      applicationId: null,
+      companyId: job.pageId || null,
+      createdByUserId: userId,
+      participantUserIds: [userId, job.createdBy],
+      clientRequestId: input.clientRequestId,
+      writeState: 'active',
+      readOnlyReason: null,
+      lastActivityAt: new Date(),
+    });
+    return this.contextResponse(conversationId, job, job.createdBy, userId);
+  }
+
+  private async updateMongoInvitation(
+    invitationId: string,
+    userId: number,
+    action: 'accept' | 'decline' | 'cancel',
+  ) {
+    const result = await this.invitationRepo.manager.transaction(
+      async (manager) => {
+        const invitation = await manager.getRepository(JobInvitation).findOne({
+          where: { id: invitationId },
+          relations: ['job', 'job.page'],
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!invitation)
+          throw new NotFoundException('Job invitation not found');
+        if (invitation.status !== 'pending') {
+          throw new BadRequestException('Invitation is no longer pending');
+        }
+        if (action === 'cancel') {
+          if (invitation.inviterUserId !== userId) {
+            throw new ForbiddenException(
+              'Only the inviter can cancel this invitation',
+            );
+          }
+          invitation.status = 'cancelled';
+        } else {
+          if (invitation.inviteeUserId !== userId) {
+            throw new ForbiddenException('Only the invited user can respond');
+          }
+          invitation.status = action === 'accept' ? 'accepted' : 'declined';
+        }
+        invitation.respondedAt = new Date();
+        const application =
+          action === 'accept'
+            ? await this.acceptInvitationApplication(invitation, manager)
+            : null;
+        await manager.save(invitation);
+        return { invitation, application };
+      },
+    );
+
+    const { invitation, application } = result;
+    await this.mongoStore.updateConversation(invitation.conversationId, {
+      ...(application
+        ? {
+            applicationId: application.id,
+            type: 'application' as const,
+            writeState: 'active' as const,
+            readOnlyReason: null,
+          }
+        : {
+            writeState: 'read_only' as const,
+            readOnlyReason: `invitation_${invitation.status}`,
+          }),
+    });
+    await this.notificationsService.create({
+      userId:
+        userId === invitation.inviterUserId
+          ? invitation.inviteeUserId
+          : invitation.inviterUserId,
+      type: 'job_invitation_status',
+      title: 'Job invitation updated',
+      message: `The invitation is now ${invitation.status}.`,
+      data: {
+        chatId: invitation.conversationId,
+        id: invitation.id,
+        invitationId: invitation.id,
+        status: invitation.status,
+        invitationStatus: invitation.status,
+        viewerAction: null,
+        jobId: invitation.jobId,
+        applicationId: application?.id,
+      },
+      dedupeKey: `job_invitation_status:${invitation.id}:${invitation.status}`,
+    });
+    return {
+      invitation: {
+        id: invitation.id,
+        invitationId: invitation.id,
+        status: invitation.status,
+        viewerAction: this.invitationViewerAction(invitation, userId),
+        respondedAt: invitation.respondedAt,
+      },
+      chatId: invitation.conversationId,
+      conversationId: invitation.conversationId,
+      applicationId: application?.id || null,
+    };
+  }
+
   private async canAccess(conversation: ChatConversation, userId: number) {
-    if (conversation.participants?.some((item) => item.userId === userId && item.active)) {
+    if (
+      conversation.participants?.some(
+        (item) => item.userId === userId && item.active,
+      )
+    ) {
       if (
         conversation.companyId &&
-        conversation.application?.applicantId !== userId
+        !this.isExternalCompanyParticipant(conversation, userId)
       ) {
         return this.companyPermission(
           conversation.companyId,
@@ -864,7 +1423,24 @@ export class ChatService {
     );
   }
 
-  private async assertCanMutate(conversation: ChatConversation, userId: number) {
+  private isExternalCompanyParticipant(
+    conversation: ChatConversation,
+    userId: number,
+  ) {
+    if (conversation.application?.applicantId === userId) return true;
+    if (conversation.type === 'inquiry') {
+      return conversation.createdByUserId === userId;
+    }
+    if (conversation.type === 'invitation') {
+      return conversation.createdByUserId !== userId;
+    }
+    return false;
+  }
+
+  private async assertCanMutate(
+    conversation: ChatConversation,
+    userId: number,
+  ) {
     if (!(await this.canAccess(conversation, userId))) {
       throw new ForbiddenException('You cannot send messages in this chat');
     }
@@ -940,26 +1516,39 @@ export class ChatService {
     userId: number,
     permission: 'chatApplicants' | 'postJobs',
   ) {
-    const company = await this.companyRepo.findOne({ where: { id: companyId } });
-    if (!company || company.verificationStatus !== 'approved') return false;
-    if (company.ownerId === userId) return true;
-    const member = await this.pageMemberRepo.findOne({
-      where: { pageId: companyId, userId },
-    });
-    return Boolean(
-      member &&
-        member.hasAccess !== false &&
-        normalizeCompanyPermissions(member.role, member.permissions)[permission],
+    return this.authorizationCache.getCompanyPermission(
+      companyId,
+      userId,
+      permission,
+      async () => {
+        const company = await this.companyRepo.findOne({
+          where: { id: companyId },
+        });
+        if (!company || company.verificationStatus !== 'approved') return false;
+        if (company.ownerId === userId) return true;
+        const member = await this.pageMemberRepo.findOne({
+          where: { pageId: companyId, userId },
+        });
+        return Boolean(
+          member &&
+            member.hasAccess !== false &&
+            normalizeCompanyPermissions(member.role, member.permissions)[
+              permission
+            ],
+        );
+      },
     );
   }
 
   private async companyChatIds(userId: number) {
     const memberships = await this.pageMemberRepo.find({
       where: { userId, hasAccess: true },
+      relations: ['page'],
     });
     const allowed: number[] = [];
     for (const member of memberships) {
       if (
+        member.page?.verificationStatus === 'approved' &&
         normalizeCompanyPermissions(member.role, member.permissions)
           .chatApplicants
       ) {
@@ -1011,9 +1600,14 @@ export class ChatService {
   ) {
     return this.conversationRepo
       .createQueryBuilder('conversation')
-      .innerJoin('conversation.participants', 'first', 'first.userId = :userId', {
-        userId,
-      })
+      .innerJoin(
+        'conversation.participants',
+        'first',
+        'first.userId = :userId',
+        {
+          userId,
+        },
+      )
       .innerJoin(
         'conversation.participants',
         'second',
@@ -1025,10 +1619,7 @@ export class ChatService {
       .getOne();
   }
 
-  private async recipientIds(
-    conversation: ChatConversation,
-    senderId: number,
-  ) {
+  private async recipientIds(conversation: ChatConversation, senderId: number) {
     const participants = conversation.participants?.length
       ? conversation.participants
       : await this.participantRepo.find({
@@ -1041,6 +1632,336 @@ export class ChatService {
           .filter((userId) => userId !== senderId),
       ),
     ];
+  }
+
+  private async listMongoChats(
+    userId: number,
+    companyIds: number[],
+    currentPage: number,
+    take: number,
+  ) {
+    const candidates: ChatMongoConversation[] = [];
+    let candidatePage = 1;
+    let candidateTotal = 0;
+    do {
+      const result = await this.mongoStore.listConversations(
+        userId,
+        companyIds,
+        candidatePage,
+        100,
+      );
+      if (!result.data.length) break;
+      candidates.push(...result.data);
+      candidateTotal = result.total;
+      candidatePage += 1;
+    } while (candidates.length < candidateTotal);
+    const visible: Array<{
+      mongo: ChatMongoConversation;
+      conversation: ChatConversation;
+    }> = [];
+    for (const mongo of candidates) {
+      const conversation = await this.hydrateMongoConversation(mongo);
+      if (!(await this.canAccess(conversation, userId))) continue;
+      if (await this.conversationBlocked(conversation, userId)) continue;
+      visible.push({ mongo, conversation });
+    }
+    const pageItems = visible.slice(
+      (currentPage - 1) * take,
+      currentPage * take,
+    );
+    return {
+      data: await Promise.all(
+        pageItems.map(({ mongo, conversation }) =>
+          this.formatMongoConversationSummary(mongo, conversation, userId),
+        ),
+      ),
+      total: visible.length,
+      totalPages: Math.ceil(visible.length / take),
+      currentPage,
+    };
+  }
+
+  private async formatMongoConversationSummary(
+    mongo: ChatMongoConversation,
+    conversation: ChatConversation,
+    userId: number,
+  ) {
+    const [state, invitation] = await Promise.all([
+      this.mongoStore.getReadState(conversation.id, userId),
+      conversation.type === 'invitation'
+        ? this.invitationRepo.findOne({
+            where: { conversationId: conversation.id },
+          })
+        : Promise.resolve(null),
+    ]);
+    const unreadCount = await this.mongoStore.countUnread(
+      conversation.id,
+      userId,
+      state?.lastReadSequence,
+    );
+    const other = conversation.participants?.find(
+      (item) => item.userId !== userId,
+    )?.user;
+    const isApplicant = conversation.application?.applicantId === userId;
+    const participant =
+      isApplicant && conversation.companyId
+        ? {
+            id: conversation.companyId,
+            type: 'company',
+            name: conversation.job?.page?.company_name || '',
+            avatarUrl: conversation.job?.page?.logoAssetId
+              ? await this.objectStorageService.getUrl(
+                  conversation.job.page.logoAssetId,
+                )
+              : conversation.job?.page?.company_logo || null,
+          }
+        : {
+            id: other?.id,
+            type: 'user',
+            name: this.userName(other),
+            avatarUrl: other?.profilePhotoAssetId
+              ? await this.objectStorageService.getUrl(
+                  other.profilePhotoAssetId,
+                )
+              : other?.profile_photo || null,
+          };
+    const writable = await this.isWritable(conversation);
+    const latestSender = mongo.latestMessage
+      ? await this.userRepo.findOne({
+          where: { id: mongo.latestMessage.senderId },
+        })
+      : null;
+    return {
+      chatId: conversation.id,
+      conversationId: conversation.id,
+      legacyApplicationChatId: conversation.applicationId || null,
+      type: conversation.type,
+      jobId: conversation.jobId,
+      applicationId: conversation.applicationId,
+      participant,
+      job: conversation.job
+        ? {
+            id: conversation.job.id,
+            title: conversation.job.title,
+            companyName:
+              conversation.job.page?.company_name ||
+              this.userName(conversation.job.creator),
+          }
+        : null,
+      invitation: invitation
+        ? {
+            id: invitation.id,
+            invitationId: invitation.id,
+            status: invitation.status,
+            viewerAction: this.invitationViewerAction(invitation, userId),
+          }
+        : null,
+      lastMessage: mongo.latestMessage
+        ? await this.formatMongoMessage(
+            mongo.latestMessage,
+            conversation,
+            latestSender,
+          )
+        : null,
+      unreadCount,
+      readOnly: !writable,
+      readOnlyReason: writable ? null : conversation.readOnlyReason,
+    };
+  }
+
+  private async hydrateMongoConversation(
+    mongo: ChatMongoConversation,
+  ): Promise<ChatConversation> {
+    const [job, application, users] = await Promise.all([
+      mongo.jobId
+        ? this.jobRepo.findOne({
+            where: { id: mongo.jobId },
+            relations: ['page', 'creator'],
+          })
+        : Promise.resolve(null),
+      mongo.applicationId
+        ? this.appRepo.findOne({
+            where: { id: mongo.applicationId },
+            relations: ['applicant'],
+          })
+        : Promise.resolve(null),
+      mongo.participantUserIds.length
+        ? this.userRepo.find({
+            where: { id: In(mongo.participantUserIds) },
+          })
+        : Promise.resolve([]),
+    ]);
+    const usersById = new Map(users.map((user) => [user.id, user]));
+    return {
+      id: mongo.id,
+      type: mongo.type,
+      jobId: mongo.jobId,
+      job,
+      applicationId: mongo.applicationId,
+      application,
+      createdByUserId: mongo.createdByUserId,
+      companyId: mongo.companyId,
+      writeState: mongo.writeState,
+      readOnlyReason: mongo.readOnlyReason,
+      clientRequestId: mongo.clientRequestId || null,
+      lastActivityAt: mongo.lastActivityAt || null,
+      participants: mongo.participantUserIds.map(
+        (participantUserId) =>
+          ({
+            conversationId: mongo.id,
+            userId: participantUserId,
+            user: usersById.get(participantUserId),
+            active: true,
+          }) as ChatParticipant,
+      ),
+      createdAt: mongo.createdAt || new Date(0),
+      updatedAt: mongo.updatedAt || mongo.createdAt || new Date(0),
+    } as ChatConversation;
+  }
+
+  private async mirrorSqlConversation(conversation: ChatConversation) {
+    const participantIds = conversation.participants?.length
+      ? conversation.participants.map((participant) => participant.userId)
+      : (
+          await this.participantRepo.find({
+            where: { conversationId: conversation.id, active: true },
+          })
+        ).map((participant) => participant.userId);
+    await this.mongoStore.upsertConversation({
+      id: conversation.id,
+      type: conversation.type,
+      jobId: conversation.jobId || null,
+      applicationId: conversation.applicationId || null,
+      createdByUserId: conversation.createdByUserId,
+      companyId: conversation.companyId || null,
+      participantUserIds: participantIds,
+      writeState: conversation.writeState,
+      readOnlyReason: conversation.readOnlyReason || null,
+      clientRequestId: conversation.clientRequestId || null,
+      lastActivityAt: conversation.lastActivityAt || null,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+    });
+  }
+
+  private sqlMessageToMongo(
+    message: ChatMessage,
+    conversationId: string,
+  ): ChatMongoMessage {
+    return {
+      id: String(message.id),
+      conversationId,
+      jobApplicationId: message.jobApplicationId || null,
+      legacySqlId: message.id,
+      sequence: message.id,
+      clientMessageId: message.clientMessageId || null,
+      senderId: message.senderId,
+      content: message.content || null,
+      mediaUrl: message.mediaUrl || null,
+      attachments: message.attachments || [],
+      messageType: message.messageType,
+      moderationStatus: message.moderationStatus || 'visible',
+      createdAt: message.createdAt,
+      readAt: message.readAt,
+    };
+  }
+
+  private async formatMongoMessage(
+    message: ChatMongoMessage,
+    conversation: ChatConversation,
+    sender?: User,
+  ) {
+    return {
+      id: String(message.id),
+      sequence: message.sequence,
+      chatId: conversation.id,
+      conversationId: conversation.id,
+      jobApplicationId:
+        conversation.applicationId || message.jobApplicationId || null,
+      clientMessageId: message.clientMessageId || null,
+      senderId: message.senderId,
+      senderName: this.userName(sender),
+      senderAvatar: sender?.profilePhotoAssetId
+        ? await this.objectStorageService.getUrl(sender.profilePhotoAssetId)
+        : sender?.profile_photo || null,
+      text: message.content || '',
+      attachments: message.attachments?.length
+        ? message.attachments
+        : message.mediaUrl
+          ? [
+              {
+                fileUrl: message.mediaUrl,
+                contentType: message.messageType,
+              },
+            ]
+          : [],
+      messageType: message.messageType,
+      createdAt: message.createdAt,
+      readAt: message.readAt || null,
+    };
+  }
+
+  private async userMap(userIds: number[]) {
+    const ids = [...new Set(userIds.map(Number).filter(Boolean))];
+    const users = ids.length
+      ? await this.userRepo.find({ where: { id: In(ids) } })
+      : [];
+    return new Map(users.map((user) => [user.id, user]));
+  }
+
+  private logMongoShadowFailure(kind: string, id: string, error: unknown) {
+    console.error('Mongo chat shadow write failed', {
+      kind,
+      id,
+      errorCode:
+        (error as any)?.code ||
+        (error as Error)?.name ||
+        'CHAT_MONGO_SHADOW_FAILED',
+    });
+  }
+
+  private async compareMongoMessagePage(
+    conversationId: string,
+    sqlMessages: ChatMessage[],
+    before: number | null,
+    page: number,
+    limit: number,
+    sqlTotal: number,
+  ) {
+    const sampleRate = Math.min(
+      1,
+      Math.max(0, Number(process.env.CHAT_SHADOW_COMPARE_SAMPLE_RATE || 0.1)),
+    );
+    if (Math.random() > sampleRate) return;
+    try {
+      const mongoBefore = before
+        ? (await this.mongoStore.getMessage(conversationId, String(before)))
+            ?.sequence || null
+        : null;
+      const mongo = await this.mongoStore.getMessages(
+        conversationId,
+        mongoBefore,
+        page,
+        limit,
+      );
+      const sqlIds = sqlMessages.map((message) => String(message.id));
+      const mongoIds = mongo.data.map((message) => message.id);
+      if (
+        sqlTotal !== mongo.total ||
+        sqlIds.length !== mongoIds.length ||
+        sqlIds.some((id, index) => id !== mongoIds[index])
+      ) {
+        console.warn('Mongo chat shadow read mismatch', {
+          conversationId,
+          sqlTotal,
+          mongoTotal: mongo.total,
+          sqlPageCount: sqlIds.length,
+          mongoPageCount: mongoIds.length,
+        });
+      }
+    } catch (error) {
+      this.logMongoShadowFailure('shadow_read', conversationId, error);
+    }
   }
 
   private async formatConversationSummary(
@@ -1076,27 +1997,29 @@ export class ChatService {
     const other = conversation.participants?.find(
       (item) => item.userId !== userId,
     )?.user;
-    const isApplicant =
-      conversation.application?.applicantId === userId;
-    const participant = isApplicant && conversation.companyId
-      ? {
-          id: conversation.companyId,
-          type: 'company',
-          name: conversation.job?.page?.company_name || '',
-          avatarUrl: conversation.job?.page?.logoAssetId
-            ? await this.objectStorageService.getUrl(
-                conversation.job.page.logoAssetId,
-              )
-            : conversation.job?.page?.company_logo || null,
-        }
-      : {
-          id: other?.id,
-          type: 'user',
-          name: this.userName(other),
-          avatarUrl: other?.profilePhotoAssetId
-            ? await this.objectStorageService.getUrl(other.profilePhotoAssetId)
-            : other?.profile_photo || null,
-        };
+    const isApplicant = conversation.application?.applicantId === userId;
+    const participant =
+      isApplicant && conversation.companyId
+        ? {
+            id: conversation.companyId,
+            type: 'company',
+            name: conversation.job?.page?.company_name || '',
+            avatarUrl: conversation.job?.page?.logoAssetId
+              ? await this.objectStorageService.getUrl(
+                  conversation.job.page.logoAssetId,
+                )
+              : conversation.job?.page?.company_logo || null,
+          }
+        : {
+            id: other?.id,
+            type: 'user',
+            name: this.userName(other),
+            avatarUrl: other?.profilePhotoAssetId
+              ? await this.objectStorageService.getUrl(
+                  other.profilePhotoAssetId,
+                )
+              : other?.profile_photo || null,
+          };
     const writable = await this.isWritable(conversation);
     return {
       chatId: conversation.id,
@@ -1137,7 +2060,8 @@ export class ChatService {
     conversation: ChatConversation,
   ) {
     return {
-      id: message.id,
+      id: String(message.id),
+      sequence: message.id,
       chatId: conversation.id,
       conversationId: conversation.id,
       jobApplicationId: conversation.applicationId || message.jobApplicationId,
@@ -1253,6 +2177,9 @@ export class ChatService {
     conversationId: string,
     fileUrl: string,
   ) {
+    if (this.storageMode === 'mongo') {
+      return this.mongoStore.isPersistedAttachment(conversationId, fileUrl);
+    }
     const result = await this.messageRepo
       .createQueryBuilder('message')
       .where('message.conversationId = :conversationId', { conversationId })
@@ -1293,20 +2220,22 @@ export class ChatService {
       where: { id: invitationId },
     });
     if (!invitation) return [];
-    return [invitation.inviterUserId, invitation.inviteeUserId].map((userId) => ({
-      userId,
-      conversationId: invitation.conversationId,
-      payload: {
-        chatId: invitation.conversationId,
+    return [invitation.inviterUserId, invitation.inviteeUserId].map(
+      (userId) => ({
+        userId,
         conversationId: invitation.conversationId,
-        invitation: {
-          id: invitation.id,
-          invitationId: invitation.id,
-          status: invitation.status,
-          viewerAction: this.invitationViewerAction(invitation, userId),
+        payload: {
+          chatId: invitation.conversationId,
+          conversationId: invitation.conversationId,
+          invitation: {
+            id: invitation.id,
+            invitationId: invitation.id,
+            status: invitation.status,
+            viewerAction: this.invitationViewerAction(invitation, userId),
+          },
         },
-      },
-    }));
+      }),
+    );
   }
 
   private invitationViewerAction(

@@ -224,7 +224,7 @@ GET /chats?page=1&limit=20
 ```
 
 ```http
-GET /chats/:conversationId/messages?before=<messageId>&limit=20
+GET /chats/:conversationId/messages?before=<sequence>&limit=20
 ```
 
 ```ts
@@ -241,7 +241,8 @@ GET /chats/:conversationId/messages?before=<messageId>&limit=20
 
 ```ts
 type ChatMessage = {
-  id: number;
+  id: string; // legacy rows keep their former numeric ID as a string
+  sequence: number;
   conversationId: string;
   chatId: string;
   applicationId: number | null;
@@ -302,10 +303,15 @@ PATCH /chats/:conversationId/read
 {
   chatId: string;
   conversationId: string;
-  lastReadMessageId: number | null;
+  lastReadMessageId: string | null;
+  lastReadSequence: number | null;
   readAt: string;
 }
 ```
+
+The mobile read-receipt comparison must use `message.sequence <=
+lastReadSequence`. Treat message IDs as opaque strings and never pass them
+through `Number()`.
 
 Get profile-specific chat actions and valid jobs:
 
@@ -833,6 +839,11 @@ JWT_SECRET
 SOCIAL_CHALLENGE_SECRET
 LEGACY_ACCESS_TOKEN_GRACE_UNTIL
 REDIS_URL
+CHAT_STORAGE_MODE=sql|dual|mongo
+MONGODB_URI and MONGODB_CHAT_DATABASE when chat mode is dual or mongo
+MONGODB_CHAT_AUTO_INDEX=false
+CHAT_AUTH_CACHE_TTL_SECONDS=30
+CHAT_SHADOW_COMPARE_SAMPLE_RATE=0.1
 STORAGE_PROVIDER=s3
 S3_BUCKET S3_REGION S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY
 S3_ENDPOINT and S3_FORCE_PATH_STYLE when required by the provider
@@ -841,6 +852,56 @@ FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS
 GOOGLE_CLIENT_IDS or GOOGLE_CLIENT_ID when Google auth is enabled
 FACEBOOK_APP_ID FACEBOOK_APP_SECRET when Facebook auth is enabled
 ```
+
+### MongoDB chat rollout
+
+MySQL remains authoritative for authentication, users, jobs, applications,
+company permissions, blocks, notifications, and job invitations. MongoDB owns
+conversation documents, participants, messages, read state, inbox projections,
+and the durable chat-notification outbox after cutover. Redis continues to own
+Socket.IO fan-out and ephemeral presence.
+
+Use a MongoDB Atlas replica set with TLS, backups, a least-privilege database
+user, and only the backend server's static egress IP or private endpoint in the
+network access list. Never expose Atlas with `0.0.0.0/0` and never place the
+Mongo URI in a mobile build.
+
+Roll out without dropping the SQL chat archive:
+
+```bash
+# 1. Deploy with CHAT_STORAGE_MODE=sql and run MySQL migrations.
+npm run migration:run
+
+# 2. Inspect the exact migration target without connecting.
+npm run migrate:chat-to-mongo -- \
+  --dry-run \
+  --confirm-sql-db=<mysql-database> \
+  --confirm-mongo-db=<mongo-database>
+
+# 3. Backfill and verify MongoDB.
+npm run migrate:chat-to-mongo -- \
+  --confirm-sql-db=<mysql-database> \
+  --confirm-mongo-db=<mongo-database>
+
+# 4. Restart in dual mode, verify shadow writes, then restart in mongo mode.
+```
+
+Before rollout, run the transaction smoke test against a disposable database
+on an Atlas test cluster or another Mongo replica set. The command always uses
+a random `jobsloot_e2e_chat_*` database and drops it in `finally`:
+
+```bash
+MONGODB_URI='<test-replica-set-uri>' npm run test:chat-mongo:isolated
+```
+
+The backfill is resumable and upsert-only. Legacy SQL message IDs are retained
+as strings. Each conversation receives a stable numeric sequence ordered by
+`createdAt` and then legacy SQL ID; `nextBefore` contains that sequence as a
+string. `dual` keeps SQL authoritative while copying writes into Mongo and
+sampling history reads for count/ID comparison. `mongo` writes no SQL
+message/read rows; SQL remains in use for authorization, workflow, invitation
+changes, and asynchronous in-app notifications. Keep the SQL chat tables for at least one coordinated
+mobile release before considering a separate removal migration.
 
 The canonical public backend origin is `https://jobsloot.com/`. Keep
 `http://localhost:3000` only as the commented development reference in local

@@ -88,6 +88,7 @@ async function main() {
         'AddContentAssetReferences1786352400000',
         'AddUnifiedModerationAndLegal1786518000000',
         'HardenIdempotencyDeletionNotifications1786518060000',
+        'DecoupleChatInvitations1787000000000',
       ];
       const applied = new Set(migrations.map((item) => item.name));
       const missing = required.filter((name) => !applied.has(name));

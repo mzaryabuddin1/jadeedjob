@@ -1387,7 +1387,9 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
     if (post.mediaType === 'video' && post.videoUrl) {
       return {
         type: 'video' as const,
+        assetId: post.videoAssetId || null,
         url: post.videoUrl,
+        thumbnailAssetId: post.videoThumbnailAssetId || null,
         thumbnailUrl: post.videoThumbnailUrl,
         ...(post.videoDurationSeconds
           ? { durationSeconds: Number(post.videoDurationSeconds) }
@@ -1395,7 +1397,11 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       };
     }
     if (post.imageUrl) {
-      return { type: 'image' as const, url: post.imageUrl };
+      return {
+        type: 'image' as const,
+        assetId: post.imageAssetId || null,
+        url: post.imageUrl,
+      };
     }
     return null;
   }
@@ -1473,14 +1479,20 @@ export class PostsService implements OnModuleInit, OnModuleDestroy {
       post.mediaType === 'video' && videoUrl
         ? {
             type: 'video' as const,
+            assetId: post.videoAssetId || null,
             url: videoUrl,
+            thumbnailAssetId: post.videoThumbnailAssetId || null,
             thumbnailUrl,
             ...(post.videoDurationSeconds
               ? { durationSeconds: Number(post.videoDurationSeconds) }
               : {}),
           }
         : imageUrl
-          ? { type: 'image' as const, url: imageUrl }
+          ? {
+              type: 'image' as const,
+              assetId: post.imageAssetId || null,
+              url: imageUrl,
+            }
           : null;
     return {
       ...result,

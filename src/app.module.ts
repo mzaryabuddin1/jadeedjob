@@ -40,15 +40,16 @@ import { ModerationModule } from './moderation/moderation.module';
 import { AccountDeletionModule } from './users/account-deletion.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { LegalModule } from './legal/legal.module';
+import { ChatMongoModule } from './chat/storage/chat-mongo.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),
-    // MongooseModule.forRoot(process.env.MONGODB_URI),
+    ChatMongoModule.register(),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT)  ,
+      port: parseInt(process.env.DB_PORT),
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,

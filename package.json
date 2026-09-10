@@ -17,6 +17,7 @@
     "migrate:reel-publishers": "node scripts/migrate-reel-company-publishing.js",
     "migrate:community-posts": "node scripts/migrate-community-posts.js",
     "migrate:community-post-videos": "node scripts/migrate-community-post-videos.js",
+    "migrate:chat-to-mongo": "node -r ts-node/register -r tsconfig-paths/register scripts/migrate-chat-to-mongo.ts",
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
     "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
     "migration:show": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:show -d src/database/data-source.ts",
@@ -29,7 +30,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:e2e:isolated": "node scripts/run-isolated-e2e.js",
-    "test:migrations:isolated": "node scripts/test-migrations-isolated.js"
+    "test:migrations:isolated": "node scripts/test-migrations-isolated.js",
+    "test:chat-mongo:isolated": "node -r ts-node/register -r tsconfig-paths/register scripts/test-chat-mongo-isolated.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1097.0",
@@ -38,6 +40,7 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^10.0.0",
     "@nestjs/jwt": "^11.0.0",
+    "@nestjs/mongoose": "^10.1.0",
     "@nestjs/platform-express": "^10.4.20",
     "@nestjs/platform-socket.io": "^10.4.20",
     "@nestjs/schedule": "^6.1.3",
@@ -54,6 +57,7 @@
     "firebase-admin": "^13.6.0",
     "google-auth-library": "^10.9.1",
     "joi": "^17.13.3",
+    "mongoose": "^8.24.4",
     "multer": "^2.0.2",
     "mysql2": "^3.15.3",
     "passport-jwt": "^4.0.1",

@@ -15,6 +15,7 @@ import { ProfileFollow } from 'src/profiles/entities/profile-follow.entity';
 import { ProfilesModule } from 'src/profiles/profiles.module';
 import { PagesModule } from 'src/pages/pages.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { PublicReelsController } from './public-reels.controller';
 
 @Module({
   imports: [
@@ -33,7 +34,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     ProfilesModule,
     NotificationsModule,
   ],
-  controllers: [ReelsController],
+  controllers: [ReelsController, PublicReelsController],
   providers: [ReelsService, ReelStorageService],
 })
 export class ReelsModule {}

@@ -430,6 +430,14 @@ export class ReelsService implements OnModuleInit {
     };
   }
 
+  async getPublicReel(reelId: number, viewerId = 0) {
+    const qb = this.createViewablePublishedQuery(viewerId);
+    if (viewerId) await this.applyBlockedPublisherFilters(qb, viewerId);
+    const reel = await qb.andWhere('reel.id = :reelId', { reelId }).getOne();
+    if (!reel) throw new NotFoundException('Reel not found');
+    return this.formatReel(reel, viewerId);
+  }
+
   async getComments(
     reelId: number,
     userId: number,
@@ -1015,6 +1023,7 @@ export class ReelsService implements OnModuleInit {
     return {
       id: String(reel.id),
       videoUrl: reel.videoUrl,
+      videoAssetId: reel.videoAssetId || null,
       category: reel.category,
       publisher,
       author: publisher,
@@ -1085,7 +1094,22 @@ export class ReelsService implements OnModuleInit {
     const videoUrl = reel.videoAssetId
       ? await this.storageAssetUrl(reel.videoAssetId)
       : reel.videoUrl;
-    return { ...result, videoUrl, publisher, author: publisher };
+    return {
+      ...result,
+      videoUrl,
+      media: {
+        type: 'video' as const,
+        assetId: reel.videoAssetId || null,
+        url: videoUrl || null,
+        thumbnailAssetId: null,
+        thumbnailUrl: null,
+        durationSeconds: reel.durationSeconds
+          ? Number(reel.durationSeconds)
+          : null,
+      },
+      publisher,
+      author: publisher,
+    };
   }
 
   private async storageAssetUrl(assetId: string) {

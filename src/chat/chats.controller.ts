@@ -5,7 +5,6 @@ import {
   Get,
   Headers,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -24,11 +23,18 @@ import { Throttle } from '@nestjs/throttler';
 import { ChatGateway } from './chat.gateway';
 import { CommunityGuidelinesGuard } from 'src/legal/community-guidelines.guard';
 import { ModerationService } from 'src/moderation/moderation.service';
-import { ApiBearerAuth, ApiExtraModels, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiExtraModels,
+  ApiOkResponse,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { InvitationProjectionDto } from './dto/invitation-api.dto';
 import { ApiOptionalIdempotencyKey } from 'src/idempotency/idempotency.decorators';
 import { ApiCommunityAcceptanceRequired } from 'src/legal/legal.decorators';
 import { ApiCreateModerationReport } from 'src/moderation/moderation.decorators';
+import { ChatMessageApiDto, ChatReadStateApiDto } from './dto/chat-api.dto';
 
 const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
@@ -78,14 +84,7 @@ const contextSchema = Joi.object({
 const reportSchema = Joi.object({
   reason: Joi.string()
     .trim()
-    .valid(
-      'spam',
-      'harassment',
-      'unsafe',
-      'fraud',
-      'inappropriate',
-      'other',
-    )
+    .valid('spam', 'harassment', 'unsafe', 'fraud', 'inappropriate', 'other')
     .required(),
   details: Joi.string().trim().max(1000).allow('', null).optional(),
 });
@@ -94,7 +93,7 @@ const reportSchema = Joi.object({
 @Controller('chats')
 @ApiTags('Chats')
 @ApiBearerAuth()
-@ApiExtraModels(InvitationProjectionDto)
+@ApiExtraModels(InvitationProjectionDto, ChatMessageApiDto, ChatReadStateApiDto)
 export class ChatsController {
   constructor(
     private readonly chatService: ChatService,
@@ -142,6 +141,23 @@ export class ChatsController {
   }
 
   @Get(':chatId/messages')
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ChatMessageApiDto' },
+        },
+        nextBefore: { type: 'string', nullable: true },
+        total: { type: 'number' },
+        totalPages: { type: 'number' },
+        currentPage: { type: 'number' },
+        readOnly: { type: 'boolean' },
+        readOnlyReason: { type: 'string', nullable: true },
+      },
+    },
+  })
   getMessages(
     @Param('chatId') chatId: string,
     @Query(new JoiValidationPipe(messageQuerySchema))
@@ -160,6 +176,7 @@ export class ChatsController {
   @UseGuards(CommunityGuidelinesGuard)
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiCommunityAcceptanceRequired()
+  @ApiOkResponse({ type: ChatMessageApiDto })
   sendMessage(
     @Param('chatId') chatId: string,
     @Body(new JoiValidationPipe(messageSchema)) body: any,
@@ -223,6 +240,7 @@ export class ChatsController {
   }
 
   @Patch(':chatId/read')
+  @ApiOkResponse({ type: ChatReadStateApiDto })
   markRead(@Param('chatId') chatId: string, @Req() req: any) {
     return this.chatService.markRead(chatId, req.user.id);
   }
@@ -230,9 +248,14 @@ export class ChatsController {
   @Post(':conversationId/messages/:messageId/report')
   @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @ApiCreateModerationReport('Report a message in an accessible conversation')
+  @ApiParam({
+    name: 'messageId',
+    type: String,
+    description: 'Mongo string ID or legacy numeric message ID.',
+  })
   async reportMessage(
     @Param('conversationId') conversationId: string,
-    @Param('messageId', ParseIntPipe) messageId: number,
+    @Param('messageId') messageId: string,
     @Body(new JoiValidationPipe(reportSchema)) body: any,
     @Req() req: any,
   ) {

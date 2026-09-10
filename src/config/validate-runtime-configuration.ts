@@ -4,6 +4,13 @@ export function validateRuntimeConfiguration() {
   const nodeEnv = process.env.NODE_ENV || 'development';
   if (!DEPLOYED_ENVIRONMENTS.has(nodeEnv)) return;
 
+  const chatStorageMode = String(
+    process.env.CHAT_STORAGE_MODE || 'sql',
+  ).toLowerCase();
+  if (!['sql', 'dual', 'mongo'].includes(chatStorageMode)) {
+    throw new Error('CHAT_STORAGE_MODE must be sql, dual, or mongo');
+  }
+
   const required = [
     'APP_URL',
     'ALLOWED_ORIGINS',
@@ -37,6 +44,11 @@ export function validateRuntimeConfiguration() {
   const missing = required.filter(
     (key) => !String(process.env[key] || '').trim(),
   );
+  if (chatStorageMode !== 'sql') {
+    for (const key of ['MONGODB_URI', 'MONGODB_CHAT_DATABASE']) {
+      if (!String(process.env[key] || '').trim()) missing.push(key);
+    }
+  }
   if (missing.length) {
     throw new Error(
       `Missing required ${nodeEnv} configuration: ${[...new Set(missing)].join(', ')}`,

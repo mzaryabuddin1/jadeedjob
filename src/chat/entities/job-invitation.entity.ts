@@ -11,7 +11,6 @@ import {
 } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
-import { ChatConversation } from './chat-conversation.entity';
 
 @Entity('job_invitations')
 @Index('IDX_job_invitations_invitee_status', ['inviteeUserId', 'status'])
@@ -23,13 +22,6 @@ export class JobInvitation {
 
   @Column({ length: 36 })
   conversationId: string;
-
-  @ManyToOne(() => ChatConversation, { onDelete: 'CASCADE' })
-  @JoinColumn({
-    name: 'conversationId',
-    foreignKeyConstraintName: 'FK_job_invitations_conversation',
-  })
-  conversation: ChatConversation;
 
   @Column()
   jobId: number;

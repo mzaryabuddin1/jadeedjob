@@ -62,12 +62,18 @@ function databaseConfig(env = process.env) {
 function assertRuntimeSafety(options, env = process.env) {
   const nodeEnv = env.NODE_ENV || 'development';
   const database = env.DB_DATABASE;
+  const chatStorageMode = String(env.CHAT_STORAGE_MODE || 'sql').toLowerCase();
   if (!database) throw new Error('DB_DATABASE is required');
   if (nodeEnv === 'production') {
     throw new Error('Demo seeding is permanently disabled in production');
   }
   if (env.DB_SYNCHRONIZE !== 'false') {
     throw new Error('DB_SYNCHRONIZE must be exactly false before seeding');
+  }
+  if (!options.dryRun && chatStorageMode !== 'sql') {
+    throw new Error(
+      'Demo chat fixtures must be seeded in CHAT_STORAGE_MODE=sql, then copied with migrate:chat-to-mongo before enabling dual or mongo mode',
+    );
   }
   if (!options.dryRun && options.confirmDatabase !== database) {
     throw new Error(
@@ -85,7 +91,7 @@ function assertRuntimeSafety(options, env = process.env) {
       throw new Error('Staging demo media requires STORAGE_PROVIDER=s3');
     }
   }
-  return { nodeEnv, database };
+  return { nodeEnv, database, chatStorageMode };
 }
 
 function printHelp() {
@@ -220,6 +226,9 @@ async function run(argv = process.argv.slice(2), env = process.env) {
       database: runtime.database,
       publicBaseUrl: publicBaseUrl(env),
       storageProvider: provider,
+      chatStorageMode: runtime.chatStorageMode,
+      chatMigrationRequired:
+        'Run migrate:chat-to-mongo after seeding and before dual/mongo mode.',
       cleanup: existing.report,
       planned: plannedCounts(fixtures),
       sampleAccounts: sampleAccounts(fixtures),

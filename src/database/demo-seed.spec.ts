@@ -119,6 +119,20 @@ describe('deterministic demo seed plan', () => {
         },
       ),
     ).toThrow('DB_SYNCHRONIZE must be exactly false');
+    expect(() =>
+      assertRuntimeSafety(
+        {
+          dryRun: false,
+          confirmDatabase: 'jobsloot_staging',
+        },
+        {
+          NODE_ENV: 'development',
+          DB_DATABASE: 'jobsloot_staging',
+          DB_SYNCHRONIZE: 'false',
+          CHAT_STORAGE_MODE: 'mongo',
+        },
+      ),
+    ).toThrow('CHAT_STORAGE_MODE=sql');
   });
 
   it('normalizes public base URLs and checks seed postconditions', () => {

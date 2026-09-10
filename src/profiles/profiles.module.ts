@@ -9,6 +9,7 @@ import { ProfilesService } from './profiles.service';
 import { PagesModule } from 'src/pages/pages.module';
 import { ProfilePublisherOptionsController } from './profile-publisher-options.controller';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { PublicProfilesController } from './public-profiles.controller';
 
 @Module({
   imports: [
@@ -21,7 +22,11 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
       CompanyPage,
     ]),
   ],
-  controllers: [ProfilePublisherOptionsController, ProfilesController],
+  controllers: [
+    ProfilePublisherOptionsController,
+    ProfilesController,
+    PublicProfilesController,
+  ],
   providers: [ProfilesService],
   exports: [ProfilesService],
 })

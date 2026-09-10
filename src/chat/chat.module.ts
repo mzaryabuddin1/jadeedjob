@@ -18,6 +18,7 @@ import { ChatReadState } from './entities/chat-read-state.entity';
 import { JobInvitation } from './entities/job-invitation.entity';
 import { ProfileChatOptionsController } from './profile-chat-options.controller';
 import { JobInvitationController } from './job-invitation.controller';
+import { ChatOutboxProcessor } from './chat-outbox.processor';
 
 @Module({
   imports: [
@@ -35,7 +36,7 @@ import { JobInvitationController } from './job-invitation.controller';
     ]),
     NotificationsModule,
   ],
-  providers: [ChatService, ChatGateway],
+  providers: [ChatService, ChatGateway, ChatOutboxProcessor],
   controllers: [
     ChatController,
     ChatsController,

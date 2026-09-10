@@ -111,6 +111,7 @@ export declare class ReelsService implements OnModuleInit {
         data: any[];
         nextCursor: string;
     }>;
+    getPublicReel(reelId: number, viewerId?: number): Promise<any>;
     getComments(reelId: number, userId: number, cursor?: string, limit?: number): Promise<{
         data: {
             id: string;

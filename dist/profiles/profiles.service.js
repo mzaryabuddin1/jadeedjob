@@ -124,7 +124,7 @@ let ProfilesService = class ProfilesService {
     }
     async getUserProfile(userId, viewerId) {
         const user = await this.userRepo.findOne({ where: { id: userId } });
-        if (!user || user.isBanned)
+        if (!user || user.isBanned || user.deletedAt)
             throw new common_1.NotFoundException('Profile not found');
         const [followersCount, following] = await Promise.all([
             this.followRepo.count({
