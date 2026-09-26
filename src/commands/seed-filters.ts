@@ -1,10 +1,11 @@
-import { NestFactory } from '@nestjs/core';
 import { config } from 'dotenv';
 import { resolve } from 'path';
-import { AppModule } from '../app.module';
-import { FilterService } from '../filter/filter.service';
 
 config({ path: resolve(process.cwd(), '.env') });
+
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from '../app.module';
+import { FilterService } from '../filter/filter.service';
 
 async function run() {
   const createdByArg = process.argv.find((a) => a.startsWith('--user='));

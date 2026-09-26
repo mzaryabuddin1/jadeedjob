@@ -1,10 +1,11 @@
-import { NestFactory } from '@nestjs/core';
 import { config } from 'dotenv';
 import { resolve } from 'path';
-import { AppModule } from '../app.module';
-import { LanguageService } from '../language/language.service';
 
 config({ path: resolve(process.cwd(), '.env') });
+
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from '../app.module';
+import { LanguageService } from '../language/language.service';
 
 async function run() {
   const app = await NestFactory.createApplicationContext(AppModule, {
