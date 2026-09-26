@@ -31,7 +31,10 @@ import { RatingModule } from './rating/rating.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     // MongooseModule.forRoot(process.env.MONGODB_URI),
     TypeOrmModule.forRoot({
       type: 'mysql',

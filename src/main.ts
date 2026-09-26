@@ -9,11 +9,13 @@ async function bootstrap() {
 
   app.enableCors();
   app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
+  app.use(express.static(join(__dirname, '..', 'public')));
 
   setupSwagger(app);
 
   await app.listen(3000, '0.0.0.0');
   console.log(`API running on http://localhost:3000`);
   console.log(`Swagger docs: http://localhost:3000/docs`);
+  console.log(`Google login test: http://localhost:3000/google-login.html`);
 }
 bootstrap();

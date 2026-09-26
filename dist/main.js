@@ -42,10 +42,12 @@ async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     app.enableCors();
     app.use('/uploads', express.static((0, path_1.join)(__dirname, '..', 'uploads')));
+    app.use(express.static((0, path_1.join)(__dirname, '..', 'public')));
     (0, swagger_setup_1.setupSwagger)(app);
     await app.listen(3000, '0.0.0.0');
     console.log(`API running on http://localhost:3000`);
     console.log(`Swagger docs: http://localhost:3000/docs`);
+    console.log(`Google login test: http://localhost:3000/google-login.html`);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

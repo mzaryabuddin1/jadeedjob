@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JobsLoot — Google Login Test</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3b82f6;
+      --ok: #22c55e;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(ellipse at top, #1a2740 0%, var(--bg) 55%);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 560px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    h1 { margin: 0 0 6px; font-size: 1.4rem; }
+    p.sub { margin: 0 0 22px; color: var(--muted); font-size: .92rem; line-height: 1.45; }
+    label {
+      display: block;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0f1724;
+      color: var(--text);
+      font-size: .9rem;
+      margin-bottom: 14px;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 8px 0 18px;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    #googleBtnWrap { min-height: 44px; margin-bottom: 8px; }
+    .hint {
+      font-size: .8rem;
+      color: var(--muted);
+      background: #0f1724;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+    .hint code {
+      color: #93c5fd;
+      font-size: .78rem;
+    }
+    pre {
+      margin: 0;
+      padding: 14px;
+      background: #0a0f16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      max-height: 340px;
+      font-size: .78rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status {
+      font-size: .85rem;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .status.info { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Google Login Test</h1>
+    <p class="sub">
+      Sign in with Google → get <code>idToken</code> → call
+      <code>POST /auth/google</code>
+    </p>
+
+    <div class="hint">
+      Google Cloud Console → Credentials → Web client →
+      <strong>Authorized JavaScript origins</strong> mein add karo:<br />
+      <code>http://localhost:3000</code>
+    </div>
+
+    <label for="clientId">Google Web Client ID</label>
+    <input
+      id="clientId"
+      type="text"
+      value="501012008250-ojhditf6a2o2i5gs576tfv4ho5uurhan.apps.googleusercontent.com"
+      placeholder="xxxx.apps.googleusercontent.com"
+    />
+
+    <label for="baseUrl">API Base URL</label>
+    <input id="baseUrl" type="text" value="http://localhost:3000" />
+
+    <label>Google Sign-In</label>
+    <div id="googleBtnWrap"></div>
+
+    <div class="row">
+      <button class="btn-ghost" type="button" onclick="reloadGoogleButton()">
+        Reload Google Button
+      </button>
+      <button class="btn-primary" type="button" id="sendBtn" disabled onclick="sendToApi()">
+        Send idToken → API
+      </button>
+      <button class="btn-ghost" type="button" onclick="clearOut()">Clear</button>
+    </div>
+
+    <div id="status" class="status info">Waiting for Google sign-in…</div>
+    <pre id="out">{}</pre>
+  </div>
+
+  <script>
+    let lastIdToken = null;
+    let lastApiResponse = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function setStatus(text, kind = 'info') {
+      const el = $('status');
+      el.textContent = text;
+      el.className = 'status ' + kind;
+    }
+
+    function show(obj) {
+      $('out').textContent = JSON.stringify(obj, null, 2);
+    }
+
+    function clearOut() {
+      lastIdToken = null;
+      lastApiResponse = null;
+      $('sendBtn').disabled = true;
+      setStatus('Waiting for Google sign-in…', 'info');
+      show({});
+    }
+
+    function onGoogleCredential(response) {
+      // response.credential = JWT idToken
+      lastIdToken = response.credential;
+      $('sendBtn').disabled = false;
+      setStatus('Got Google idToken — ab API pe bhejo', 'ok');
+      show({
+        step: 'google_signin_ok',
+        idToken_preview: lastIdToken.slice(0, 40) + '…',
+        idToken_length: lastIdToken.length,
+        tip: 'Click “Send idToken → API”',
+      });
+    }
+
+    function reloadGoogleButton() {
+      const clientId = $('clientId').value.trim();
+      if (!clientId) {
+        setStatus('Web Client ID required', 'err');
+        return;
+      }
+
+      const wrap = $('googleBtnWrap');
+      wrap.innerHTML = '';
+
+      if (!window.google?.accounts?.id) {
+        setStatus('Google script still loading… try again in 1s', 'err');
+        return;
+      }
+
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: onGoogleCredential,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+
+      google.accounts.id.renderButton(wrap, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular',
+        width: 320,
+      });
+
+      setStatus('Google button ready — click Sign in', 'info');
+    }
+
+    async function sendToApi() {
+      if (!lastIdToken) {
+        setStatus('Pehle Google se sign in karo', 'err');
+        return;
+      }
+
+      const baseUrl = $('baseUrl').value.replace(/\/$/, '');
+      setStatus('Calling POST /auth/google …', 'info');
+      $('sendBtn').disabled = true;
+
+      try {
+        const res = await fetch(baseUrl + '/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idToken: lastIdToken,
+            // optional:
+            // country: 41,
+            // language: 2,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({ raw: 'non-json response' }));
+        lastApiResponse = { status: res.status, data };
+
+        if (!res.ok) {
+          setStatus('API error ' + res.status, 'err');
+          show(lastApiResponse);
+          $('sendBtn').disabled = false;
+          return;
+        }
+
+        setStatus(
+          'Login OK — kyc_complete: ' + String(data.kyc_complete),
+          'ok',
+        );
+        show({
+          step: 'api_ok',
+          access_token: data.access_token,
+          kyc_complete: data.kyc_complete,
+          isNewUser: data.isNewUser,
+          message: data.message,
+          user: data.user,
+        });
+
+        if (data.access_token) {
+          localStorage.setItem('jobsloot_access_token', data.access_token);
+        }
+      } catch (err) {
+        setStatus('Network / CORS error: ' + err.message, 'err');
+        show({ error: String(err) });
+        $('sendBtn').disabled = false;
+      }
+    }
+
+    // Init when GIS script is ready
+    window.addEventListener('load', () => {
+      const tryInit = () => {
+        if (window.google?.accounts?.id) {
+          reloadGoogleButton();
+        } else {
+          setTimeout(tryInit, 200);
+        }
+      };
+      tryInit();
+    });
+  </script>
+</body>
+</html>

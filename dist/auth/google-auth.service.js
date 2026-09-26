@@ -65,7 +65,11 @@ let GoogleAuthService = class GoogleAuthService {
                 err instanceof common_1.ServiceUnavailableException) {
                 throw err;
             }
-            throw new common_1.UnauthorizedException('Invalid or expired Google token. Use the ID token from Google Sign-In (not access_token).');
+            const detail = err instanceof Error ? err.message : 'token verification failed';
+            console.error('[GoogleAuth] verifyIdToken failed:', detail, {
+                audiences,
+            });
+            throw new common_1.UnauthorizedException(`Invalid or expired Google token (${detail}). Ensure GOOGLE_CLIENT_ID matches the Web client that issued the idToken, then restart the server.`);
         }
     }
 };
