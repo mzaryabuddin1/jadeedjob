@@ -6,53 +6,47 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OtpService = void 0;
+exports.OtpService = exports.DEV_OTP_CODE = void 0;
 const common_1 = require("@nestjs/common");
+exports.DEV_OTP_CODE = '123456';
 let OtpService = class OtpService {
     constructor() {
         this.otps = new Map();
     }
-    generateOTP(phone, registrationData) {
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    generateOTP(key, registrationData) {
+        const otp = exports.DEV_OTP_CODE;
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-        this.otps.set(phone, {
+        this.otps.set(key, {
             code: otp,
             used: false,
             expiresAt,
             registrationData,
         });
-        console.log({
-            code: otp,
-            used: false,
-            expiresAt,
-            registrationData,
-        });
-        console.log(`OTP for ${phone}: ${otp}`);
+        console.log(`OTP for ${key}: ${otp}`);
         return otp;
     }
-    verifyOTP(phone, code) {
-        const otpEntry = this.otps.get(phone);
-        console.log(this.otps);
+    verifyOTP(key, code) {
+        const otpEntry = this.otps.get(key);
         if (!otpEntry || otpEntry.code !== code || otpEntry.used)
             return false;
         otpEntry.used = true;
         return true;
     }
-    isOtpUsed(phone) {
-        const otpEntry = this.otps.get(phone);
+    isOtpUsed(key) {
+        const otpEntry = this.otps.get(key);
         return !!otpEntry?.used;
     }
-    getOtpEntry(phone) {
-        return this.otps.get(phone);
+    getOtpEntry(key) {
+        return this.otps.get(key);
     }
-    markUsed(phone) {
-        const entry = this.otps.get(phone);
+    markUsed(key) {
+        const entry = this.otps.get(key);
         if (entry) {
             entry.used = true;
         }
     }
-    deleteOtp(phone) {
-        this.otps.delete(phone);
+    deleteOtp(key) {
+        this.otps.delete(key);
     }
 };
 exports.OtpService = OtpService;

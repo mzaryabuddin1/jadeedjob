@@ -17,6 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PagesController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const pages_service_1 = require("./pages.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
@@ -53,6 +54,7 @@ let PagesController = class PagesController {
 exports.PagesController = PagesController;
 __decorate([
     (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Create company page' }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         company_name: joi_1.default.string().required(),
         business_name: joi_1.default.string().optional(),
@@ -100,6 +102,7 @@ __decorate([
 ], PagesController.prototype, "createPage", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'List pages' }),
     __param(0, (0, common_1.Query)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -108,6 +111,7 @@ __decorate([
 ], PagesController.prototype, "getPages", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get page by id' }),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -115,6 +119,7 @@ __decorate([
 ], PagesController.prototype, "getPageById", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update page' }),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Req)()),
@@ -124,6 +129,7 @@ __decorate([
 ], PagesController.prototype, "updatePage", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete page' }),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -132,6 +138,17 @@ __decorate([
 ], PagesController.prototype, "deletePage", null);
 __decorate([
     (0, common_1.Post)(':pageId/members'),
+    (0, swagger_1.ApiOperation)({ summary: 'Add page member' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['userId', 'role'],
+            properties: {
+                userId: { type: 'number', example: 2 },
+                role: { type: 'string', enum: ['admin', 'editor'], example: 'editor' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('pageId')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Req)()),
@@ -141,6 +158,7 @@ __decorate([
 ], PagesController.prototype, "addMember", null);
 __decorate([
     (0, common_1.Delete)(':pageId/members/:userId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Remove page member' }),
     __param(0, (0, common_1.Param)('pageId')),
     __param(1, (0, common_1.Param)('userId')),
     __param(2, (0, common_1.Req)()),
@@ -150,6 +168,16 @@ __decorate([
 ], PagesController.prototype, "removeMember", null);
 __decorate([
     (0, common_1.Patch)(':pageId/members/:userId/role'),
+    (0, swagger_1.ApiOperation)({ summary: 'Change page member role' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['role'],
+            properties: {
+                role: { type: 'string', enum: ['admin', 'editor'], example: 'admin' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('pageId')),
     __param(1, (0, common_1.Param)('userId')),
     __param(2, (0, common_1.Body)()),
@@ -159,6 +187,8 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PagesController.prototype, "changeMemberRole", null);
 exports.PagesController = PagesController = __decorate([
+    (0, swagger_1.ApiTags)('Pages'),
+    (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('pages'),
     __metadata("design:paramtypes", [pages_service_1.PagesService])

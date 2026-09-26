@@ -17,6 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FilterController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const filter_service_1 = require("./filter.service");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const joi_1 = __importDefault(require("joi"));
@@ -58,6 +59,19 @@ exports.FilterController = FilterController;
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBearerAuth)('JWT'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create filter (JWT)' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['name', 'icon'],
+            properties: {
+                name: { type: 'string', example: 'Construction' },
+                icon: { type: 'string', example: "{ icon: 'hammer' }" },
+                status: { type: 'string', enum: ['active', 'inactive'], example: 'active' },
+            },
+        },
+    }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().trim().required(),
         icon: joi_1.default.string().trim().pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/).required(),
@@ -71,6 +85,7 @@ __decorate([
 ], FilterController.prototype, "createFilter", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'List approved filters (public)' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -78,12 +93,14 @@ __decorate([
 ], FilterController.prototype, "getFilter", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get filter by id (public)' }),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], FilterController.prototype, "getFilterById", null);
 exports.FilterController = FilterController = __decorate([
+    (0, swagger_1.ApiTags)('Filters'),
     (0, common_1.Controller)('filters'),
     __param(1, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [filter_service_1.FilterService,

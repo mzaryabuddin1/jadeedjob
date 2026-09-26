@@ -16,7 +16,7 @@ export class UsersService {
   async getUserById(id: number) {
     const user = await this.userRepo.findOne({
       where: { id },
-      relations: ['country', 'language'],
+      relations: ['country', 'language', 'cityEntity'],
     });
 
     if (!user) throw new NotFoundException('User not found');
@@ -25,7 +25,10 @@ export class UsersService {
   }
 
   async updateUser(id: number, data: any) {
-    const user = await this.userRepo.findOne({ where: { id } });
+    const user = await this.userRepo.findOne({
+      where: { id },
+      relations: ['country', 'language', 'cityEntity'],
+    });
     if (!user) throw new NotFoundException('User not found');
 
     Object.assign(user, data);

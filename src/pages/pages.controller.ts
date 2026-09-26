@@ -12,17 +12,26 @@ import {
   UsePipes,
   Patch,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PagesService } from './pages.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
 
+@ApiTags('Pages')
+@ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard)
 @Controller('pages')
 export class PagesController {
   constructor(private readonly pagesService: PagesService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create company page' })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -71,26 +80,41 @@ export class PagesController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'List pages' })
   getPages(@Query() query: any, @Req() req: any) {
     return this.pagesService.getPages(query, req.user.id);
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get page by id' })
   getPageById(@Param('id') id: string) {
     return this.pagesService.getPageById(Number(id));
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update page' })
   updatePage(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     return this.pagesService.updatePage(Number(id), body, req.user.id);
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete page' })
   deletePage(@Param('id') id: string, @Req() req: any) {
     return this.pagesService.deletePage(Number(id), req.user.id);
   }
 
   @Post(':pageId/members')
+  @ApiOperation({ summary: 'Add page member' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['userId', 'role'],
+      properties: {
+        userId: { type: 'number', example: 2 },
+        role: { type: 'string', enum: ['admin', 'editor'], example: 'editor' },
+      },
+    },
+  })
   // @UsePipes(
   //   new JoiValidationPipe(
   //     Joi.object({
@@ -113,6 +137,7 @@ export class PagesController {
   }
 
   @Delete(':pageId/members/:userId')
+  @ApiOperation({ summary: 'Remove page member' })
   removeMember(
     @Param('pageId') pageId: string,
     @Param('userId') memberId: string,
@@ -126,6 +151,16 @@ export class PagesController {
   }
 
   @Patch(':pageId/members/:userId/role')
+  @ApiOperation({ summary: 'Change page member role' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['role'],
+      properties: {
+        role: { type: 'string', enum: ['admin', 'editor'], example: 'admin' },
+      },
+    },
+  })
   changeMemberRole(
     @Param('pageId') pageId: string,
     @Param('userId') userId: string,

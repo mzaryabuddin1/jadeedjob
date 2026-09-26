@@ -4,11 +4,13 @@ import {
   Column,
   OneToMany,
   ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import { City } from 'src/city/entities/city.entity';
 import { Education } from 'src/users/entities/education.entity';
 import { Certification } from 'src/users/entities/certification.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
@@ -24,7 +26,7 @@ export class User {
   id: number;
 
   // Basic Auth fields
-  @Column({ nullable: true })
+  @Column({ unique: true, nullable: true })
   email: string;
 
   @Column()
@@ -181,6 +183,14 @@ export class User {
     nullable: true,
   })
   country: Country | null;
+
+  // Many-to-one with City (optional profile city)
+  @ManyToOne(() => City, (city) => city.users, {
+    eager: true,
+    nullable: true,
+  })
+  @JoinColumn({ name: 'cityId' })
+  cityEntity: City | null;
 
   // Many-to-one with Language
   @ManyToOne(() => Language, (language) => language.users, {

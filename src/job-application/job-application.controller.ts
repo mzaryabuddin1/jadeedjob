@@ -10,17 +10,33 @@ import {
   UsePipes,
   Query,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JobApplicationService } from './job-application.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
 
+@ApiTags('Job Applications')
+@ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard)
 @Controller('job-application')
 export class JobApplicationController {
   constructor(private readonly jobAppService: JobApplicationService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Apply to a job' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['job'],
+      properties: { job: { type: 'number', example: 1 } },
+    },
+  })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -36,6 +52,7 @@ export class JobApplicationController {
   }
 
   @Get('my')
+  @ApiOperation({ summary: 'My applications' })
   async getMyApplications(
     @Req() req: any,
     @Query('page') page = 1,
@@ -45,6 +62,7 @@ export class JobApplicationController {
   }
 
   @Get('job/:jobId')
+  @ApiOperation({ summary: 'Applications for a job' })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -57,6 +75,20 @@ export class JobApplicationController {
   }
 
   @Patch(':id/status')
+  @ApiOperation({ summary: 'Update application status' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['status'],
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['pending', 'accepted', 'rejected'],
+          example: 'accepted',
+        },
+      },
+    },
+  })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({

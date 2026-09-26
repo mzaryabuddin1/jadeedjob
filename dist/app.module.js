@@ -18,6 +18,7 @@ const otp_module_1 = require("./otp/otp.module");
 const twilio_module_1 = require("./twilio/twilio.module");
 const country_module_1 = require("./country/country.module");
 const language_module_1 = require("./language/language.module");
+const city_module_1 = require("./city/city.module");
 const throttler_1 = require("@nestjs/throttler");
 const core_1 = require("@nestjs/core");
 const filter_module_1 = require("./filter/filter.module");
@@ -54,6 +55,7 @@ exports.AppModule = AppModule = __decorate([
             twilio_module_1.TwilioModule,
             country_module_1.CountryModule,
             language_module_1.LanguageModule,
+            city_module_1.CityModule,
             throttler_1.ThrottlerModule.forRoot({
                 throttlers: [
                     {

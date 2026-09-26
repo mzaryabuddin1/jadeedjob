@@ -9,6 +9,7 @@ import {
   Get,
   Post,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Request } from 'express';
@@ -17,6 +18,8 @@ import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { AuthService } from 'src/auth/auth.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 
+@ApiTags('Users')
+@ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
@@ -27,13 +30,16 @@ export class UsersController {
   ) {}
 
   @Patch('me')
+  @ApiOperation({
+    summary: 'Update my profile',
+    description:
+      'Email/phone cannot be changed here — use /auth/update-email/* and /auth/kyc/*',
+  })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
-        email: Joi.string().email().optional(),
         firstName: Joi.string().optional(),
         lastName: Joi.string().optional(),
-        phone: Joi.string().optional(),
         password: Joi.string()
           .min(6)
           .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
@@ -95,8 +101,10 @@ export class UsersController {
       delete body.filter_preferences; // avoid double handling in usersService
     }
 
-    // Remove forbidden fields
+    // Remove forbidden fields (email/phone via dedicated OTP flows)
     const forbidden = [
+      'email',
+      'phone',
       'passwordHash',
       'passwordSalt',
       'isBanned',
@@ -104,6 +112,11 @@ export class UsersController {
       'verified_by_admin_id',
       'kyc_status',
       'country',
+      'cityEntity',
+      'cityId',
+      'googleId',
+      'facebookId',
+      'authProvider',
     ];
     forbidden.forEach((field) => delete body[field]);
 
@@ -135,6 +148,7 @@ export class UsersController {
   }
 
   @Get('me/preferences')
+  @ApiOperation({ summary: 'Get my filter preferences' })
   async getMyPreferences(@Req() req: any) {
     return await this.usersService.getUserPreference(req.user.id);
   }

@@ -1,21 +1,84 @@
 import { AuthService } from './auth.service';
 import { OtpService } from 'src/otp/otp.service';
-import { TwilioService } from 'src/twilio/twilio.service';
 import { UsersService } from 'src/users/users.service';
-import { User } from 'src/users/entities/user.entity';
 export declare class AuthController {
     private readonly authService;
     private readonly otpService;
-    private readonly twilioService;
     private readonly usersService;
-    constructor(authService: AuthService, otpService: OtpService, twilioService: TwilioService, usersService: UsersService);
+    constructor(authService: AuthService, otpService: OtpService, usersService: UsersService);
+    private assertValidOtp;
     sendOtp(body: any): Promise<{
         message: string;
         otp: string;
     }>;
     verifyOtp(body: any): Promise<{
         access_token: string;
-        user: User;
+        kyc_complete: boolean;
+        user: {
+            kyc_complete: boolean;
+            id: number;
+            email: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            googleId: string;
+            facebookId: string;
+            authProvider: "phone" | "google" | "facebook";
+            isVerified: boolean;
+            isBanned: boolean;
+            full_name: string;
+            father_name: string;
+            gender: string;
+            date_of_birth: Date;
+            nationality: string;
+            marital_status: string;
+            profile_photo: string;
+            alternate_phone: string;
+            address_line1: string;
+            address_line2: string;
+            city: string;
+            state: string;
+            postal_code: string;
+            contact_country: string;
+            professional_summary: string;
+            linkedin_url: string;
+            github_url: string;
+            portfolio_url: string;
+            behance_url: string;
+            skills: string[];
+            technical_skills: string[];
+            soft_skills: string[];
+            bank_name: string;
+            account_number: string;
+            iban: string;
+            branch_name: string;
+            swift_code: string;
+            kyc_status: string;
+            verified_by_admin_id: number;
+            verification_date: Date;
+            rejection_reason: string;
+            notes: string;
+            fcmTokens: string[];
+            ratingsReceived: import("../rating/entities/rating.entity").Rating[];
+            ratingsGiven: import("../rating/entities/rating.entity").Rating[];
+            ratingAverage: number;
+            ratingCount: number;
+            country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
+            language: import("../language/entities/language.entity").Language | null;
+            work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
+            education: import("../users/entities/education.entity").Education[];
+            certifications: import("../users/entities/certification.entity").Certification[];
+            applications: import("../job-application/entities/job-application.entity").JobApplication[];
+            createdFilters: import("../filter/entities/filter.entity").Filter[];
+            messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
+            jobsCreated: import("../job/entities/job.entity").Job[];
+            filter_preferences: number[];
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        isNewUser?: boolean;
+        message?: string;
     }>;
     login(dto: {
         phone: string;
@@ -23,7 +86,9 @@ export declare class AuthController {
         fcmToken?: string;
     }): Promise<{
         access_token: string;
+        kyc_complete: boolean;
         user: {
+            kyc_complete: boolean;
             id: number;
             email: string;
             firstName: string;
@@ -72,6 +137,7 @@ export declare class AuthController {
             ratingAverage: number;
             ratingCount: number;
             country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
             language: import("../language/entities/language.entity").Language | null;
             work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
             education: import("../users/entities/education.entity").Education[];
@@ -84,6 +150,8 @@ export declare class AuthController {
             createdAt: Date;
             updatedAt: Date;
         };
+        isNewUser?: boolean;
+        message?: string;
     }>;
     googleAuth(body: {
         idToken: string;
@@ -91,10 +159,10 @@ export declare class AuthController {
         country?: number;
         language?: number;
     }): Promise<{
-        message: string;
-        isNewUser: boolean;
         access_token: string;
+        kyc_complete: boolean;
         user: {
+            kyc_complete: boolean;
             id: number;
             email: string;
             firstName: string;
@@ -143,6 +211,159 @@ export declare class AuthController {
             ratingAverage: number;
             ratingCount: number;
             country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
+            language: import("../language/entities/language.entity").Language | null;
+            work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
+            education: import("../users/entities/education.entity").Education[];
+            certifications: import("../users/entities/certification.entity").Certification[];
+            applications: import("../job-application/entities/job-application.entity").JobApplication[];
+            createdFilters: import("../filter/entities/filter.entity").Filter[];
+            messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
+            jobsCreated: import("../job/entities/job.entity").Job[];
+            filter_preferences: number[];
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        isNewUser?: boolean;
+        message?: string;
+    }>;
+    facebookAuth(body: {
+        accessToken: string;
+        fcmToken?: string;
+        country?: number;
+        language?: number;
+    }): Promise<{
+        access_token: string;
+        kyc_complete: boolean;
+        user: {
+            kyc_complete: boolean;
+            id: number;
+            email: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            googleId: string;
+            facebookId: string;
+            authProvider: "phone" | "google" | "facebook";
+            isVerified: boolean;
+            isBanned: boolean;
+            full_name: string;
+            father_name: string;
+            gender: string;
+            date_of_birth: Date;
+            nationality: string;
+            marital_status: string;
+            profile_photo: string;
+            alternate_phone: string;
+            address_line1: string;
+            address_line2: string;
+            city: string;
+            state: string;
+            postal_code: string;
+            contact_country: string;
+            professional_summary: string;
+            linkedin_url: string;
+            github_url: string;
+            portfolio_url: string;
+            behance_url: string;
+            skills: string[];
+            technical_skills: string[];
+            soft_skills: string[];
+            bank_name: string;
+            account_number: string;
+            iban: string;
+            branch_name: string;
+            swift_code: string;
+            kyc_status: string;
+            verified_by_admin_id: number;
+            verification_date: Date;
+            rejection_reason: string;
+            notes: string;
+            fcmTokens: string[];
+            ratingsReceived: import("../rating/entities/rating.entity").Rating[];
+            ratingsGiven: import("../rating/entities/rating.entity").Rating[];
+            ratingAverage: number;
+            ratingCount: number;
+            country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
+            language: import("../language/entities/language.entity").Language | null;
+            work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
+            education: import("../users/entities/education.entity").Education[];
+            certifications: import("../users/entities/certification.entity").Certification[];
+            applications: import("../job-application/entities/job-application.entity").JobApplication[];
+            createdFilters: import("../filter/entities/filter.entity").Filter[];
+            messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
+            jobsCreated: import("../job/entities/job.entity").Job[];
+            filter_preferences: number[];
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        isNewUser?: boolean;
+        message?: string;
+    }>;
+    sendUpdateEmailOtp(req: any, body: {
+        email: string;
+    }): Promise<{
+        message: string;
+        otp: string;
+    }>;
+    verifyUpdateEmailOtp(req: any, body: {
+        email: string;
+        code: string;
+    }): Promise<{
+        message: string;
+        kyc_complete: boolean;
+        user: {
+            kyc_complete: boolean;
+            id: number;
+            email: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            googleId: string;
+            facebookId: string;
+            authProvider: "phone" | "google" | "facebook";
+            isVerified: boolean;
+            isBanned: boolean;
+            full_name: string;
+            father_name: string;
+            gender: string;
+            date_of_birth: Date;
+            nationality: string;
+            marital_status: string;
+            profile_photo: string;
+            alternate_phone: string;
+            address_line1: string;
+            address_line2: string;
+            city: string;
+            state: string;
+            postal_code: string;
+            contact_country: string;
+            professional_summary: string;
+            linkedin_url: string;
+            github_url: string;
+            portfolio_url: string;
+            behance_url: string;
+            skills: string[];
+            technical_skills: string[];
+            soft_skills: string[];
+            bank_name: string;
+            account_number: string;
+            iban: string;
+            branch_name: string;
+            swift_code: string;
+            kyc_status: string;
+            verified_by_admin_id: number;
+            verification_date: Date;
+            rejection_reason: string;
+            notes: string;
+            fcmTokens: string[];
+            ratingsReceived: import("../rating/entities/rating.entity").Rating[];
+            ratingsGiven: import("../rating/entities/rating.entity").Rating[];
+            ratingAverage: number;
+            ratingCount: number;
+            country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
             language: import("../language/entities/language.entity").Language | null;
             work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
             education: import("../users/entities/education.entity").Education[];
@@ -156,16 +377,23 @@ export declare class AuthController {
             updatedAt: Date;
         };
     }>;
-    facebookAuth(body: {
-        accessToken: string;
-        fcmToken?: string;
+    sendKycOtp(req: any, body: {
+        phone: string;
         country?: number;
         language?: number;
+        city?: number;
     }): Promise<{
         message: string;
-        isNewUser: boolean;
-        access_token: string;
+        otp: string;
+    }>;
+    verifyKycOtp(req: any, body: {
+        phone: string;
+        code: string;
+    }): Promise<{
+        message: string;
+        kyc_complete: boolean;
         user: {
+            kyc_complete: boolean;
             id: number;
             email: string;
             firstName: string;
@@ -214,6 +442,7 @@ export declare class AuthController {
             ratingAverage: number;
             ratingCount: number;
             country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
             language: import("../language/entities/language.entity").Language | null;
             work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
             education: import("../users/entities/education.entity").Education[];

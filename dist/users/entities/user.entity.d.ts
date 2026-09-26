@@ -1,5 +1,6 @@
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import { City } from 'src/city/entities/city.entity';
 import { Education } from 'src/users/entities/education.entity';
 import { Certification } from 'src/users/entities/certification.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
@@ -59,6 +60,7 @@ export declare class User {
     ratingAverage: number;
     ratingCount: number;
     country: Country | null;
+    cityEntity: City | null;
     language: Language | null;
     work_experience: WorkExperience[];
     education: Education[];

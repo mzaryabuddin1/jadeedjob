@@ -17,6 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CountryController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const country_service_1 = require("./country.service");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const joi_1 = __importDefault(require("joi"));
@@ -40,6 +41,7 @@ let CountryController = class CountryController {
 exports.CountryController = CountryController;
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'List countries' }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         page: joi_1.default.number().integer().min(1).default(1),
         limit: joi_1.default.number().integer().min(1).max(100).default(20),
@@ -56,6 +58,7 @@ __decorate([
 ], CountryController.prototype, "getAllCountries", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get country by id' }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         id: joi_1.default.number().required(),
     }))),
@@ -65,6 +68,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], CountryController.prototype, "getCountryById", null);
 exports.CountryController = CountryController = __decorate([
+    (0, swagger_1.ApiTags)('Countries'),
     (0, common_1.Controller)('countries'),
     __metadata("design:paramtypes", [country_service_1.CountryService])
 ], CountryController);

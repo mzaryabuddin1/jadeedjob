@@ -3,6 +3,10 @@ import { Country } from './entities/country.entity';
 export declare class CountryService {
     private countryRepo;
     constructor(countryRepo: Repository<Country>);
+    seedCountries(): Promise<{
+        created: Country[];
+        skipped: string[];
+    }>;
     getAllCountries(options: {
         page?: number;
         limit?: number;

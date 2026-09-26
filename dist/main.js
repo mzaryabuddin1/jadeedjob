@@ -37,10 +37,15 @@ const core_1 = require("@nestjs/core");
 const app_module_1 = require("./app.module");
 const express = __importStar(require("express"));
 const path_1 = require("path");
+const swagger_setup_1 = require("./swagger/swagger.setup");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.enableCors();
     app.use('/uploads', express.static((0, path_1.join)(__dirname, '..', 'uploads')));
+    (0, swagger_setup_1.setupSwagger)(app);
     await app.listen(3000, '0.0.0.0');
+    console.log(`API running on http://localhost:3000`);
+    console.log(`Swagger docs: http://localhost:3000/docs`);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

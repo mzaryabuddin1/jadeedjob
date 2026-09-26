@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Language } from './entities/language.entity';
+import { SEED_LANGUAGES } from './seed-languages.data';
 
 @Injectable()
 export class LanguageService {
@@ -9,6 +10,37 @@ export class LanguageService {
     @InjectRepository(Language)
     private readonly languageRepo: Repository<Language>,
   ) {}
+
+  /**
+   * Populate languages (CLI: npm run seed:languages).
+   * Skips rows that already exist by code or name.
+   */
+  async seedLanguages(): Promise<{ created: Language[]; skipped: string[] }> {
+    const created: Language[] = [];
+    const skipped: string[] = [];
+
+    for (const item of SEED_LANGUAGES) {
+      const existing = await this.languageRepo.findOne({
+        where: [{ code: item.code }, { name: item.name }],
+      });
+
+      if (existing) {
+        skipped.push(item.name);
+        continue;
+      }
+
+      const language = await this.languageRepo.save(
+        this.languageRepo.create({
+          code: item.code,
+          name: item.name,
+        }),
+      );
+
+      created.push(language);
+    }
+
+    return { created, skipped };
+  }
 
   findAll() {
     return this.languageRepo.find();

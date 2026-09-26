@@ -17,6 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RatingController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const rating_service_1 = require("./rating.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
@@ -32,6 +33,18 @@ let RatingController = class RatingController {
 exports.RatingController = RatingController;
 __decorate([
     (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Rate a user via job application' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['jobApplicationId', 'stars'],
+            properties: {
+                jobApplicationId: { type: 'number', example: 1 },
+                stars: { type: 'number', minimum: 1, maximum: 5, example: 5 },
+                comment: { type: 'string', example: 'Great work!' },
+            },
+        },
+    }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         jobApplicationId: joi_1.default.number().required(),
         stars: joi_1.default.number().integer().min(1).max(5).required(),
@@ -44,6 +57,8 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RatingController.prototype, "rate", null);
 exports.RatingController = RatingController = __decorate([
+    (0, swagger_1.ApiTags)('Ratings'),
+    (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('ratings'),
     __metadata("design:paramtypes", [rating_service_1.RatingService])

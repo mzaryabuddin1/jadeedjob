@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FilesController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
+const swagger_1 = require("@nestjs/swagger");
 const files_service_1 = require("./files.service");
 let FilesController = class FilesController {
     constructor(filesService) {
@@ -35,6 +36,17 @@ let FilesController = class FilesController {
 exports.FilesController = FilesController;
 __decorate([
     (0, common_1.Post)('upload'),
+    (0, swagger_1.ApiOperation)({ summary: 'Upload a file' }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['file'],
+            properties: {
+                file: { type: 'string', format: 'binary' },
+            },
+        },
+    }),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
     __param(0, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
@@ -42,6 +54,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], FilesController.prototype, "uploadFile", null);
 exports.FilesController = FilesController = __decorate([
+    (0, swagger_1.ApiTags)('Files'),
     (0, common_1.Controller)('files'),
     __metadata("design:paramtypes", [files_service_1.FilesService])
 ], FilesController);

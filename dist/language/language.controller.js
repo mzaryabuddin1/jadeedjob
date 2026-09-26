@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LanguageController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const language_service_1 = require("./language.service");
 let LanguageController = class LanguageController {
     constructor(languageService) {
@@ -38,12 +39,14 @@ let LanguageController = class LanguageController {
 exports.LanguageController = LanguageController;
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'List languages' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], LanguageController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get language by id' }),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -51,6 +54,17 @@ __decorate([
 ], LanguageController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Create language' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['code', 'name'],
+            properties: {
+                code: { type: 'string', example: 'ur' },
+                name: { type: 'string', example: 'Urdu' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -58,6 +72,16 @@ __decorate([
 ], LanguageController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update language' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                code: { type: 'string', example: 'ur' },
+                name: { type: 'string', example: 'Urdu' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -66,12 +90,14 @@ __decorate([
 ], LanguageController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete language' }),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], LanguageController.prototype, "remove", null);
 exports.LanguageController = LanguageController = __decorate([
+    (0, swagger_1.ApiTags)('Languages'),
     (0, common_1.Controller)('languages'),
     __metadata("design:paramtypes", [language_service_1.LanguageService])
 ], LanguageController);

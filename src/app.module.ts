@@ -13,6 +13,7 @@ import { OtpModule } from './otp/otp.module';
 import { TwilioModule } from './twilio/twilio.module';
 import { CountryModule } from './country/country.module';
 import { LanguageModule } from './language/language.module';
+import { CityModule } from './city/city.module';
 
 // Throttling
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -50,6 +51,7 @@ import { RatingModule } from './rating/rating.module';
     TwilioModule,
     CountryModule,
     LanguageModule,
+    CityModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

@@ -47,6 +47,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const users_service_1 = require("./users.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const Joi = __importStar(require("joi"));
@@ -69,6 +70,8 @@ let UsersController = class UsersController {
             delete body.filter_preferences;
         }
         const forbidden = [
+            'email',
+            'phone',
             'passwordHash',
             'passwordSalt',
             'isBanned',
@@ -76,6 +79,11 @@ let UsersController = class UsersController {
             'verified_by_admin_id',
             'kyc_status',
             'country',
+            'cityEntity',
+            'cityId',
+            'googleId',
+            'facebookId',
+            'authProvider',
         ];
         forbidden.forEach((field) => delete body[field]);
         if (body?.password) {
@@ -101,11 +109,13 @@ let UsersController = class UsersController {
 exports.UsersController = UsersController;
 __decorate([
     (0, common_1.Patch)('me'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update my profile',
+        description: 'Email/phone cannot be changed here — use /auth/update-email/* and /auth/kyc/*',
+    }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(Joi.object({
-        email: Joi.string().email().optional(),
         firstName: Joi.string().optional(),
         lastName: Joi.string().optional(),
-        phone: Joi.string().optional(),
         password: Joi.string()
             .min(6)
             .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
@@ -151,12 +161,15 @@ __decorate([
 ], UsersController.prototype, "updateMe", null);
 __decorate([
     (0, common_1.Get)('me/preferences'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get my filter preferences' }),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getMyPreferences", null);
 exports.UsersController = UsersController = __decorate([
+    (0, swagger_1.ApiTags)('Users'),
+    (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('users'),
     __metadata("design:paramtypes", [users_service_1.UsersService,

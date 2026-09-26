@@ -10,6 +10,12 @@ import {
   Query,
   Param,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { FilterService } from './filter.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
@@ -19,6 +25,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Filter } from './entities/filter.entity';
 
+@ApiTags('Filters')
 @Controller('filters')
 export class FilterController {
   constructor(
@@ -29,6 +36,19 @@ export class FilterController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Create filter (JWT)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['name', 'icon'],
+      properties: {
+        name: { type: 'string', example: 'Construction' },
+        icon: { type: 'string', example: "{ icon: 'hammer' }" },
+        status: { type: 'string', enum: ['active', 'inactive'], example: 'active' },
+      },
+    },
+  })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -62,12 +82,14 @@ export class FilterController {
 
   /** Public — returns approved + active filters only */
   @Get()
+  @ApiOperation({ summary: 'List approved filters (public)' })
   async getFilter(@Query() query: any) {
     return this.filterService.getFilters(query, { approvedOnly: true });
   }
 
   /** Public — only if filter is approved and active */
   @Get(':id')
+  @ApiOperation({ summary: 'Get filter by id (public)' })
   async getFilterById(@Param('id') id: string) {
     return this.filterService.filterById(Number(id), { approvedOnly: true });
   }

@@ -17,9 +17,29 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const language_entity_1 = require("./entities/language.entity");
+const seed_languages_data_1 = require("./seed-languages.data");
 let LanguageService = class LanguageService {
     constructor(languageRepo) {
         this.languageRepo = languageRepo;
+    }
+    async seedLanguages() {
+        const created = [];
+        const skipped = [];
+        for (const item of seed_languages_data_1.SEED_LANGUAGES) {
+            const existing = await this.languageRepo.findOne({
+                where: [{ code: item.code }, { name: item.name }],
+            });
+            if (existing) {
+                skipped.push(item.name);
+                continue;
+            }
+            const language = await this.languageRepo.save(this.languageRepo.create({
+                code: item.code,
+                name: item.name,
+            }));
+            created.push(language);
+        }
+        return { created, skipped };
     }
     findAll() {
         return this.languageRepo.find();

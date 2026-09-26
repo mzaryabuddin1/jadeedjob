@@ -11,17 +11,99 @@ import {
   Patch,
   ParseIntPipe,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JobService } from './job.service';
 import Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
+@ApiTags('Jobs')
+@ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard)
 @Controller('job')
 export class JobController {
   constructor(private readonly jobService: JobService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create job' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: [
+        'title',
+        'filterId',
+        'description',
+        'salaryType',
+        'salaryAmount',
+        'location',
+      ],
+      properties: {
+        title: { type: 'string', example: 'Warehouse Helper' },
+        filterId: { type: 'number', example: 1 },
+        description: { type: 'string', example: 'Need helpers for loading' },
+        pageId: { type: 'number', nullable: true },
+        requirements: { type: 'string' },
+        benefits: { type: 'array', items: { type: 'string' }, example: ['Meals'] },
+        shifts: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['morning', 'evening', 'night', 'rotational'],
+          },
+        },
+        jobTypes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: [
+              'full-time',
+              'part-time',
+              'contract',
+              'temporary',
+              'freelance',
+              'internship',
+            ],
+          },
+        },
+        salaryType: {
+          type: 'string',
+          enum: [
+            'piece-rate',
+            'daily-wage',
+            'hourly',
+            'monthly',
+            'fixed',
+            'commission',
+            'negotiable',
+          ],
+          example: 'daily-wage',
+        },
+        salaryAmount: { type: 'number', example: 1500 },
+        currency: { type: 'string', example: 'PKR' },
+        location: {
+          type: 'object',
+          properties: {
+            lat: { type: 'number', example: 24.8607 },
+            lng: { type: 'number', example: 67.0011 },
+          },
+        },
+        startDate: { type: 'string', format: 'date' },
+        endDate: { type: 'string', format: 'date' },
+        industry: { type: 'string' },
+        educationLevel: { type: 'string' },
+        experienceRequired: { type: 'string' },
+        languageRequirements: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
+  })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -78,16 +160,19 @@ export class JobController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'List jobs' })
   async findJobs(@Query() query: any, @Req() req: any) {
     return this.jobService.findJobs(query, req.user.id);
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get job by id' })
   async findJob(@Param('id') id: number) {
     return this.jobService.findJobById(id);
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update job' })
   async patchJob(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(

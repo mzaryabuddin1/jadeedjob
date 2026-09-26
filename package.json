@@ -18,7 +18,10 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed:filters": "ts-node -r tsconfig-paths/register src/commands/seed-filters.ts"
+    "seed:filters": "ts-node -r tsconfig-paths/register src/commands/seed-filters.ts",
+    "seed:countries": "ts-node -r tsconfig-paths/register src/commands/seed-countries.ts",
+    "seed:languages": "ts-node -r tsconfig-paths/register src/commands/seed-languages.ts",
+    "seed:cities": "ts-node -r tsconfig-paths/register src/commands/seed-cities.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -27,6 +30,7 @@
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^10.4.20",
     "@nestjs/platform-socket.io": "^10.4.20",
+    "@nestjs/swagger": "^7.4.2",
     "@nestjs/throttler": "^6.4.0",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^10.4.20",

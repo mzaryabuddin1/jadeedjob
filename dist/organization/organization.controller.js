@@ -17,6 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrganizationController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const organization_service_1 = require("./organization.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
@@ -52,6 +53,28 @@ let OrganizationController = class OrganizationController {
 exports.OrganizationController = OrganizationController;
 __decorate([
     (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Create organization' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['name', 'industry'],
+            properties: {
+                name: { type: 'string', example: 'Acme Corp' },
+                industry: { type: 'string', example: 'Technology' },
+                username: { type: 'string', example: 'acme-corp' },
+                members: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            user: { type: 'number' },
+                            role: { type: 'string', enum: ['admin', 'user'] },
+                        },
+                    },
+                },
+            },
+        },
+    }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().required(),
         industry: joi_1.default.string().required(),
@@ -75,6 +98,18 @@ __decorate([
 ], OrganizationController.prototype, "create", null);
 __decorate([
     (0, common_1.Post)('member'),
+    (0, swagger_1.ApiOperation)({ summary: 'Add organization member' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['organization', 'user', 'role'],
+            properties: {
+                organization: { type: 'number', example: 1 },
+                user: { type: 'number', example: 2 },
+                role: { type: 'string', enum: ['admin', 'user'], example: 'user' },
+            },
+        },
+    }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         organization: joi_1.default.number().required(),
         user: joi_1.default.number().required(),
@@ -88,6 +123,17 @@ __decorate([
 ], OrganizationController.prototype, "addMember", null);
 __decorate([
     (0, common_1.Delete)('member/remove'),
+    (0, swagger_1.ApiOperation)({ summary: 'Remove organization member' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['organization', 'user'],
+            properties: {
+                organization: { type: 'number', example: 1 },
+                user: { type: 'number', example: 2 },
+            },
+        },
+    }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         organization: joi_1.default.number().required(),
         user: joi_1.default.number().required(),
@@ -100,6 +146,7 @@ __decorate([
 ], OrganizationController.prototype, "removeMember", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'List organizations' }),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('mine')),
     __param(2, (0, common_1.Query)('search')),
@@ -112,6 +159,8 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], OrganizationController.prototype, "getOrganizations", null);
 exports.OrganizationController = OrganizationController = __decorate([
+    (0, swagger_1.ApiTags)('Organization'),
+    (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('organization'),
     __metadata("design:paramtypes", [organization_service_1.OrganizationService])

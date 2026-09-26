@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
+/** Dev OTP — always 123456 until production SMS/email is enabled */
+export const DEV_OTP_CODE = '123456';
+
 @Injectable()
 export class OtpService {
   private otps = new Map<
@@ -12,56 +15,49 @@ export class OtpService {
     }
   >();
 
-  generateOTP(phone: string, registrationData: any): string {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  /**
+   * @param key phone or email (unique identifier for this OTP session)
+   */
+  generateOTP(key: string, registrationData: any): string {
+    const otp = DEV_OTP_CODE;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    this.otps.set(phone, {
+    this.otps.set(key, {
       code: otp,
       used: false,
       expiresAt,
       registrationData,
     });
 
-    console.log({
-      code: otp,
-      used: false,
-      expiresAt,
-      registrationData,
-    })
-
-    console.log(`OTP for ${phone}: ${otp}`);
+    console.log(`OTP for ${key}: ${otp}`);
     return otp;
   }
 
-  verifyOTP(phone: string, code: string): boolean {
-    const otpEntry = this.otps.get(phone);
-    console.log(this.otps)
+  verifyOTP(key: string, code: string): boolean {
+    const otpEntry = this.otps.get(key);
     if (!otpEntry || otpEntry.code !== code || otpEntry.used) return false;
 
     otpEntry.used = true;
     return true;
   }
 
-  isOtpUsed(phone: string): boolean {
-    const otpEntry = this.otps.get(phone);
+  isOtpUsed(key: string): boolean {
+    const otpEntry = this.otps.get(key);
     return !!otpEntry?.used;
   }
 
-  getOtpEntry(phone: string) {
-    return this.otps.get(phone);
+  getOtpEntry(key: string) {
+    return this.otps.get(key);
   }
 
-  markUsed(phone: string) {
-    const entry = this.otps.get(phone);
+  markUsed(key: string) {
+    const entry = this.otps.get(key);
     if (entry) {
       entry.used = true;
     }
   }
 
-  deleteOtp(phone: string) {
-    this.otps.delete(phone);
+  deleteOtp(key: string) {
+    this.otps.delete(key);
   }
-
- 
 }

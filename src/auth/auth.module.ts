@@ -12,10 +12,12 @@ import { CountryModule } from 'src/country/country.module';
 import { LanguageModule } from 'src/language/language.module';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import { City } from 'src/city/entities/city.entity';
 import { FilterModule } from 'src/filter/filter.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
 import { GoogleAuthService } from './google-auth.service';
 import { FacebookAuthService } from './facebook-auth.service';
+import { CityModule } from 'src/city/city.module';
 
 @Module({
   imports: [
@@ -24,11 +26,12 @@ import { FacebookAuthService } from './facebook-auth.service';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '365d' },
     }),
-    TypeOrmModule.forFeature([User, Country, Language]),
+    TypeOrmModule.forFeature([User, Country, Language, City]),
     UsersModule,
     OtpModule,
     CountryModule,
     LanguageModule,
+    CityModule,
     TwilioModule,
     FilterModule,
     FirebaseModule

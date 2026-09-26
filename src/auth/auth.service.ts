@@ -5,11 +5,12 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 import { User } from 'src/users/entities/user.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
+import { City } from 'src/city/entities/city.entity';
 import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { GoogleAuthService } from './google-auth.service';
@@ -29,56 +30,89 @@ export class AuthService {
     @InjectRepository(Language)
     private languageRepo: Repository<Language>,
 
+    @InjectRepository(City)
+    private cityRepo: Repository<City>,
+
     private filterService: FilterService,
     private firebaseService: FirebaseService,
     private googleAuthService: GoogleAuthService,
     private facebookAuthService: FacebookAuthService,
   ) {}
 
+  /** KYC is complete when the account has a verified phone number */
+  isKycComplete(user: User | null | undefined): boolean {
+    return !!(user?.phone && String(user.phone).trim());
+  }
+
   toPublicUser(user: User) {
     const { passwordHash, passwordSalt, ...publicUser } = user as User & {
       passwordHash?: string;
       passwordSalt?: string;
     };
-    return publicUser;
+    return {
+      ...publicUser,
+      kyc_complete: this.isKycComplete(user),
+    };
+  }
+
+  authResponse(
+    user: User,
+    extras?: { message?: string; isNewUser?: boolean },
+  ) {
+    return {
+      ...(extras?.message ? { message: extras.message } : {}),
+      ...(extras?.isNewUser !== undefined
+        ? { isNewUser: extras.isNewUser }
+        : {}),
+      access_token: this.generateToken(user),
+      kyc_complete: this.isKycComplete(user),
+      user: this.toPublicUser(user),
+    };
   }
 
   generateToken(user: any) {
     return this.jwtService.sign({ id: user.id });
   }
 
-  // ────────────────────────────────────────────────
-  // CHECK USER BY PHONE
-  // ────────────────────────────────────────────────
+  async findUserById(id: number) {
+    return this.userRepo.findOne({
+      where: { id },
+      relations: ['country', 'language', 'cityEntity'],
+    });
+  }
+
   async findUserByPhone(phone: string) {
     return this.userRepo.findOne({
       where: { phone },
-      relations: ['country', 'language'],
+      relations: ['country', 'language', 'cityEntity'],
     });
   }
 
   async findUserByGoogleId(googleId: string) {
     return this.userRepo.findOne({
       where: { googleId },
-      relations: ['country', 'language'],
+      relations: ['country', 'language', 'cityEntity'],
     });
   }
 
   async findUserByFacebookId(facebookId: string) {
     return this.userRepo.findOne({
       where: { facebookId },
-      relations: ['country', 'language'],
+      relations: ['country', 'language', 'cityEntity'],
     });
   }
 
   async findUserByEmail(email: string) {
     return this.userRepo.findOne({
       where: { email },
-      relations: ['country', 'language'],
+      relations: ['country', 'language', 'cityEntity'],
     });
   }
 
-  private async resolveCountryLanguage(countryId?: number, languageId?: number) {
+  private async resolveCountryLanguage(
+    countryId?: number,
+    languageId?: number,
+  ) {
     const country = countryId
       ? await this.countryRepo.findOne({ where: { id: countryId } })
       : await this.countryRepo.findOne({ where: {}, order: { id: 'ASC' } });
@@ -90,31 +124,68 @@ export class AuthService {
     return { country: country ?? null, language: language ?? null };
   }
 
+  private async resolveCity(cityId?: number) {
+    if (!cityId) return null;
+    const city = await this.cityRepo.findOne({ where: { id: Number(cityId) } });
+    if (!city) throw new BadRequestException('Invalid city id');
+    return city;
+  }
+
+  /** Ensure email is not used by another account */
+  async assertEmailAvailable(email: string, excludeUserId?: number) {
+    const existing = await this.userRepo.findOne({
+      where: excludeUserId
+        ? { email, id: Not(excludeUserId) }
+        : { email },
+    });
+    if (existing) {
+      throw new BadRequestException('Email already registered');
+    }
+  }
+
   // ────────────────────────────────────────────────
-  // CREATE USER IF NOT EXISTS
+  // CREATE USER IF NOT EXISTS (phone registration)
   // ────────────────────────────────────────────────
   async createOrGetUser(data: any) {
     const existing = await this.findUserByPhone(data.phone);
     if (existing) return existing;
 
+    if (data.email) {
+      await this.assertEmailAvailable(data.email);
+    }
+
+    const {
+      country: countryId,
+      language: languageId,
+      city: cityId,
+      purpose: _purpose,
+      ...rest
+    } = data;
+
     const country = await this.countryRepo.findOne({
-      where: { id: Number(data.country) },
+      where: { id: Number(countryId) },
     });
+    if (!country) throw new BadRequestException('Invalid country id');
 
     const language = await this.languageRepo.findOne({
-      where: { id: Number(data.language) },
+      where: { id: Number(languageId) },
     });
+    if (!language) throw new BadRequestException('Invalid language id');
 
-    // 🔥 Get top 9 filters by job availability
+    const cityEntity = await this.resolveCity(
+      cityId !== undefined && cityId !== null ? Number(cityId) : undefined,
+    );
+
     const defaultFilterPreferences =
       await this.filterService.getTopFiltersByJobs(9);
 
     const user = this.userRepo.create({
-      ...data,
+      ...rest,
       country,
       language,
+      cityEntity,
       isBanned: false,
-      filter_preferences: defaultFilterPreferences, // ✅ AUTO SET
+      filter_preferences: defaultFilterPreferences,
     });
 
     return this.userRepo.save(user);
@@ -134,9 +205,6 @@ export class AuthService {
     return hash === storedHash;
   }
 
-  // ────────────────────────────────────────────────
-  // LOGIN / VALIDATE USER
-  // ────────────────────────────────────────────────
   async validateUser(phone: string, password: string) {
     const user = await this.findUserByPhone(phone);
     if (!user) throw new UnauthorizedException('Invalid phone or password');
@@ -167,9 +235,6 @@ export class AuthService {
     return user;
   }
 
-  // ────────────────────────────────────────────────
-  // RESET PASSWORD (forgot-password)
-  // ────────────────────────────────────────────────
   async resetPassword(phone: string, salt: string, hash: string) {
     await this.userRepo.update(
       { phone },
@@ -178,7 +243,66 @@ export class AuthService {
   }
 
   // ────────────────────────────────────────────────
-  // GOOGLE LOGIN / SIGNUP — one endpoint, saves user row
+  // UPDATE EMAIL (after OTP verify)
+  // ────────────────────────────────────────────────
+  async updateUserEmail(userId: number, email: string) {
+    await this.assertEmailAvailable(email, userId);
+    const user = await this.findUserById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    user.email = email;
+    return this.userRepo.save(user);
+  }
+
+  // ────────────────────────────────────────────────
+  // COMPLETE KYC — attach phone (+ optional country/language/city)
+  // ────────────────────────────────────────────────
+  async completeKyc(
+    userId: number,
+    data: {
+      phone: string;
+      country?: number;
+      language?: number;
+      city?: number;
+    },
+  ) {
+    const phoneTaken = await this.findUserByPhone(data.phone);
+    if (phoneTaken && phoneTaken.id !== userId) {
+      throw new BadRequestException('Phone already registered');
+    }
+
+    const user = await this.findUserById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    user.phone = data.phone;
+    user.isVerified = true;
+    user.kyc_status = 'phone_verified';
+
+    if (data.country) {
+      const country = await this.countryRepo.findOne({
+        where: { id: Number(data.country) },
+      });
+      if (!country) throw new BadRequestException('Invalid country id');
+      user.country = country;
+    }
+
+    if (data.language) {
+      const language = await this.languageRepo.findOne({
+        where: { id: Number(data.language) },
+      });
+      if (!language) throw new BadRequestException('Invalid language id');
+      user.language = language;
+    }
+
+    if (data.city !== undefined && data.city !== null) {
+      user.cityEntity = await this.resolveCity(Number(data.city));
+    }
+
+    return this.userRepo.save(user);
+  }
+
+  // ────────────────────────────────────────────────
+  // GOOGLE LOGIN / SIGNUP
   // ────────────────────────────────────────────────
   async loginWithGoogle(
     idToken: string,
@@ -186,10 +310,8 @@ export class AuthService {
   ) {
     const profile = await this.googleAuthService.getProfileFromToken(idToken);
 
-    // 1) Existing Google user
     let user = await this.findUserByGoogleId(profile.providerId);
 
-    // 2) Same email already registered (link Google to that account)
     if (!user && profile.email) {
       user = await this.findUserByEmail(profile.email);
     }
@@ -227,6 +349,7 @@ export class AuthService {
           language,
           isVerified: true,
           isBanned: false,
+          kyc_status: 'pending',
           filter_preferences: await this.filterService.getTopFiltersByJobs(9),
         }),
       );
@@ -247,12 +370,10 @@ export class AuthService {
       user = (await this.findUserByGoogleId(profile.providerId))!;
     }
 
-    return {
+    return this.authResponse(user, {
       message: isNewUser ? 'Signup successful' : 'Login successful',
       isNewUser,
-      access_token: this.generateToken(user),
-      user: this.toPublicUser(user),
-    };
+    });
   }
 
   // ────────────────────────────────────────────────
@@ -304,6 +425,7 @@ export class AuthService {
           language,
           isVerified: true,
           isBanned: false,
+          kyc_status: 'pending',
           filter_preferences: await this.filterService.getTopFiltersByJobs(9),
         }),
       );
@@ -324,12 +446,10 @@ export class AuthService {
       user = (await this.findUserByFacebookId(profile.providerId))!;
     }
 
-    return {
+    return this.authResponse(user, {
       message: isNewUser ? 'Signup successful' : 'Login successful',
       isNewUser,
-      access_token: this.generateToken(user),
-      user: this.toPublicUser(user),
-    };
+    });
   }
 
   async attachFcmToken(userId: number, fcmToken: string) {
@@ -346,13 +466,9 @@ export class AuthService {
     user.fcmTokens = Array.from(tokens);
     await this.userRepo.save(user);
 
-    // 🔥 Subscribe this token to current filters
     const filters = user.filter_preferences || [];
     if (filters.length) {
       await this.firebaseService.subscribeTokenToFilters(fcmToken, filters);
     }
   }
-
-
-
 }

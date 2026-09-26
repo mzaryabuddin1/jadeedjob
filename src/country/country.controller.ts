@@ -1,13 +1,16 @@
 import { Controller, Get, Query, Param, UsePipes } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CountryService } from './country.service';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import Joi from 'joi';
 
+@ApiTags('Countries')
 @Controller('countries')
 export class CountryController {
   constructor(private readonly countryService: CountryService) {}
 
   @Get()
+  @ApiOperation({ summary: 'List countries' })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({
@@ -32,6 +35,7 @@ export class CountryController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get country by id' })
   @UsePipes(
     new JoiValidationPipe(
       Joi.object({

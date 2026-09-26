@@ -13,6 +13,7 @@ exports.User = void 0;
 const typeorm_1 = require("typeorm");
 const country_entity_1 = require("../../country/entities/country.entity");
 const language_entity_1 = require("../../language/entities/language.entity");
+const city_entity_1 = require("../../city/entities/city.entity");
 const education_entity_1 = require("./education.entity");
 const certification_entity_1 = require("./certification.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
@@ -29,7 +30,7 @@ __decorate([
     __metadata("design:type", Number)
 ], User.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ unique: true, nullable: true }),
     __metadata("design:type", String)
 ], User.prototype, "email", void 0);
 __decorate([
@@ -227,6 +228,14 @@ __decorate([
     }),
     __metadata("design:type", country_entity_1.Country)
 ], User.prototype, "country", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => city_entity_1.City, (city) => city.users, {
+        eager: true,
+        nullable: true,
+    }),
+    (0, typeorm_1.JoinColumn)({ name: 'cityId' }),
+    __metadata("design:type", city_entity_1.City)
+], User.prototype, "cityEntity", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => language_entity_1.Language, (language) => language.users, {
         eager: true,

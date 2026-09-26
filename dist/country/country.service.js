@@ -17,9 +17,30 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const country_entity_1 = require("./entities/country.entity");
+const seed_countries_data_1 = require("./seed-countries.data");
 let CountryService = class CountryService {
     constructor(countryRepo) {
         this.countryRepo = countryRepo;
+    }
+    async seedCountries() {
+        const created = [];
+        const skipped = [];
+        for (const item of seed_countries_data_1.SEED_COUNTRIES) {
+            const existing = await this.countryRepo.findOne({
+                where: [{ code: item.code }, { name: item.name }],
+            });
+            if (existing) {
+                skipped.push(item.name);
+                continue;
+            }
+            const country = await this.countryRepo.save(this.countryRepo.create({
+                name: item.name,
+                code: item.code,
+                dial_code: item.dial_code,
+            }));
+            created.push(country);
+        }
+        return { created, skipped };
     }
     async getAllCountries(options) {
         const { limit = 20, page = 1, search = '', sortBy = 'name', sortOrder = 'asc', } = options;

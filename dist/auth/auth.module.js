@@ -21,10 +21,12 @@ const country_module_1 = require("../country/country.module");
 const language_module_1 = require("../language/language.module");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
+const city_entity_1 = require("../city/entities/city.entity");
 const filter_module_1 = require("../filter/filter.module");
 const firebase_module_1 = require("../firebase/firebase.module");
 const google_auth_service_1 = require("./google-auth.service");
 const facebook_auth_service_1 = require("./facebook-auth.service");
+const city_module_1 = require("../city/city.module");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -36,11 +38,12 @@ exports.AuthModule = AuthModule = __decorate([
                 secret: process.env.JWT_SECRET,
                 signOptions: { expiresIn: '365d' },
             }),
-            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language]),
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language, city_entity_1.City]),
             users_module_1.UsersModule,
             otp_module_1.OtpModule,
             country_module_1.CountryModule,
             language_module_1.LanguageModule,
+            city_module_1.CityModule,
             twilio_module_1.TwilioModule,
             filter_module_1.FilterModule,
             firebase_module_1.FirebaseModule

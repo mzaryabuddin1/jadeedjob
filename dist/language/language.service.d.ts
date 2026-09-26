@@ -3,6 +3,10 @@ import { Language } from './entities/language.entity';
 export declare class LanguageService {
     private readonly languageRepo;
     constructor(languageRepo: Repository<Language>);
+    seedLanguages(): Promise<{
+        created: Language[];
+        skipped: string[];
+    }>;
     findAll(): Promise<Language[]>;
     findOne(id: number): Promise<Language>;
     create(data: {
