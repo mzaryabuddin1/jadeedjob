@@ -22,6 +22,7 @@ const language_module_1 = require("../language/language.module");
 const country_entity_1 = require("../country/entities/country.entity");
 const language_entity_1 = require("../language/entities/language.entity");
 const city_entity_1 = require("../city/entities/city.entity");
+const user_auth_identity_entity_1 = require("../users/entities/user-auth-identity.entity");
 const filter_module_1 = require("../filter/filter.module");
 const firebase_module_1 = require("../firebase/firebase.module");
 const google_auth_service_1 = require("./google-auth.service");
@@ -38,7 +39,7 @@ exports.AuthModule = AuthModule = __decorate([
                 secret: process.env.JWT_SECRET,
                 signOptions: { expiresIn: '365d' },
             }),
-            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language, city_entity_1.City]),
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, country_entity_1.Country, language_entity_1.Language, city_entity_1.City, user_auth_identity_entity_1.UserAuthIdentity]),
             users_module_1.UsersModule,
             otp_module_1.OtpModule,
             country_module_1.CountryModule,
@@ -46,7 +47,7 @@ exports.AuthModule = AuthModule = __decorate([
             city_module_1.CityModule,
             twilio_module_1.TwilioModule,
             filter_module_1.FilterModule,
-            firebase_module_1.FirebaseModule
+            firebase_module_1.FirebaseModule,
         ],
         controllers: [auth_controller_1.AuthController],
         providers: [auth_service_1.AuthService, google_auth_service_1.GoogleAuthService, facebook_auth_service_1.FacebookAuthService],

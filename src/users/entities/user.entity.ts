@@ -19,6 +19,7 @@ import { WorkExperience } from './work-experience.entity';
 import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
+import type { UserAuthIdentity } from './user-auth-identity.entity';
 
 @Entity('users')
 export class User {
@@ -43,6 +44,13 @@ export class User {
 
   @Column({ unique: true, nullable: true })
   facebookId: string;
+
+  /**
+   * All linked Google / Facebook identities (supports multiple per provider).
+   * Legacy googleId / facebookId columns are kept as primary mirrors for compatibility.
+   */
+  @OneToMany('UserAuthIdentity', 'user')
+  authIdentities: UserAuthIdentity[];
 
   @Column({ default: 'phone' })
   authProvider: 'phone' | 'google' | 'facebook';

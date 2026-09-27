@@ -23,6 +23,7 @@ export declare class AuthController {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -96,6 +97,7 @@ export declare class AuthController {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -170,6 +172,7 @@ export declare class AuthController {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -226,6 +229,21 @@ export declare class AuthController {
         };
         isNewUser?: boolean;
         message?: string;
+    } | {
+        kyc_token: string;
+        profile: {
+            provider: import("../users/entities/user-auth-identity.entity").AuthProviderType;
+            email: string;
+            firstName: string;
+            lastName: string;
+            picture: string;
+        };
+        hint?: string;
+        registered_phone_hint?: string;
+        message: string;
+        kyc_complete: boolean;
+        isNewUser: boolean;
+        email_already_registered: boolean;
     }>;
     facebookAuth(body: {
         accessToken: string;
@@ -244,6 +262,7 @@ export declare class AuthController {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -300,6 +319,21 @@ export declare class AuthController {
         };
         isNewUser?: boolean;
         message?: string;
+    } | {
+        kyc_token: string;
+        profile: {
+            provider: import("../users/entities/user-auth-identity.entity").AuthProviderType;
+            email: string;
+            firstName: string;
+            lastName: string;
+            picture: string;
+        };
+        hint?: string;
+        registered_phone_hint?: string;
+        message: string;
+        kyc_complete: boolean;
+        isNewUser: boolean;
+        email_already_registered: boolean;
     }>;
     sendUpdateEmailOtp(req: any, body: {
         email: string;
@@ -322,6 +356,7 @@ export declare class AuthController {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -379,18 +414,25 @@ export declare class AuthController {
     }>;
     sendKycOtp(req: any, body: {
         phone: string;
+        kycToken?: string;
         country?: number;
         language?: number;
         city?: number;
     }): Promise<{
         message: string;
         otp: string;
+        phone_exists: boolean;
+    } | {
+        message: string;
+        otp: string;
+        phone_exists?: undefined;
     }>;
     verifyKycOtp(req: any, body: {
         phone: string;
         code: string;
+        kycToken?: string;
     }): Promise<{
-        message: string;
+        access_token: string;
         kyc_complete: boolean;
         user: {
             kyc_complete: boolean;
@@ -401,6 +443,7 @@ export declare class AuthController {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -455,6 +498,156 @@ export declare class AuthController {
             createdAt: Date;
             updatedAt: Date;
         };
+        isNewUser?: boolean;
+        message: string;
+        requires_link_confirmation: boolean;
+        link_token: string;
+        existing_providers: import("../users/entities/user-auth-identity.entity").AuthProviderType[];
+    } | {
+        access_token: string;
+        kyc_complete: boolean;
+        user: {
+            kyc_complete: boolean;
+            id: number;
+            email: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            googleId: string;
+            facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
+            authProvider: "phone" | "google" | "facebook";
+            isVerified: boolean;
+            isBanned: boolean;
+            full_name: string;
+            father_name: string;
+            gender: string;
+            date_of_birth: Date;
+            nationality: string;
+            marital_status: string;
+            profile_photo: string;
+            alternate_phone: string;
+            address_line1: string;
+            address_line2: string;
+            city: string;
+            state: string;
+            postal_code: string;
+            contact_country: string;
+            professional_summary: string;
+            linkedin_url: string;
+            github_url: string;
+            portfolio_url: string;
+            behance_url: string;
+            skills: string[];
+            technical_skills: string[];
+            soft_skills: string[];
+            bank_name: string;
+            account_number: string;
+            iban: string;
+            branch_name: string;
+            swift_code: string;
+            kyc_status: string;
+            verified_by_admin_id: number;
+            verification_date: Date;
+            rejection_reason: string;
+            notes: string;
+            fcmTokens: string[];
+            ratingsReceived: import("../rating/entities/rating.entity").Rating[];
+            ratingsGiven: import("../rating/entities/rating.entity").Rating[];
+            ratingAverage: number;
+            ratingCount: number;
+            country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
+            language: import("../language/entities/language.entity").Language | null;
+            work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
+            education: import("../users/entities/education.entity").Education[];
+            certifications: import("../users/entities/certification.entity").Certification[];
+            applications: import("../job-application/entities/job-application.entity").JobApplication[];
+            createdFilters: import("../filter/entities/filter.entity").Filter[];
+            messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
+            jobsCreated: import("../job/entities/job.entity").Job[];
+            filter_preferences: number[];
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        isNewUser?: boolean;
+        message: string;
+    }>;
+    confirmLinkIdentity(body: {
+        linkToken: string;
+        confirm: boolean;
+    }): Promise<{
+        access_token: string;
+        kyc_complete: boolean;
+        user: {
+            kyc_complete: boolean;
+            id: number;
+            email: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            googleId: string;
+            facebookId: string;
+            authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
+            authProvider: "phone" | "google" | "facebook";
+            isVerified: boolean;
+            isBanned: boolean;
+            full_name: string;
+            father_name: string;
+            gender: string;
+            date_of_birth: Date;
+            nationality: string;
+            marital_status: string;
+            profile_photo: string;
+            alternate_phone: string;
+            address_line1: string;
+            address_line2: string;
+            city: string;
+            state: string;
+            postal_code: string;
+            contact_country: string;
+            professional_summary: string;
+            linkedin_url: string;
+            github_url: string;
+            portfolio_url: string;
+            behance_url: string;
+            skills: string[];
+            technical_skills: string[];
+            soft_skills: string[];
+            bank_name: string;
+            account_number: string;
+            iban: string;
+            branch_name: string;
+            swift_code: string;
+            kyc_status: string;
+            verified_by_admin_id: number;
+            verification_date: Date;
+            rejection_reason: string;
+            notes: string;
+            fcmTokens: string[];
+            ratingsReceived: import("../rating/entities/rating.entity").Rating[];
+            ratingsGiven: import("../rating/entities/rating.entity").Rating[];
+            ratingAverage: number;
+            ratingCount: number;
+            country: import("../country/entities/country.entity").Country | null;
+            cityEntity: import("../city/entities/city.entity").City | null;
+            language: import("../language/entities/language.entity").Language | null;
+            work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
+            education: import("../users/entities/education.entity").Education[];
+            certifications: import("../users/entities/certification.entity").Certification[];
+            applications: import("../job-application/entities/job-application.entity").JobApplication[];
+            createdFilters: import("../filter/entities/filter.entity").Filter[];
+            messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
+            jobsCreated: import("../job/entities/job.entity").Job[];
+            filter_preferences: number[];
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        isNewUser?: boolean;
+        message?: string;
+    } | {
+        message: string;
+        linked: boolean;
     }>;
     sendForgotPasswordOtp(body: any): Promise<{
         message: string;
@@ -462,5 +655,37 @@ export declare class AuthController {
     }>;
     verifyForgotPasswordOtp(body: any): Promise<{
         message: string;
+    }>;
+    debugAccounts(): Promise<{
+        count: number;
+        accounts: {
+            id: number;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            email: string;
+            authProvider: "phone" | "google" | "facebook";
+            googleId: string;
+            facebookId: string;
+            kyc_complete: boolean;
+            kyc_status: string;
+            isVerified: boolean;
+            countryId: number;
+            languageId: number;
+            cityId: number;
+            createdAt: Date;
+            identities: {
+                id: number;
+                provider: import("../users/entities/user-auth-identity.entity").AuthProviderType;
+                providerId: string;
+                providerEmail: string;
+                linkedAt: Date;
+            }[];
+        }[];
+        refreshedAt: string;
+    }>;
+    debugDeleteAccount(id: number): Promise<{
+        deleted: boolean;
+        id: number;
     }>;
 }

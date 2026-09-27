@@ -54,6 +54,10 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "facebookId", void 0);
 __decorate([
+    (0, typeorm_1.OneToMany)('UserAuthIdentity', 'user'),
+    __metadata("design:type", Array)
+], User.prototype, "authIdentities", void 0);
+__decorate([
     (0, typeorm_1.Column)({ default: 'phone' }),
     __metadata("design:type", String)
 ], User.prototype, "authProvider", void 0);

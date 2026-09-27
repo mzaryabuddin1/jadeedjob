@@ -13,6 +13,7 @@ import { LanguageModule } from 'src/language/language.module';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { City } from 'src/city/entities/city.entity';
+import { UserAuthIdentity } from 'src/users/entities/user-auth-identity.entity';
 import { FilterModule } from 'src/filter/filter.module';
 import { FirebaseModule } from 'src/firebase/firebase.module';
 import { GoogleAuthService } from './google-auth.service';
@@ -26,7 +27,7 @@ import { CityModule } from 'src/city/city.module';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '365d' },
     }),
-    TypeOrmModule.forFeature([User, Country, Language, City]),
+    TypeOrmModule.forFeature([User, Country, Language, City, UserAuthIdentity]),
     UsersModule,
     OtpModule,
     CountryModule,
@@ -34,7 +35,7 @@ import { CityModule } from 'src/city/city.module';
     CityModule,
     TwilioModule,
     FilterModule,
-    FirebaseModule
+    FirebaseModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, GoogleAuthService, FacebookAuthService],

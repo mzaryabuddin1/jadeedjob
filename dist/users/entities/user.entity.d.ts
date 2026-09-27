@@ -9,6 +9,7 @@ import { WorkExperience } from './work-experience.entity';
 import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
+import type { UserAuthIdentity } from './user-auth-identity.entity';
 export declare class User {
     id: number;
     email: string;
@@ -17,6 +18,7 @@ export declare class User {
     phone: string;
     googleId: string;
     facebookId: string;
+    authIdentities: UserAuthIdentity[];
     authProvider: 'phone' | 'google' | 'facebook';
     passwordHash: string;
     passwordSalt: string;

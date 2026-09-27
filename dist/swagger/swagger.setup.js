@@ -17,7 +17,12 @@ function setupSwagger(app) {
         'Phone & email OTP is always **`123456`** until production SMS/email is enabled.',
         '',
         '### KYC (Google / Facebook)',
-        'Social login returns `kyc_complete: false` until phone is verified via `/auth/kyc/*`.',
+        '**New / unlinked** social → `kyc_complete: false` + `kyc_token` (30 min). No DB user yet.',
+        'Then `POST /auth/kyc/send-otp` + `verify-otp` with `kycToken`.',
+        'If phone already exists → links to that account (OTP = ownership).',
+        'If that account already has another Google/Facebook → `requires_link_confirmation` + `link_token`.',
+        'Confirm with `POST /auth/link-identity/confirm` (never overwrites primary email / googleId).',
+        'Never auto-links by email match alone.',
         '',
         '### Email update',
         'Use `/auth/update-email/*` (JWT required). Email must be unique.',
@@ -30,7 +35,7 @@ function setupSwagger(app) {
         description: 'Paste JWT from login / register / google / facebook',
     }, 'JWT')
         .addTag('Health', 'App health check')
-        .addTag('Auth', 'Register, login, social, KYC, email update, forgot password')
+        .addTag('Auth', 'Register, login, social (kyc_token until phone OTP), KYC, email update')
         .addTag('Users', 'Profile & preferences')
         .addTag('Countries', 'Country list')
         .addTag('Languages', 'Language CRUD')

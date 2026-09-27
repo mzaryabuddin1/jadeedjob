@@ -130,13 +130,37 @@ let AuthController = class AuthController {
         };
     }
     async sendKycOtp(req, body) {
-        const userId = req.user.id;
         const phoneTaken = await this.authService.findUserByPhone(body.phone);
+        if (body.kycToken) {
+            const pending = this.authService.verifyKycToken(body.kycToken);
+            const otp = this.otpService.generateOTP(body.phone, {
+                purpose: 'kyc',
+                mode: 'social_kyc',
+                pending,
+                phone: body.phone,
+                country: body.country ?? pending.country,
+                language: body.language ?? pending.language,
+                city: body.city,
+                phoneExists: !!phoneTaken,
+            });
+            return {
+                message: phoneTaken
+                    ? `OTP sent to ${body.phone}. After verify, this social login will link to your existing account.`
+                    : `OTP sent to ${body.phone}`,
+                otp,
+                phone_exists: !!phoneTaken,
+            };
+        }
+        const userId = this.authService.tryGetUserIdFromAuthHeader(req.headers?.authorization) ?? req.user?.id;
+        if (!userId) {
+            throw new common_1.UnauthorizedException('Provide kycToken (Google/Facebook) or Bearer access_token');
+        }
         if (phoneTaken && phoneTaken.id !== userId) {
             throw new common_1.BadRequestException('Phone already registered');
         }
         const otp = this.otpService.generateOTP(body.phone, {
             purpose: 'kyc',
+            mode: 'attach_phone',
             userId,
             phone: body.phone,
             country: body.country,
@@ -146,12 +170,54 @@ let AuthController = class AuthController {
         return { message: `OTP sent to ${body.phone}`, otp };
     }
     async verifyKycOtp(req, body) {
-        const userId = req.user.id;
         const entry = this.assertValidOtp(body.phone, body.code, 'kyc');
-        if (entry.registrationData?.userId !== userId) {
+        this.otpService.markUsed(body.phone);
+        const mode = entry.registrationData?.mode;
+        if (mode === 'social_kyc' || mode === 'create_from_social') {
+            const pending = entry.registrationData.pending ||
+                (body.kycToken
+                    ? this.authService.verifyKycToken(body.kycToken)
+                    : null);
+            if (!pending) {
+                throw new common_1.UnauthorizedException('Missing pending social signup data');
+            }
+            const result = await this.authService.resolveSocialKyc(pending, {
+                phone: body.phone,
+                country: entry.registrationData.country,
+                language: entry.registrationData.language,
+                city: entry.registrationData.city,
+                fcmToken: pending.fcmToken,
+            });
+            this.otpService.deleteOtp(body.phone);
+            if (result.status === 'needs_confirmation') {
+                return {
+                    message: result.message,
+                    kyc_complete: this.authService.isKycComplete(result.user),
+                    requires_link_confirmation: true,
+                    link_token: result.link_token,
+                    existing_providers: result.existing_providers,
+                    ...this.authService.authResponse(result.user, { isNewUser: false }),
+                };
+            }
+            return {
+                message: result.isNewUser
+                    ? 'Account created successfully'
+                    : 'Social account linked successfully',
+                ...this.authService.authResponse(result.user, {
+                    isNewUser: result.isNewUser,
+                }),
+            };
+        }
+        const userId = entry.registrationData?.userId ??
+            this.authService.tryGetUserIdFromAuthHeader(req.headers?.authorization) ??
+            req.user?.id;
+        if (!userId) {
+            throw new common_1.UnauthorizedException('Invalid KYC session');
+        }
+        if (entry.registrationData?.userId &&
+            entry.registrationData.userId !== userId) {
             throw new common_1.UnauthorizedException('OTP does not belong to this user');
         }
-        this.otpService.markUsed(body.phone);
         const user = await this.authService.completeKyc(userId, {
             phone: body.phone,
             country: entry.registrationData.country,
@@ -161,9 +227,17 @@ let AuthController = class AuthController {
         this.otpService.deleteOtp(body.phone);
         return {
             message: 'KYC completed successfully',
-            kyc_complete: true,
-            user: this.authService.toPublicUser(user),
+            ...this.authService.authResponse(user, { isNewUser: false }),
         };
+    }
+    async confirmLinkIdentity(body) {
+        if (!body.confirm) {
+            return {
+                message: 'Link cancelled. You can still login with phone or your previously linked social account.',
+                linked: false,
+            };
+        }
+        return this.authService.confirmLinkIdentity(body.linkToken);
     }
     async sendForgotPasswordOtp(body) {
         const user = await this.authService.findUserByPhone(body.phone);
@@ -186,6 +260,23 @@ let AuthController = class AuthController {
         this.otpService.markUsed(phone);
         this.otpService.deleteOtp(phone);
         return { message: 'Password reset successfully' };
+    }
+    async debugAccounts() {
+        if (process.env.NODE_ENV === 'production') {
+            throw new common_1.ForbiddenException('Not available in production');
+        }
+        const accounts = await this.authService.listDebugAccounts();
+        return {
+            count: accounts.length,
+            accounts,
+            refreshedAt: new Date().toISOString(),
+        };
+    }
+    async debugDeleteAccount(id) {
+        if (process.env.NODE_ENV === 'production') {
+            throw new common_1.ForbiddenException('Not available in production');
+        }
+        return this.authService.deleteDebugAccount(id);
     }
 };
 exports.AuthController = AuthController;
@@ -297,7 +388,7 @@ __decorate([
     (0, common_1.Post)('google'),
     (0, swagger_1.ApiOperation)({
         summary: 'Google login / signup',
-        description: 'Returns `kyc_complete`. If false, complete KYC via /auth/kyc/*',
+        description: 'Existing user → `access_token` + `kyc_complete`. New user → `kyc_complete: false` + `kyc_token` (no DB account yet). Complete via `/auth/kyc/*` with `kycToken`.',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -326,7 +417,7 @@ __decorate([
     (0, common_1.Post)('facebook'),
     (0, swagger_1.ApiOperation)({
         summary: 'Facebook login / signup',
-        description: 'Returns `kyc_complete`. If false, complete KYC via /auth/kyc/*',
+        description: 'Existing user → `access_token` + `kyc_complete`. New user → `kyc_complete: false` + `kyc_token` (no DB account yet).',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -407,11 +498,9 @@ __decorate([
 ], AuthController.prototype, "verifyUpdateEmailOtp", null);
 __decorate([
     (0, common_1.Post)('kyc/send-otp'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, swagger_1.ApiOperation)({
-        summary: 'KYC — send OTP to phone (Google/Facebook users)',
-        description: 'JWT required. Dev OTP = 123456',
+        summary: 'KYC / link — send OTP to phone',
+        description: 'Pass `kycToken` from Google/Facebook. If phone already exists, OTP proves ownership for secure linking. Dev OTP = 123456',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -419,6 +508,10 @@ __decorate([
             required: ['phone'],
             properties: {
                 phone: { type: 'string', example: '+923001234567' },
+                kycToken: {
+                    type: 'string',
+                    description: 'From Google/Facebook when kyc_token is returned',
+                },
                 country: { type: 'number', example: 41 },
                 language: { type: 'number', example: 2 },
                 city: { type: 'number', example: 1 },
@@ -427,6 +520,7 @@ __decorate([
     }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
+        kycToken: joi_1.default.string().optional(),
         country: joi_1.default.number().optional(),
         language: joi_1.default.number().optional(),
         city: joi_1.default.number().optional(),
@@ -439,11 +533,9 @@ __decorate([
 ], AuthController.prototype, "sendKycOtp", null);
 __decorate([
     (0, common_1.Post)('kyc/verify-otp'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, swagger_1.ApiOperation)({
-        summary: 'KYC — verify phone OTP',
-        description: 'Sets kyc_complete = true',
+        summary: 'KYC / link — verify phone OTP',
+        description: 'Creates a new account OR links social to existing phone account. If that account already has another Google/Facebook, returns `link_token` for confirmation (no overwrite).',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -452,12 +544,14 @@ __decorate([
             properties: {
                 phone: { type: 'string', example: '+923001234567' },
                 code: { type: 'string', example: '123456' },
+                kycToken: { type: 'string' },
             },
         },
     }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         phone: joi_1.default.string().required(),
         code: joi_1.default.string().required(),
+        kycToken: joi_1.default.string().optional(),
     }))),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -465,6 +559,31 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "verifyKycOtp", null);
+__decorate([
+    (0, common_1.Post)('link-identity/confirm'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Confirm linking an additional Google/Facebook account',
+        description: 'Used when verify-otp returns `requires_link_confirmation`. Does not replace existing primary Google/Facebook or email.',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['linkToken', 'confirm'],
+            properties: {
+                linkToken: { type: 'string' },
+                confirm: { type: 'boolean', example: true },
+            },
+        },
+    }),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        linkToken: joi_1.default.string().required(),
+        confirm: joi_1.default.boolean().required(),
+    }))),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "confirmLinkIdentity", null);
 __decorate([
     (0, common_1.Post)('forgot-password/send-otp'),
     (0, swagger_1.ApiOperation)({ summary: 'Forgot password — send OTP' }),
@@ -501,6 +620,27 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "verifyForgotPasswordOtp", null);
+__decorate([
+    (0, common_1.Get)('debug/accounts'),
+    (0, swagger_1.ApiOperation)({
+        summary: '[DEV] List users + social identities',
+        description: 'For google-login.html auth lab. Disabled when NODE_ENV=production.',
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "debugAccounts", null);
+__decorate([
+    (0, common_1.Delete)('debug/accounts/:id'),
+    (0, swagger_1.ApiOperation)({
+        summary: '[DEV] Delete a user + identities',
+        description: 'For auth lab cleanup. Disabled when NODE_ENV=production.',
+    }),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "debugDeleteAccount", null);
 exports.AuthController = AuthController = __decorate([
     (0, swagger_1.ApiTags)('Auth'),
     (0, common_1.Controller)('auth'),

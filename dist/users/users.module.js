@@ -10,6 +10,7 @@ exports.UsersModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const user_entity_1 = require("./entities/user.entity");
+const user_auth_identity_entity_1 = require("./entities/user-auth-identity.entity");
 const work_experience_entity_1 = require("./entities/work-experience.entity");
 const education_entity_1 = require("./entities/education.entity");
 const certification_entity_1 = require("./entities/certification.entity");
@@ -25,12 +26,13 @@ exports.UsersModule = UsersModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature([
                 user_entity_1.User,
+                user_auth_identity_entity_1.UserAuthIdentity,
                 work_experience_entity_1.WorkExperience,
                 education_entity_1.Education,
                 certification_entity_1.Certification,
             ]),
             (0, common_1.forwardRef)(() => auth_module_1.AuthModule),
-            firebase_module_1.FirebaseModule
+            firebase_module_1.FirebaseModule,
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],

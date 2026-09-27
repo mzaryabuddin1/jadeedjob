@@ -2,11 +2,16 @@ import {
   Body,
   Controller,
   Post,
+  Get,
+  Delete,
+  Param,
+  ParseIntPipe,
   UnauthorizedException,
   UsePipes,
   BadRequestException,
   UseGuards,
   Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -202,7 +207,8 @@ export class AuthController {
   @Post('google')
   @ApiOperation({
     summary: 'Google login / signup',
-    description: 'Returns `kyc_complete`. If false, complete KYC via /auth/kyc/*',
+    description:
+      'Existing user → `access_token` + `kyc_complete`. New user → `kyc_complete: false` + `kyc_token` (no DB account yet). Complete via `/auth/kyc/*` with `kycToken`.',
   })
   @ApiBody({
     schema: {
@@ -245,7 +251,8 @@ export class AuthController {
   @Post('facebook')
   @ApiOperation({
     summary: 'Facebook login / signup',
-    description: 'Returns `kyc_complete`. If false, complete KYC via /auth/kyc/*',
+    description:
+      'Existing user → `access_token` + `kyc_complete`. New user → `kyc_complete: false` + `kyc_token` (no DB account yet).',
   })
   @ApiBody({
     schema: {
@@ -369,11 +376,10 @@ export class AuthController {
   }
 
   @Post('kyc/send-otp')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT')
   @ApiOperation({
-    summary: 'KYC — send OTP to phone (Google/Facebook users)',
-    description: 'JWT required. Dev OTP = 123456',
+    summary: 'KYC / link — send OTP to phone',
+    description:
+      'Pass `kycToken` from Google/Facebook. If phone already exists, OTP proves ownership for secure linking. Dev OTP = 123456',
   })
   @ApiBody({
     schema: {
@@ -381,6 +387,10 @@ export class AuthController {
       required: ['phone'],
       properties: {
         phone: { type: 'string', example: '+923001234567' },
+        kycToken: {
+          type: 'string',
+          description: 'From Google/Facebook when kyc_token is returned',
+        },
         country: { type: 'number', example: 41 },
         language: { type: 'number', example: 2 },
         city: { type: 'number', example: 1 },
@@ -391,6 +401,7 @@ export class AuthController {
     new JoiValidationPipe(
       Joi.object({
         phone: Joi.string().required(),
+        kycToken: Joi.string().optional(),
         country: Joi.number().optional(),
         language: Joi.number().optional(),
         city: Joi.number().optional(),
@@ -402,19 +413,56 @@ export class AuthController {
     @Body()
     body: {
       phone: string;
+      kycToken?: string;
       country?: number;
       language?: number;
       city?: number;
     },
   ) {
-    const userId = req.user.id;
     const phoneTaken = await this.authService.findUserByPhone(body.phone);
+
+    if (body.kycToken) {
+      const pending = this.authService.verifyKycToken(body.kycToken);
+
+      // Phone may already exist — OTP will authorize linking to that account
+      const otp = this.otpService.generateOTP(body.phone, {
+        purpose: 'kyc',
+        mode: 'social_kyc',
+        pending,
+        phone: body.phone,
+        country: body.country ?? pending.country,
+        language: body.language ?? pending.language,
+        city: body.city,
+        phoneExists: !!phoneTaken,
+      });
+
+      return {
+        message: phoneTaken
+          ? `OTP sent to ${body.phone}. After verify, this social login will link to your existing account.`
+          : `OTP sent to ${body.phone}`,
+        otp,
+        phone_exists: !!phoneTaken,
+      };
+    }
+
+    const userId =
+      this.authService.tryGetUserIdFromAuthHeader(
+        req.headers?.authorization,
+      ) ?? req.user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException(
+        'Provide kycToken (Google/Facebook) or Bearer access_token',
+      );
+    }
+
     if (phoneTaken && phoneTaken.id !== userId) {
       throw new BadRequestException('Phone already registered');
     }
 
     const otp = this.otpService.generateOTP(body.phone, {
       purpose: 'kyc',
+      mode: 'attach_phone',
       userId,
       phone: body.phone,
       country: body.country,
@@ -426,11 +474,10 @@ export class AuthController {
   }
 
   @Post('kyc/verify-otp')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT')
   @ApiOperation({
-    summary: 'KYC — verify phone OTP',
-    description: 'Sets kyc_complete = true',
+    summary: 'KYC / link — verify phone OTP',
+    description:
+      'Creates a new account OR links social to existing phone account. If that account already has another Google/Facebook, returns `link_token` for confirmation (no overwrite).',
   })
   @ApiBody({
     schema: {
@@ -439,6 +486,7 @@ export class AuthController {
       properties: {
         phone: { type: 'string', example: '+923001234567' },
         code: { type: 'string', example: '123456' },
+        kycToken: { type: 'string' },
       },
     },
   })
@@ -447,21 +495,80 @@ export class AuthController {
       Joi.object({
         phone: Joi.string().required(),
         code: Joi.string().required(),
+        kycToken: Joi.string().optional(),
       }),
     ),
   )
   async verifyKycOtp(
     @Req() req: any,
-    @Body() body: { phone: string; code: string },
+    @Body() body: { phone: string; code: string; kycToken?: string },
   ) {
-    const userId = req.user.id;
     const entry = this.assertValidOtp(body.phone, body.code, 'kyc');
+    this.otpService.markUsed(body.phone);
 
-    if (entry.registrationData?.userId !== userId) {
-      throw new UnauthorizedException('OTP does not belong to this user');
+    const mode = entry.registrationData?.mode;
+
+    if (mode === 'social_kyc' || mode === 'create_from_social') {
+      const pending =
+        entry.registrationData.pending ||
+        (body.kycToken
+          ? this.authService.verifyKycToken(body.kycToken)
+          : null);
+
+      if (!pending) {
+        throw new UnauthorizedException('Missing pending social signup data');
+      }
+
+      const result = await this.authService.resolveSocialKyc(pending, {
+        phone: body.phone,
+        country: entry.registrationData.country,
+        language: entry.registrationData.language,
+        city: entry.registrationData.city,
+        fcmToken: pending.fcmToken,
+      });
+
+      this.otpService.deleteOtp(body.phone);
+
+      if (result.status === 'needs_confirmation') {
+        return {
+          message: result.message,
+          kyc_complete: this.authService.isKycComplete(result.user),
+          requires_link_confirmation: true,
+          link_token: result.link_token,
+          existing_providers: result.existing_providers,
+          // Phone ownership verified — allow session on existing account,
+          // but social is NOT linked until /auth/link-identity/confirm
+          ...this.authService.authResponse(result.user, { isNewUser: false }),
+        };
+      }
+
+      return {
+        message: result.isNewUser
+          ? 'Account created successfully'
+          : 'Social account linked successfully',
+        ...this.authService.authResponse(result.user, {
+          isNewUser: result.isNewUser,
+        }),
+      };
     }
 
-    this.otpService.markUsed(body.phone);
+    const userId =
+      entry.registrationData?.userId ??
+      this.authService.tryGetUserIdFromAuthHeader(
+        req.headers?.authorization,
+      ) ??
+      req.user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('Invalid KYC session');
+    }
+
+    if (
+      entry.registrationData?.userId &&
+      entry.registrationData.userId !== userId
+    ) {
+      throw new UnauthorizedException('OTP does not belong to this user');
+    }
 
     const user = await this.authService.completeKyc(userId, {
       phone: body.phone,
@@ -474,9 +581,46 @@ export class AuthController {
 
     return {
       message: 'KYC completed successfully',
-      kyc_complete: true,
-      user: this.authService.toPublicUser(user),
+      ...this.authService.authResponse(user, { isNewUser: false }),
     };
+  }
+
+  @Post('link-identity/confirm')
+  @ApiOperation({
+    summary: 'Confirm linking an additional Google/Facebook account',
+    description:
+      'Used when verify-otp returns `requires_link_confirmation`. Does not replace existing primary Google/Facebook or email.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['linkToken', 'confirm'],
+      properties: {
+        linkToken: { type: 'string' },
+        confirm: { type: 'boolean', example: true },
+      },
+    },
+  })
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        linkToken: Joi.string().required(),
+        confirm: Joi.boolean().required(),
+      }),
+    ),
+  )
+  async confirmLinkIdentity(
+    @Body() body: { linkToken: string; confirm: boolean },
+  ) {
+    if (!body.confirm) {
+      return {
+        message:
+          'Link cancelled. You can still login with phone or your previously linked social account.',
+        linked: false,
+      };
+    }
+
+    return this.authService.confirmLinkIdentity(body.linkToken);
   }
 
   @Post('forgot-password/send-otp')
@@ -530,5 +674,35 @@ export class AuthController {
     this.otpService.deleteOtp(phone);
 
     return { message: 'Password reset successfully' };
+  }
+
+  @Get('debug/accounts')
+  @ApiOperation({
+    summary: '[DEV] List users + social identities',
+    description:
+      'For google-login.html auth lab. Disabled when NODE_ENV=production.',
+  })
+  async debugAccounts() {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Not available in production');
+    }
+    const accounts = await this.authService.listDebugAccounts();
+    return {
+      count: accounts.length,
+      accounts,
+      refreshedAt: new Date().toISOString(),
+    };
+  }
+
+  @Delete('debug/accounts/:id')
+  @ApiOperation({
+    summary: '[DEV] Delete a user + identities',
+    description: 'For auth lab cleanup. Disabled when NODE_ENV=production.',
+  })
+  async debugDeleteAccount(@Param('id', ParseIntPipe) id: number) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Not available in production');
+    }
+    return this.authService.deleteDebugAccount(id);
   }
 }

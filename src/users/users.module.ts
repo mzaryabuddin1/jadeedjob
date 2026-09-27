@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
+import { UserAuthIdentity } from './entities/user-auth-identity.entity';
 import { WorkExperience } from './entities/work-experience.entity';
 import { Education } from './entities/education.entity';
 import { Certification } from './entities/certification.entity';
@@ -13,13 +14,13 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
   imports: [
     TypeOrmModule.forFeature([
       User,
+      UserAuthIdentity,
       WorkExperience,
       Education,
       Certification,
     ]),
     forwardRef(() => AuthModule),
-      FirebaseModule
-
+    FirebaseModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

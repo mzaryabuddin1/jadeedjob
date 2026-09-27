@@ -1,6 +1,8 @@
+import { OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
+import { AuthProviderType, UserAuthIdentity } from 'src/users/entities/user-auth-identity.entity';
 import { Country } from 'src/country/entities/country.entity';
 import { Language } from 'src/language/entities/language.entity';
 import { City } from 'src/city/entities/city.entity';
@@ -8,9 +10,44 @@ import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { GoogleAuthService } from './google-auth.service';
 import { FacebookAuthService } from './facebook-auth.service';
-export declare class AuthService {
+export type PendingSocialSignup = {
+    purpose: 'kyc_pending';
+    provider: AuthProviderType;
+    providerId: string;
+    email: string | null;
+    firstName: string;
+    lastName: string;
+    picture: string | null;
+    country?: number;
+    language?: number;
+    fcmToken?: string;
+};
+export type PendingLinkConfirmation = {
+    purpose: 'link_confirm';
+    userId: number;
+    provider: AuthProviderType;
+    providerId: string;
+    providerEmail: string | null;
+    firstName: string;
+    lastName: string;
+    picture: string | null;
+    fcmToken?: string;
+};
+export type SocialKycResult = {
+    status: 'ok';
+    user: User;
+    isNewUser: boolean;
+} | {
+    status: 'needs_confirmation';
+    user: User;
+    link_token: string;
+    message: string;
+    existing_providers: AuthProviderType[];
+};
+export declare class AuthService implements OnModuleInit {
     private jwtService;
     private userRepo;
+    private identityRepo;
     private countryRepo;
     private languageRepo;
     private cityRepo;
@@ -18,7 +55,10 @@ export declare class AuthService {
     private firebaseService;
     private googleAuthService;
     private facebookAuthService;
-    constructor(jwtService: JwtService, userRepo: Repository<User>, countryRepo: Repository<Country>, languageRepo: Repository<Language>, cityRepo: Repository<City>, filterService: FilterService, firebaseService: FirebaseService, googleAuthService: GoogleAuthService, facebookAuthService: FacebookAuthService);
+    constructor(jwtService: JwtService, userRepo: Repository<User>, identityRepo: Repository<UserAuthIdentity>, countryRepo: Repository<Country>, languageRepo: Repository<Language>, cityRepo: Repository<City>, filterService: FilterService, firebaseService: FirebaseService, googleAuthService: GoogleAuthService, facebookAuthService: FacebookAuthService);
+    onModuleInit(): Promise<void>;
+    private migrateLegacyIdentities;
+    private ensureIdentityRow;
     isKycComplete(user: User | null | undefined): boolean;
     toPublicUser(user: User): {
         kyc_complete: boolean;
@@ -29,6 +69,7 @@ export declare class AuthService {
         phone: string;
         googleId: string;
         facebookId: string;
+        authIdentities: UserAuthIdentity[];
         authProvider: "phone" | "google" | "facebook";
         isVerified: boolean;
         isBanned: boolean;
@@ -98,6 +139,7 @@ export declare class AuthService {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -155,12 +197,66 @@ export declare class AuthService {
         isNewUser?: boolean;
         message?: string;
     };
+    pendingKycResponse(pending: PendingSocialSignup, extras?: {
+        emailAlreadyRegistered?: boolean;
+        hintPhone?: string | null;
+    }): {
+        kyc_token: string;
+        profile: {
+            provider: AuthProviderType;
+            email: string;
+            firstName: string;
+            lastName: string;
+            picture: string;
+        };
+        hint?: string;
+        registered_phone_hint?: string;
+        message: string;
+        kyc_complete: boolean;
+        isNewUser: boolean;
+        email_already_registered: boolean;
+    };
+    private maskPhone;
+    private pendingSocialWithEmailHint;
     generateToken(user: any): string;
+    listDebugAccounts(): Promise<{
+        id: number;
+        firstName: string;
+        lastName: string;
+        phone: string;
+        email: string;
+        authProvider: "phone" | "google" | "facebook";
+        googleId: string;
+        facebookId: string;
+        kyc_complete: boolean;
+        kyc_status: string;
+        isVerified: boolean;
+        countryId: number;
+        languageId: number;
+        cityId: number;
+        createdAt: Date;
+        identities: {
+            id: number;
+            provider: AuthProviderType;
+            providerId: string;
+            providerEmail: string;
+            linkedAt: Date;
+        }[];
+    }[]>;
+    deleteDebugAccount(userId: number): Promise<{
+        deleted: boolean;
+        id: number;
+    }>;
+    generateKycToken(pending: PendingSocialSignup): string;
+    verifyKycToken(token: string): PendingSocialSignup;
+    generateLinkToken(payload: PendingLinkConfirmation): string;
+    verifyLinkToken(token: string): PendingLinkConfirmation;
+    tryGetUserIdFromAuthHeader(authHeader?: string): number | null;
     findUserById(id: number): Promise<User>;
     findUserByPhone(phone: string): Promise<User>;
-    findUserByGoogleId(googleId: string): Promise<User>;
-    findUserByFacebookId(facebookId: string): Promise<User>;
     findUserByEmail(email: string): Promise<User>;
+    findUserByProvider(provider: AuthProviderType, providerId: string): Promise<User>;
+    listProviderTypesForUser(userId: number): Promise<AuthProviderType[]>;
     private resolveCountryLanguage;
     private resolveCity;
     assertEmailAvailable(email: string, excludeUserId?: number): Promise<void>;
@@ -179,11 +275,18 @@ export declare class AuthService {
         language?: number;
         city?: number;
     }): Promise<User>;
-    loginWithGoogle(idToken: string, options?: {
-        fcmToken?: string;
-        country?: number;
-        language?: number;
-    }): Promise<{
+    linkIdentityToUser(user: User, pending: {
+        provider: AuthProviderType;
+        providerId: string;
+        email?: string | null;
+        firstName?: string;
+        lastName?: string;
+        picture?: string | null;
+    }, options?: {
+        forceAdditional?: boolean;
+    }): Promise<SocialKycResult>;
+    private applyPrimarySocialMirrors;
+    confirmLinkIdentity(linkToken: string): Promise<{
         access_token: string;
         kyc_complete: boolean;
         user: {
@@ -195,6 +298,7 @@ export declare class AuthService {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -252,7 +356,15 @@ export declare class AuthService {
         isNewUser?: boolean;
         message?: string;
     }>;
-    loginWithFacebook(accessToken: string, options?: {
+    resolveSocialKyc(pending: PendingSocialSignup, data: {
+        phone: string;
+        country?: number;
+        language?: number;
+        city?: number;
+        fcmToken?: string;
+    }): Promise<SocialKycResult>;
+    private finishSocialLogin;
+    loginWithGoogle(idToken: string, options?: {
         fcmToken?: string;
         country?: number;
         language?: number;
@@ -268,6 +380,7 @@ export declare class AuthService {
             phone: string;
             googleId: string;
             facebookId: string;
+            authIdentities: UserAuthIdentity[];
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
@@ -324,6 +437,110 @@ export declare class AuthService {
         };
         isNewUser?: boolean;
         message?: string;
+    } | {
+        kyc_token: string;
+        profile: {
+            provider: AuthProviderType;
+            email: string;
+            firstName: string;
+            lastName: string;
+            picture: string;
+        };
+        hint?: string;
+        registered_phone_hint?: string;
+        message: string;
+        kyc_complete: boolean;
+        isNewUser: boolean;
+        email_already_registered: boolean;
+    }>;
+    loginWithFacebook(accessToken: string, options?: {
+        fcmToken?: string;
+        country?: number;
+        language?: number;
+    }): Promise<{
+        access_token: string;
+        kyc_complete: boolean;
+        user: {
+            kyc_complete: boolean;
+            id: number;
+            email: string;
+            firstName: string;
+            lastName: string;
+            phone: string;
+            googleId: string;
+            facebookId: string;
+            authIdentities: UserAuthIdentity[];
+            authProvider: "phone" | "google" | "facebook";
+            isVerified: boolean;
+            isBanned: boolean;
+            full_name: string;
+            father_name: string;
+            gender: string;
+            date_of_birth: Date;
+            nationality: string;
+            marital_status: string;
+            profile_photo: string;
+            alternate_phone: string;
+            address_line1: string;
+            address_line2: string;
+            city: string;
+            state: string;
+            postal_code: string;
+            contact_country: string;
+            professional_summary: string;
+            linkedin_url: string;
+            github_url: string;
+            portfolio_url: string;
+            behance_url: string;
+            skills: string[];
+            technical_skills: string[];
+            soft_skills: string[];
+            bank_name: string;
+            account_number: string;
+            iban: string;
+            branch_name: string;
+            swift_code: string;
+            kyc_status: string;
+            verified_by_admin_id: number;
+            verification_date: Date;
+            rejection_reason: string;
+            notes: string;
+            fcmTokens: string[];
+            ratingsReceived: import("../rating/entities/rating.entity").Rating[];
+            ratingsGiven: import("../rating/entities/rating.entity").Rating[];
+            ratingAverage: number;
+            ratingCount: number;
+            country: Country | null;
+            cityEntity: City | null;
+            language: Language | null;
+            work_experience: import("../users/entities/work-experience.entity").WorkExperience[];
+            education: import("../users/entities/education.entity").Education[];
+            certifications: import("../users/entities/certification.entity").Certification[];
+            applications: import("../job-application/entities/job-application.entity").JobApplication[];
+            createdFilters: import("../filter/entities/filter.entity").Filter[];
+            messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
+            jobsCreated: import("../job/entities/job.entity").Job[];
+            filter_preferences: number[];
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        isNewUser?: boolean;
+        message?: string;
+    } | {
+        kyc_token: string;
+        profile: {
+            provider: AuthProviderType;
+            email: string;
+            firstName: string;
+            lastName: string;
+            picture: string;
+        };
+        hint?: string;
+        registered_phone_hint?: string;
+        message: string;
+        kyc_complete: boolean;
+        isNewUser: boolean;
+        email_already_registered: boolean;
     }>;
     attachFcmToken(userId: number, fcmToken: string): Promise<void>;
 }

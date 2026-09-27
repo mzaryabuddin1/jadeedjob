@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JobsLoot — Google Login Test</title>
+  <title>JobsLoot — Auth Lab</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
@@ -15,6 +15,9 @@
       --accent: #3b82f6;
       --ok: #22c55e;
       --err: #ef4444;
+      --warn: #f59e0b;
+      --google: #4285f4;
+      --phone: #14b8a6;
     }
     * { box-sizing: border-box; }
     body {
@@ -23,56 +26,72 @@
       font-family: "Segoe UI", system-ui, sans-serif;
       background: radial-gradient(ellipse at top, #1a2740 0%, var(--bg) 55%);
       color: var(--text);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      padding: 16px 20px 32px;
     }
-    .card {
-      width: 100%;
-      max-width: 560px;
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(340px, 1fr) minmax(380px, 1.15fr);
+      gap: 16px;
+      max-width: 1400px;
+      margin: 0 auto;
+      align-items: start;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 28px;
-      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.28);
     }
-    h1 { margin: 0 0 6px; font-size: 1.4rem; }
-    p.sub { margin: 0 0 22px; color: var(--muted); font-size: .92rem; line-height: 1.45; }
+    .panel h1 { margin: 0 0 4px; font-size: 1.25rem; }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .sub { margin: 0 0 14px; color: var(--muted); font-size: .86rem; line-height: 1.45; }
     label {
       display: block;
-      font-size: .75rem;
+      font-size: .7rem;
       text-transform: uppercase;
       letter-spacing: .04em;
       color: var(--muted);
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
-    input {
+    input, select {
       width: 100%;
-      padding: 10px 12px;
+      padding: 9px 11px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: #0f1724;
       color: var(--text);
-      font-size: .9rem;
-      margin-bottom: 14px;
+      font-size: .88rem;
+      margin-bottom: 10px;
     }
-    input:focus {
-      outline: none;
-      border-color: var(--accent);
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 10px;
     }
     .row {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
       align-items: center;
-      margin: 8px 0 18px;
+      margin: 6px 0 12px;
     }
     button {
       border: none;
       border-radius: 8px;
-      padding: 10px 16px;
-      font-size: .9rem;
+      padding: 9px 14px;
+      font-size: .84rem;
       font-weight: 600;
       cursor: pointer;
     }
@@ -83,91 +102,321 @@
       color: var(--muted);
       border: 1px solid var(--border);
     }
-    #googleBtnWrap { min-height: 44px; margin-bottom: 8px; }
+    .btn-ok { background: #15803d; color: #fff; }
+    .btn-warn { background: #b45309; color: #fff; }
+    .tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .tab {
+      background: #0f1724;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: .78rem;
+    }
+    .tab.active {
+      background: rgba(59,130,246,.2);
+      border-color: var(--accent);
+      color: #93c5fd;
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    #googleBtnWrap { min-height: 40px; margin-bottom: 6px; }
     .hint {
-      font-size: .8rem;
+      font-size: .76rem;
       color: var(--muted);
       background: #0f1724;
       border: 1px dashed var(--border);
       border-radius: 8px;
-      padding: 10px 12px;
-      margin-bottom: 16px;
+      padding: 9px 11px;
+      margin-bottom: 12px;
       line-height: 1.4;
     }
-    .hint code {
-      color: #93c5fd;
-      font-size: .78rem;
-    }
+    .hint code { color: #93c5fd; font-size: .74rem; }
     pre {
       margin: 0;
-      padding: 14px;
+      padding: 12px;
       background: #0a0f16;
       border: 1px solid var(--border);
       border-radius: 10px;
       overflow: auto;
-      max-height: 340px;
-      font-size: .78rem;
-      line-height: 1.45;
+      max-height: 260px;
+      font-size: .74rem;
+      line-height: 1.4;
       white-space: pre-wrap;
       word-break: break-word;
     }
     .status {
-      font-size: .85rem;
-      margin-bottom: 10px;
+      font-size: .82rem;
+      margin: 8px 0;
       font-weight: 600;
     }
     .status.ok { color: var(--ok); }
     .status.err { color: var(--err); }
     .status.info { color: #93c5fd; }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .meta { font-size: .75rem; color: var(--muted); }
+    .table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 120px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .78rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #121a28;
+      color: var(--muted);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      z-index: 1;
+    }
+    tr:hover td { background: rgba(59,130,246,.06); }
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: .68rem;
+      font-weight: 700;
+      margin: 1px 2px;
+    }
+    .badge-google { background: rgba(66,133,244,.2); color: #93c5fd; }
+    .badge-facebook { background: rgba(24,119,242,.2); color: #93c5fd; }
+    .badge-phone { background: rgba(20,184,166,.18); color: #5eead4; }
+    .badge-ok { background: rgba(34,197,94,.18); color: #86efac; }
+    .badge-no { background: rgba(239,68,68,.15); color: #fca5a5; }
+    .id-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .id-card {
+      background: #0f1724;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      line-height: 1.35;
+    }
+    .id-card .p { color: #93c5fd; font-weight: 700; font-size: .72rem; text-transform: uppercase; }
+    .id-card .e { color: var(--text); word-break: break-all; }
+    .id-card .s { color: var(--muted); font-size: .7rem; word-break: break-all; }
+    .btn-del {
+      background: rgba(239,68,68,.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,.35);
+      padding: 5px 10px;
+      font-size: .72rem;
+    }
+    .btn-del:hover { background: rgba(239,68,68,.28); }
+    .empty {
+      padding: 28px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+    .usecases {
+      font-size: .74rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin: 0 0 12px;
+      padding-left: 16px;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Google Login Test</h1>
-    <p class="sub">
-      Sign in with Google → get <code>idToken</code> → call
-      <code>POST /auth/google</code>
-    </p>
+  <div class="layout">
+    <!-- LEFT: actions -->
+    <div class="panel">
+      <h1>Auth Lab</h1>
+      <p class="sub">
+        Test phone register / login, Google KYC &amp; linking. Right panel shows live DB accounts + social identities.
+      </p>
 
-    <div class="hint">
-      Google Cloud Console → Credentials → Web client →
-      <strong>Authorized JavaScript origins</strong> mein add karo:<br />
-      <code>http://localhost:3000</code>
+      <label for="baseUrl">API Base URL</label>
+      <input id="baseUrl" type="text" value="http://localhost:3000" />
+
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="google" onclick="switchTab('google')">Google</button>
+        <button type="button" class="tab" data-tab="register" onclick="switchTab('register')">Register (phone)</button>
+        <button type="button" class="tab" data-tab="login" onclick="switchTab('login')">Login (phone)</button>
+        <button type="button" class="tab" data-tab="kyc" onclick="switchTab('kyc')">KYC / Link</button>
+      </div>
+
+      <ul class="usecases">
+        <li><b>Register</b> phone (+ optional email) → new user</li>
+        <li><b>Google</b> new → KYC phone → creates / links account</li>
+        <li><b>Google</b> same email as registered → same phone OTP → links (no email auto-login)</li>
+        <li><b>2nd Google</b> on same phone → Confirm Link</li>
+      </ul>
+
+      <!-- GOOGLE -->
+      <div id="sec-google" class="section active">
+        <div class="hint">
+          Authorized JS origin: <code>http://localhost:3000</code>
+        </div>
+        <label for="clientId">Google Web Client ID</label>
+        <input
+          id="clientId"
+          type="text"
+          value="501012008250-ojhditf6a2o2i5gs576tfv4ho5uurhan.apps.googleusercontent.com"
+        />
+        <label>Google Sign-In</label>
+        <div id="googleBtnWrap"></div>
+        <div class="row">
+          <button class="btn-ghost" type="button" onclick="reloadGoogleButton()">Reload Button</button>
+          <button class="btn-primary" type="button" id="sendBtn" disabled onclick="sendToApi()">
+            Send idToken → /auth/google
+          </button>
+        </div>
+      </div>
+
+      <!-- REGISTER -->
+      <div id="sec-register" class="section">
+        <div class="grid2">
+          <div>
+            <label>First name</label>
+            <input id="regFirst" value="Ali" />
+          </div>
+          <div>
+            <label>Last name</label>
+            <input id="regLast" value="Khan" />
+          </div>
+        </div>
+        <label>Phone</label>
+        <input id="regPhone" value="+923001234567" />
+        <label>Email (optional)</label>
+        <input id="regEmail" type="email" placeholder="you@gmail.com" />
+        <label>Password</label>
+        <input id="regPass" type="text" value="Pass@123" />
+        <div class="grid2">
+          <div>
+            <label>Country ID</label>
+            <input id="regCountry" type="number" value="41" />
+          </div>
+          <div>
+            <label>Language ID</label>
+            <input id="regLanguage" type="number" value="2" />
+          </div>
+        </div>
+        <label>City ID (optional)</label>
+        <input id="regCity" type="number" value="1" />
+        <div class="row">
+          <button class="btn-primary" type="button" onclick="registerSendOtp()">Send OTP</button>
+          <button class="btn-ok" type="button" onclick="registerVerifyOtp()">Verify OTP (123456)</button>
+        </div>
+      </div>
+
+      <!-- LOGIN -->
+      <div id="sec-login" class="section">
+        <label>Phone</label>
+        <input id="loginPhone" value="+923001234567" />
+        <label>Password</label>
+        <input id="loginPass" type="text" value="Pass@123" />
+        <div class="row">
+          <button class="btn-primary" type="button" onclick="phoneLogin()">POST /auth/login</button>
+        </div>
+      </div>
+
+      <!-- KYC -->
+      <div id="sec-kyc" class="section">
+        <p class="sub" id="kycHint">
+          After Google returns <code>kyc_token</code>, verify phone here (or it opens automatically).
+        </p>
+        <label>Phone (KYC)</label>
+        <input id="phone" type="text" value="+923001234567" />
+        <div class="grid2">
+          <div>
+            <label>Country ID</label>
+            <input id="country" type="number" value="41" />
+          </div>
+          <div>
+            <label>Language ID</label>
+            <input id="language" type="number" value="2" />
+          </div>
+        </div>
+        <label>City ID (optional)</label>
+        <input id="city" type="number" value="1" />
+        <div class="row">
+          <button class="btn-primary" type="button" onclick="sendKycOtp()">Send KYC OTP</button>
+          <button class="btn-ok" type="button" onclick="verifyKycOtp()">Verify OTP (123456)</button>
+          <button class="btn-warn" type="button" id="confirmLinkBtn" style="display:none" onclick="confirmLink()">
+            Confirm Extra Social Link
+          </button>
+        </div>
+      </div>
+
+      <div id="status" class="status info">Ready</div>
+      <pre id="out">{}</pre>
+      <div class="row">
+        <button class="btn-ghost" type="button" onclick="clearOut()">Clear response</button>
+        <button class="btn-ghost" type="button" onclick="refreshAccounts()">Refresh accounts →</button>
+      </div>
     </div>
 
-    <label for="clientId">Google Web Client ID</label>
-    <input
-      id="clientId"
-      type="text"
-      value="501012008250-ojhditf6a2o2i5gs576tfv4ho5uurhan.apps.googleusercontent.com"
-      placeholder="xxxx.apps.googleusercontent.com"
-    />
-
-    <label for="baseUrl">API Base URL</label>
-    <input id="baseUrl" type="text" value="http://localhost:3000" />
-
-    <label>Google Sign-In</label>
-    <div id="googleBtnWrap"></div>
-
-    <div class="row">
-      <button class="btn-ghost" type="button" onclick="reloadGoogleButton()">
-        Reload Google Button
-      </button>
-      <button class="btn-primary" type="button" id="sendBtn" disabled onclick="sendToApi()">
-        Send idToken → API
-      </button>
-      <button class="btn-ghost" type="button" onclick="clearOut()">Clear</button>
+    <!-- RIGHT: accounts -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 style="margin:0;color:var(--text);text-transform:none;font-size:1.05rem;">
+            Users &amp; social links
+          </h2>
+          <div class="meta" id="accountsMeta">Loading…</div>
+        </div>
+        <div class="row" style="margin:0">
+          <button class="btn-ghost" type="button" onclick="refreshAccounts()">Refresh</button>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:.75rem;color:var(--muted)">
+            <input id="autoRefresh" type="checkbox" checked style="width:auto;margin:0" />
+            auto
+          </label>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Phone / Email</th>
+              <th>Primary</th>
+              <th>Social identities</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="accountsBody">
+            <tr><td colspan="4" class="empty">Loading accounts…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-
-    <div id="status" class="status info">Waiting for Google sign-in…</div>
-    <pre id="out">{}</pre>
   </div>
 
   <script>
     let lastIdToken = null;
-    let lastApiResponse = null;
+    let lastKycToken = null;
 
     const $ = (id) => document.getElementById(id);
+    const base = () => $('baseUrl').value.replace(/\/$/, '');
 
     function setStatus(text, kind = 'info') {
       const el = $('status');
@@ -179,24 +428,155 @@
       $('out').textContent = JSON.stringify(obj, null, 2);
     }
 
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach((t) => {
+        t.classList.toggle('active', t.dataset.tab === name);
+      });
+      document.querySelectorAll('.section').forEach((s) => {
+        s.classList.toggle('active', s.id === 'sec-' + name);
+      });
+    }
+
     function clearOut() {
       lastIdToken = null;
-      lastApiResponse = null;
+      lastKycToken = null;
       $('sendBtn').disabled = true;
-      setStatus('Waiting for Google sign-in…', 'info');
+      $('confirmLinkBtn').style.display = 'none';
+      setStatus('Ready', 'info');
       show({});
     }
 
+    async function api(path, body) {
+      const res = await fetch(base() + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    }
+
+    function afterMutation() {
+      if ($('autoRefresh').checked) refreshAccounts();
+    }
+
+    /* ---------- Accounts panel ---------- */
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function refreshAccounts() {
+      try {
+        const res = await fetch(base() + '/auth/debug/accounts');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          $('accountsBody').innerHTML =
+            `<tr><td colspan="5" class="empty">Failed: ${esc(data.message || res.status)}</td></tr>`;
+          $('accountsMeta').textContent = 'Error';
+          return;
+        }
+        const accounts = data.accounts || [];
+        $('accountsMeta').textContent =
+          `${accounts.length} user(s) · ${data.refreshedAt || ''}`;
+
+        if (!accounts.length) {
+          $('accountsBody').innerHTML =
+            '<tr><td colspan="5" class="empty">No users yet — register or complete Google KYC</td></tr>';
+          return;
+        }
+
+        $('accountsBody').innerHTML = accounts
+          .map((u) => {
+            const ids = (u.identities || [])
+              .map(
+                (i) => `
+              <div class="id-card">
+                <div class="p">${esc(i.provider)}</div>
+                <div class="e">${esc(i.providerEmail || '—')}</div>
+                <div class="s">sub: ${esc(i.providerId)}</div>
+              </div>`,
+              )
+              .join('');
+
+            const primary = [
+              u.authProvider
+                ? `<span class="badge badge-${u.authProvider === 'phone' ? 'phone' : u.authProvider}">${esc(u.authProvider)}</span>`
+                : '',
+              u.googleId
+                ? `<span class="badge badge-google">googleId set</span>`
+                : '',
+              u.facebookId
+                ? `<span class="badge badge-facebook">facebookId set</span>`
+                : '',
+              u.kyc_complete
+                ? `<span class="badge badge-ok">kyc ok</span>`
+                : `<span class="badge badge-no">no phone</span>`,
+            ].join(' ');
+
+            return `<tr>
+              <td>
+                <strong>#${u.id}</strong><br/>
+                ${esc(u.firstName)} ${esc(u.lastName)}
+              </td>
+              <td>
+                <div>${esc(u.phone || '—')}</div>
+                <div style="color:var(--muted)">${esc(u.email || '—')}</div>
+              </td>
+              <td>${primary || '—'}</td>
+              <td>
+                <div class="id-list">
+                  ${ids || '<span style="color:var(--muted)">No social linked</span>'}
+                </div>
+              </td>
+              <td>
+                <button type="button" class="btn-del" onclick="deleteAccount(${u.id}, '${esc(u.phone || u.email || String(u.id))}')">
+                  Delete
+                </button>
+              </td>
+            </tr>`;
+          })
+          .join('');
+      } catch (e) {
+        $('accountsBody').innerHTML =
+          `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    async function deleteAccount(id, label) {
+      if (!confirm(`Delete user #${id} (${label})?\nThis removes the user and linked social identities.`)) {
+        return;
+      }
+      try {
+        const res = await fetch(base() + '/auth/debug/accounts/' + id, {
+          method: 'DELETE',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus('Delete failed: ' + (data.message || res.status), 'err');
+          show({ status: res.status, data });
+          return;
+        }
+        setStatus(`Deleted user #${id}`, 'ok');
+        show(data);
+        await refreshAccounts();
+      } catch (e) {
+        setStatus('Delete error: ' + e.message, 'err');
+      }
+    }
+
+    /* ---------- Google ---------- */
     function onGoogleCredential(response) {
-      // response.credential = JWT idToken
       lastIdToken = response.credential;
       $('sendBtn').disabled = false;
-      setStatus('Got Google idToken — ab API pe bhejo', 'ok');
+      setStatus('Got Google idToken — send to API', 'ok');
       show({
         step: 'google_signin_ok',
         idToken_preview: lastIdToken.slice(0, 40) + '…',
-        idToken_length: lastIdToken.length,
-        tip: 'Click “Send idToken → API”',
+        tip: 'Click Send idToken',
       });
     }
 
@@ -206,22 +586,18 @@
         setStatus('Web Client ID required', 'err');
         return;
       }
-
       const wrap = $('googleBtnWrap');
       wrap.innerHTML = '';
-
       if (!window.google?.accounts?.id) {
-        setStatus('Google script still loading… try again in 1s', 'err');
+        setStatus('Google script loading…', 'err');
         return;
       }
-
       google.accounts.id.initialize({
         client_id: clientId,
         callback: onGoogleCredential,
         auto_select: false,
         cancel_on_tap_outside: true,
       });
-
       google.accounts.id.renderButton(wrap, {
         theme: 'outline',
         size: 'large',
@@ -229,75 +605,190 @@
         shape: 'rectangular',
         width: 320,
       });
-
-      setStatus('Google button ready — click Sign in', 'info');
+      setStatus('Google button ready', 'info');
     }
 
     async function sendToApi() {
       if (!lastIdToken) {
-        setStatus('Pehle Google se sign in karo', 'err');
+        setStatus('Sign in with Google first', 'err');
         return;
       }
-
-      const baseUrl = $('baseUrl').value.replace(/\/$/, '');
-      setStatus('Calling POST /auth/google …', 'info');
+      setStatus('POST /auth/google …', 'info');
       $('sendBtn').disabled = true;
-
       try {
-        const res = await fetch(baseUrl + '/auth/google', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            idToken: lastIdToken,
-            // optional:
-            // country: 41,
-            // language: 2,
-          }),
+        const { res, data } = await api('/auth/google', {
+          idToken: lastIdToken,
+          country: Number($('country').value) || undefined,
+          language: Number($('language').value) || undefined,
         });
-
-        const data = await res.json().catch(() => ({ raw: 'non-json response' }));
-        lastApiResponse = { status: res.status, data };
-
+        show({ status: res.status, data });
         if (!res.ok) {
           setStatus('API error ' + res.status, 'err');
-          show(lastApiResponse);
           $('sendBtn').disabled = false;
           return;
         }
-
-        setStatus(
-          'Login OK — kyc_complete: ' + String(data.kyc_complete),
-          'ok',
-        );
-        show({
-          step: 'api_ok',
-          access_token: data.access_token,
-          kyc_complete: data.kyc_complete,
-          isNewUser: data.isNewUser,
-          message: data.message,
-          user: data.user,
-        });
-
+        if (data.kyc_token) {
+          lastKycToken = data.kyc_token;
+          localStorage.setItem('jobsloot_kyc_token', data.kyc_token);
+          switchTab('kyc');
+          if (data.email_already_registered) {
+            $('kycHint').textContent =
+              data.hint ||
+              'Email already on a phone account — use that phone OTP to link Google.';
+            setStatus('Email exists — KYC with registered phone to link', 'ok');
+          } else {
+            $('kycHint').textContent =
+              'New Google — phone OTP will create the account.';
+            setStatus('KYC required — verify phone', 'ok');
+          }
+          afterMutation();
+          return;
+        }
         if (data.access_token) {
           localStorage.setItem('jobsloot_access_token', data.access_token);
         }
+        setStatus('Login OK — kyc_complete: ' + data.kyc_complete, 'ok');
+        afterMutation();
       } catch (err) {
-        setStatus('Network / CORS error: ' + err.message, 'err');
+        setStatus('Network error: ' + err.message, 'err');
         show({ error: String(err) });
         $('sendBtn').disabled = false;
       }
     }
 
-    // Init when GIS script is ready
-    window.addEventListener('load', () => {
-      const tryInit = () => {
-        if (window.google?.accounts?.id) {
-          reloadGoogleButton();
-        } else {
-          setTimeout(tryInit, 200);
+    /* ---------- Register ---------- */
+    async function registerSendOtp() {
+      setStatus('POST /auth/register/send-otp …', 'info');
+      const body = {
+        firstName: $('regFirst').value.trim(),
+        lastName: $('regLast').value.trim(),
+        phone: $('regPhone').value.trim(),
+        password: $('regPass').value,
+        country: Number($('regCountry').value),
+        language: Number($('regLanguage').value),
+        city: Number($('regCity').value) || undefined,
+      };
+      const email = $('regEmail').value.trim();
+      if (email) body.email = email;
+      const { res, data } = await api('/auth/register/send-otp', body);
+      show({ status: res.status, data });
+      setStatus(res.ok ? 'OTP sent (dev: 123456)' : 'Register send failed', res.ok ? 'ok' : 'err');
+    }
+
+    async function registerVerifyOtp() {
+      setStatus('POST /auth/register/verify-otp …', 'info');
+      const { res, data } = await api('/auth/register/verify-otp', {
+        phone: $('regPhone').value.trim(),
+        code: '123456',
+      });
+      show({ status: res.status, data });
+      if (res.ok && data.access_token) {
+        localStorage.setItem('jobsloot_access_token', data.access_token);
+        setStatus('Registered — user created', 'ok');
+        afterMutation();
+      } else {
+        setStatus('Register verify failed', 'err');
+      }
+    }
+
+    /* ---------- Login ---------- */
+    async function phoneLogin() {
+      setStatus('POST /auth/login …', 'info');
+      const { res, data } = await api('/auth/login', {
+        phone: $('loginPhone').value.trim(),
+        password: $('loginPass').value,
+      });
+      show({ status: res.status, data });
+      if (res.ok && data.access_token) {
+        localStorage.setItem('jobsloot_access_token', data.access_token);
+        setStatus('Phone login OK', 'ok');
+      } else {
+        setStatus('Login failed', 'err');
+      }
+      afterMutation();
+    }
+
+    /* ---------- KYC ---------- */
+    async function sendKycOtp() {
+      const kycToken = lastKycToken || localStorage.getItem('jobsloot_kyc_token');
+      if (!kycToken) {
+        setStatus('kyc_token missing — Google login first', 'err');
+        return;
+      }
+      setStatus('POST /auth/kyc/send-otp …', 'info');
+      const { res, data } = await api('/auth/kyc/send-otp', {
+        phone: $('phone').value.trim(),
+        kycToken,
+        country: Number($('country').value) || undefined,
+        language: Number($('language').value) || undefined,
+        city: Number($('city').value) || undefined,
+      });
+      show({ status: res.status, data });
+      setStatus(res.ok ? 'OTP sent (dev: 123456)' : 'KYC send failed', res.ok ? 'ok' : 'err');
+    }
+
+    async function verifyKycOtp() {
+      const kycToken = lastKycToken || localStorage.getItem('jobsloot_kyc_token');
+      setStatus('POST /auth/kyc/verify-otp …', 'info');
+      const { res, data } = await api('/auth/kyc/verify-otp', {
+        phone: $('phone').value.trim(),
+        code: '123456',
+        kycToken,
+      });
+      show({ status: res.status, data });
+
+      if (res.ok && data.requires_link_confirmation && data.link_token) {
+        localStorage.setItem('jobsloot_link_token', data.link_token);
+        if (data.access_token) {
+          localStorage.setItem('jobsloot_access_token', data.access_token);
         }
+        $('confirmLinkBtn').style.display = 'inline-block';
+        setStatus('Confirm extra Google/Facebook link', 'ok');
+        afterMutation();
+        return;
+      }
+
+      if (res.ok && data.access_token) {
+        localStorage.setItem('jobsloot_access_token', data.access_token);
+        localStorage.removeItem('jobsloot_kyc_token');
+        lastKycToken = null;
+        $('confirmLinkBtn').style.display = 'none';
+        setStatus('Done — kyc_complete: ' + data.kyc_complete, 'ok');
+        afterMutation();
+      } else {
+        setStatus('KYC verify failed', 'err');
+      }
+    }
+
+    async function confirmLink() {
+      const linkToken = localStorage.getItem('jobsloot_link_token');
+      setStatus('POST /auth/link-identity/confirm …', 'info');
+      const { res, data } = await api('/auth/link-identity/confirm', {
+        linkToken,
+        confirm: true,
+      });
+      show({ status: res.status, data });
+      if (res.ok && data.access_token) {
+        localStorage.setItem('jobsloot_access_token', data.access_token);
+        localStorage.removeItem('jobsloot_link_token');
+        $('confirmLinkBtn').style.display = 'none';
+        setStatus('Additional social linked', 'ok');
+        afterMutation();
+      } else {
+        setStatus('Link confirm failed', 'err');
+      }
+    }
+
+    window.addEventListener('load', () => {
+      refreshAccounts();
+      const tryInit = () => {
+        if (window.google?.accounts?.id) reloadGoogleButton();
+        else setTimeout(tryInit, 200);
       };
       tryInit();
+      setInterval(() => {
+        if ($('autoRefresh').checked) refreshAccounts();
+      }, 8000);
     });
   </script>
 </body>
