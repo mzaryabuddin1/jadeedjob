@@ -52,6 +52,7 @@ let AuthController = class AuthController {
         if (existing)
             throw new common_1.BadRequestException('Phone already registered');
         if (body.email) {
+            body.email = String(body.email).trim().toLowerCase();
             await this.authService.assertEmailAvailable(body.email);
         }
         else {
@@ -61,19 +62,49 @@ let AuthController = class AuthController {
         body.passwordHash = hash;
         body.passwordSalt = salt;
         delete body.password;
-        const otp = this.otpService.generateOTP(body.phone, {
+        const phoneOtp = this.otpService.generateOTP(body.phone, {
             ...body,
             purpose: 'register',
-        });
-        return { message: `OTP sent to ${body.phone}`, otp };
+            emailPending: !!body.email,
+        }, 'phone');
+        const channels = ['phone'];
+        let emailOtp;
+        if (body.email) {
+            emailOtp = this.otpService.generateOTP(body.email, {
+                purpose: 'register_email',
+                phone: body.phone,
+                email: body.email,
+            }, 'email');
+            channels.push('email');
+        }
+        return {
+            message: channels.length > 1
+                ? `OTP sent to ${body.phone} and ${body.email}`
+                : `OTP sent to ${body.phone}`,
+            otp: phoneOtp,
+            phone_otp: phoneOtp,
+            ...(emailOtp ? { email_otp: emailOtp } : {}),
+            otp_channels: channels,
+            email_otp_required: !!body.email,
+        };
     }
     async verifyOtp(body) {
-        const { phone, code, fcmToken = null } = body;
+        const { phone, code, emailCode, fcmToken = null } = body;
         const entry = this.assertValidOtp(phone, code, 'register');
         this.otpService.markUsed(phone);
+        const regEmail = entry.registrationData?.email;
+        if (regEmail) {
+            if (!emailCode) {
+                throw new common_1.BadRequestException('emailCode is required — OTP was also sent to your email');
+            }
+            this.assertValidOtp(regEmail, emailCode, 'register_email');
+            this.otpService.markUsed(regEmail);
+            this.otpService.deleteOtp(regEmail);
+        }
         const user = (await this.authService.createOrGetUser({
             ...entry.registrationData,
             isVerified: true,
+            terms_and_condition: true,
         }));
         if (fcmToken) {
             await this.authService.attachFcmToken(user.id, fcmToken);
@@ -83,7 +114,7 @@ let AuthController = class AuthController {
         return this.authService.authResponse(fresh);
     }
     async login(dto) {
-        const user = await this.authService.validateUser(dto.phone, dto.password);
+        const user = await this.authService.validateUser({ phone: dto.phone, email: dto.email }, dto.password);
         if (dto.fcmToken) {
             await this.authService.attachFcmToken(user.id, dto.fcmToken);
         }
@@ -95,6 +126,7 @@ let AuthController = class AuthController {
             fcmToken: body.fcmToken,
             country: body.country,
             language: body.language,
+            terms_and_condition: body.terms_and_condition,
         });
     }
     async facebookAuth(body) {
@@ -102,6 +134,7 @@ let AuthController = class AuthController {
             fcmToken: body.fcmToken,
             country: body.country,
             language: body.language,
+            terms_and_condition: body.terms_and_condition,
         });
     }
     async sendUpdateEmailOtp(req, body) {
@@ -133,6 +166,7 @@ let AuthController = class AuthController {
         const phoneTaken = await this.authService.findUserByPhone(body.phone);
         if (body.kycToken) {
             const pending = this.authService.verifyKycToken(body.kycToken);
+            await this.authService.assertSocialKycEmailOk(pending, body.phone);
             const otp = this.otpService.generateOTP(body.phone, {
                 purpose: 'kyc',
                 mode: 'social_kyc',
@@ -283,8 +317,8 @@ exports.AuthController = AuthController;
 __decorate([
     (0, common_1.Post)('register/send-otp'),
     (0, swagger_1.ApiOperation)({
-        summary: 'Register — send OTP to phone',
-        description: 'Phone required. Email & city optional. Dev OTP is always **123456**.',
+        summary: 'Register — send OTP to phone (and email if provided)',
+        description: 'Phone + `terms_and_condition: true` required. If optional email is set, a **different** OTP is sent to email. Dev: phone=`123456`, email=`654321`.',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -296,6 +330,7 @@ __decorate([
                 'country',
                 'language',
                 'password',
+                'terms_and_condition',
             ],
             properties: {
                 firstName: { type: 'string', example: 'Ali' },
@@ -316,7 +351,12 @@ __decorate([
                 email: {
                     type: 'string',
                     example: 'ali@example.com',
-                    description: 'Optional, must be unique',
+                    description: 'Optional — if set, OTP is also sent to this email',
+                },
+                terms_and_condition: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Must be true',
                 },
                 full_name: { type: 'string', example: 'Ali Khan' },
             },
@@ -334,6 +374,9 @@ __decorate([
             .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/)
             .required(),
         email: joi_1.default.string().email().optional().allow(null, ''),
+        terms_and_condition: joi_1.default.boolean().valid(true).required().messages({
+            'any.only': 'terms_and_condition must be true',
+        }),
         full_name: joi_1.default.string().optional(),
     }))),
     __param(0, (0, common_1.Body)()),
@@ -343,14 +386,22 @@ __decorate([
 ], AuthController.prototype, "sendOtp", null);
 __decorate([
     (0, common_1.Post)('register/verify-otp'),
-    (0, swagger_1.ApiOperation)({ summary: 'Register — verify OTP & create account' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Register — verify OTP & create account',
+        description: 'If email was provided at send-otp, also send `emailCode` (different from phone OTP). Dev email OTP = **654321**.',
+    }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
             required: ['phone', 'code'],
             properties: {
                 phone: { type: 'string', example: '+923001234567' },
-                code: { type: 'string', example: '123456' },
+                code: { type: 'string', example: '123456', description: 'Phone OTP' },
+                emailCode: {
+                    type: 'string',
+                    example: '654321',
+                    description: 'Required if email OTP was sent — different from phone OTP',
+                },
                 fcmToken: { type: 'string', example: 'optional-fcm-token' },
             },
         },
@@ -362,22 +413,31 @@ __decorate([
 ], AuthController.prototype, "verifyOtp", null);
 __decorate([
     (0, common_1.Post)('login'),
-    (0, swagger_1.ApiOperation)({ summary: 'Login with phone & password' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Login with phone or email & password',
+        description: 'Send either `phone` or `email` (or both). Password required.',
+    }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
-            required: ['phone', 'password'],
+            required: ['password'],
             properties: {
                 phone: { type: 'string', example: '+923001234567' },
+                email: { type: 'string', example: 'user@example.com' },
                 password: { type: 'string', example: 'Pass@123' },
                 fcmToken: { type: 'string' },
             },
         },
     }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        phone: joi_1.default.string().required(),
+        phone: joi_1.default.string().optional(),
+        email: joi_1.default.string().email().optional(),
         password: joi_1.default.string().required(),
         fcmToken: joi_1.default.string().optional(),
+    })
+        .or('phone', 'email')
+        .messages({
+        'object.missing': 'Provide phone or email',
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -388,7 +448,7 @@ __decorate([
     (0, common_1.Post)('google'),
     (0, swagger_1.ApiOperation)({
         summary: 'Google login / signup',
-        description: 'Existing user → `access_token` + `kyc_complete`. New user → `kyc_complete: false` + `kyc_token` (no DB account yet). Complete via `/auth/kyc/*` with `kycToken`.',
+        description: 'Existing user → `access_token`. New user → needs `terms_and_condition: true` → `kyc_token` (complete via `/auth/kyc/*`).',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -399,6 +459,11 @@ __decorate([
                 fcmToken: { type: 'string' },
                 country: { type: 'number', example: 41 },
                 language: { type: 'number', example: 2 },
+                terms_and_condition: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Required true for new Google registration',
+                },
             },
         },
     }),
@@ -407,6 +472,7 @@ __decorate([
         fcmToken: joi_1.default.string().optional(),
         country: joi_1.default.number().optional(),
         language: joi_1.default.number().optional(),
+        terms_and_condition: joi_1.default.boolean().optional(),
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -417,7 +483,7 @@ __decorate([
     (0, common_1.Post)('facebook'),
     (0, swagger_1.ApiOperation)({
         summary: 'Facebook login / signup',
-        description: 'Existing user → `access_token` + `kyc_complete`. New user → `kyc_complete: false` + `kyc_token` (no DB account yet).',
+        description: 'Existing user → `access_token`. New user → needs `terms_and_condition: true` → `kyc_token`.',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -431,6 +497,11 @@ __decorate([
                 fcmToken: { type: 'string' },
                 country: { type: 'number', example: 41 },
                 language: { type: 'number', example: 2 },
+                terms_and_condition: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Required true for new Facebook registration',
+                },
             },
         },
     }),
@@ -439,6 +510,7 @@ __decorate([
         fcmToken: joi_1.default.string().optional(),
         country: joi_1.default.number().optional(),
         language: joi_1.default.number().optional(),
+        terms_and_condition: joi_1.default.boolean().optional(),
     }))),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -500,7 +572,7 @@ __decorate([
     (0, common_1.Post)('kyc/send-otp'),
     (0, swagger_1.ApiOperation)({
         summary: 'KYC / link — send OTP to phone',
-        description: 'Pass `kycToken` from Google/Facebook. If phone already exists, OTP proves ownership for secure linking. Dev OTP = 123456',
+        description: 'Pass `kycToken` from Google/Facebook. Checks social-email conflicts before sending OTP. If phone already exists, OTP proves ownership for linking. Dev OTP = 123456',
     }),
     (0, swagger_1.ApiBody)({
         schema: {

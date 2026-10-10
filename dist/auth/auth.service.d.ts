@@ -21,6 +21,7 @@ export type PendingSocialSignup = {
     country?: number;
     language?: number;
     fcmToken?: string;
+    terms_and_condition?: boolean;
 };
 export type PendingLinkConfirmation = {
     purpose: 'link_confirm';
@@ -73,6 +74,7 @@ export declare class AuthService implements OnModuleInit {
         authProvider: "phone" | "google" | "facebook";
         isVerified: boolean;
         isBanned: boolean;
+        terms_and_condition: boolean;
         full_name: string;
         father_name: string;
         gender: string;
@@ -143,6 +145,7 @@ export declare class AuthService implements OnModuleInit {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -225,7 +228,7 @@ export declare class AuthService implements OnModuleInit {
         lastName: string;
         phone: string;
         email: string;
-        authProvider: "google" | "facebook" | "phone";
+        authProvider: "phone" | "google" | "facebook";
         googleId: string;
         facebookId: string;
         kyc_complete: boolean;
@@ -260,13 +263,17 @@ export declare class AuthService implements OnModuleInit {
     private resolveCountryLanguage;
     private resolveCity;
     assertEmailAvailable(email: string, excludeUserId?: number): Promise<void>;
+    assertSocialKycEmailOk(pending: PendingSocialSignup, phone: string): Promise<void>;
     createOrGetUser(data: any): Promise<User | User[]>;
     hashPassword(password: string): {
         salt: string;
         hash: string;
     };
     validatePassword(password: string, storedHash: string, salt: string): boolean;
-    validateUser(phone: string, password: string): Promise<User>;
+    validateUser(identifier: {
+        phone?: string;
+        email?: string;
+    }, password: string): Promise<User>;
     resetPassword(phone: string, salt: string, hash: string): Promise<void>;
     updateUserEmail(userId: number, email: string): Promise<User>;
     completeKyc(userId: number, data: {
@@ -302,6 +309,7 @@ export declare class AuthService implements OnModuleInit {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -368,6 +376,7 @@ export declare class AuthService implements OnModuleInit {
         fcmToken?: string;
         country?: number;
         language?: number;
+        terms_and_condition?: boolean;
     }): Promise<{
         access_token: string;
         kyc_complete: boolean;
@@ -384,6 +393,7 @@ export declare class AuthService implements OnModuleInit {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -457,6 +467,7 @@ export declare class AuthService implements OnModuleInit {
         fcmToken?: string;
         country?: number;
         language?: number;
+        terms_and_condition?: boolean;
     }): Promise<{
         access_token: string;
         kyc_complete: boolean;
@@ -473,6 +484,7 @@ export declare class AuthService implements OnModuleInit {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;

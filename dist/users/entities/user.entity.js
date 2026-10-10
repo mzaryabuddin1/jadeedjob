@@ -78,6 +78,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], User.prototype, "isBanned", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "terms_and_condition", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], User.prototype, "full_name", void 0);

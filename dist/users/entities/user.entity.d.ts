@@ -24,6 +24,7 @@ export declare class User {
     passwordSalt: string;
     isVerified: boolean;
     isBanned: boolean;
+    terms_and_condition: boolean;
     full_name: string;
     father_name: string;
     gender: string;

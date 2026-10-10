@@ -6,23 +6,26 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OtpService = exports.DEV_OTP_CODE = void 0;
+exports.OtpService = exports.DEV_OTP_CODE = exports.DEV_EMAIL_OTP = exports.DEV_PHONE_OTP = void 0;
 const common_1 = require("@nestjs/common");
-exports.DEV_OTP_CODE = '123456';
+exports.DEV_PHONE_OTP = '123456';
+exports.DEV_EMAIL_OTP = '654321';
+exports.DEV_OTP_CODE = exports.DEV_PHONE_OTP;
 let OtpService = class OtpService {
     constructor() {
         this.otps = new Map();
     }
-    generateOTP(key, registrationData) {
-        const otp = exports.DEV_OTP_CODE;
+    generateOTP(key, registrationData, channel = key.includes('@') ? 'email' : 'phone') {
+        const otp = channel === 'email' ? exports.DEV_EMAIL_OTP : exports.DEV_PHONE_OTP;
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
         this.otps.set(key, {
             code: otp,
             used: false,
             expiresAt,
             registrationData,
+            channel,
         });
-        console.log(`OTP for ${key}: ${otp}`);
+        console.log(`OTP (${channel}) for ${key}: ${otp}`);
         return otp;
     }
     verifyOTP(key, code) {

@@ -8,8 +8,12 @@ export declare class AuthController {
     constructor(authService: AuthService, otpService: OtpService, usersService: UsersService);
     private assertValidOtp;
     sendOtp(body: any): Promise<{
+        otp_channels: string[];
+        email_otp_required: boolean;
+        email_otp?: string;
         message: string;
         otp: string;
+        phone_otp: string;
     }>;
     verifyOtp(body: any): Promise<{
         access_token: string;
@@ -27,6 +31,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -82,7 +87,8 @@ export declare class AuthController {
         message?: string;
     }>;
     login(dto: {
-        phone: string;
+        phone?: string;
+        email?: string;
         password: string;
         fcmToken?: string;
     }): Promise<{
@@ -101,6 +107,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -160,6 +167,7 @@ export declare class AuthController {
         fcmToken?: string;
         country?: number;
         language?: number;
+        terms_and_condition?: boolean;
     }): Promise<{
         access_token: string;
         kyc_complete: boolean;
@@ -176,6 +184,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -250,6 +259,7 @@ export declare class AuthController {
         fcmToken?: string;
         country?: number;
         language?: number;
+        terms_and_condition?: boolean;
     }): Promise<{
         access_token: string;
         kyc_complete: boolean;
@@ -266,6 +276,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -360,6 +371,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -447,6 +459,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -519,6 +532,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -592,6 +606,7 @@ export declare class AuthController {
             authProvider: "phone" | "google" | "facebook";
             isVerified: boolean;
             isBanned: boolean;
+            terms_and_condition: boolean;
             full_name: string;
             father_name: string;
             gender: string;
@@ -664,7 +679,7 @@ export declare class AuthController {
             lastName: string;
             phone: string;
             email: string;
-            authProvider: "google" | "facebook" | "phone";
+            authProvider: "phone" | "google" | "facebook";
             googleId: string;
             facebookId: string;
             kyc_complete: boolean;

@@ -34,7 +34,7 @@ import { CityModule } from 'src/city/city.module';
     LanguageModule,
     CityModule,
     TwilioModule,
-    FilterModule,
+    forwardRef(() => FilterModule),
     FirebaseModule,
   ],
   controllers: [AuthController],

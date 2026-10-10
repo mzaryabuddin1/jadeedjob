@@ -34,6 +34,7 @@ export type PendingSocialSignup = {
   country?: number;
   language?: number;
   fcmToken?: string;
+  terms_and_condition?: boolean;
 };
 
 /** After phone OTP — confirm linking an *additional* social identity */
@@ -362,10 +363,17 @@ export class AuthService implements OnModuleInit {
   }
 
   async findUserByEmail(email: string) {
-    return this.userRepo.findOne({
-      where: { email },
-      relations: ['country', 'language', 'cityEntity', 'authIdentities'],
-    });
+    const normalized = String(email).trim().toLowerCase();
+    if (!normalized) return null;
+
+    return this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.country', 'country')
+      .leftJoinAndSelect('u.language', 'language')
+      .leftJoinAndSelect('u.cityEntity', 'cityEntity')
+      .leftJoinAndSelect('u.authIdentities', 'authIdentities')
+      .where('LOWER(u.email) = :email', { email: normalized })
+      .getOne();
   }
 
   /** Resolve user by linked identity (table + legacy columns). Never by email. */
@@ -452,9 +460,39 @@ export class AuthService implements OnModuleInit {
     }
   }
 
+  /**
+   * Early check for social KYC (send-otp + verify).
+   * New phone → social email must not belong to another account.
+   * Existing phone → email may belong to that same user only.
+   */
+  async assertSocialKycEmailOk(
+    pending: PendingSocialSignup,
+    phone: string,
+  ): Promise<void> {
+    if (!pending.email) return;
+
+    const phoneUser = await this.findUserByPhone(phone);
+    try {
+      await this.assertEmailAvailable(
+        pending.email,
+        phoneUser?.id,
+      );
+    } catch {
+      throw new ConflictException(
+        'This social email is already used by another account. Use a different phone or contact support.',
+      );
+    }
+  }
+
   async createOrGetUser(data: any) {
     const existing = await this.findUserByPhone(data.phone);
     if (existing) return existing;
+
+    if (!data.terms_and_condition) {
+      throw new BadRequestException(
+        'terms_and_condition must be accepted to register',
+      );
+    }
 
     if (data.email) {
       await this.assertEmailAvailable(data.email);
@@ -466,6 +504,8 @@ export class AuthService implements OnModuleInit {
       language: languageId,
       city: cityId,
       purpose: _purpose,
+      emailPending: _emailPending,
+      emailOtpSent: _emailOtpSent,
       ...rest
     } = data;
 
@@ -492,6 +532,7 @@ export class AuthService implements OnModuleInit {
       language,
       cityEntity,
       isBanned: false,
+      terms_and_condition: true,
       filter_preferences: defaultFilterPreferences,
     });
 
@@ -509,9 +550,21 @@ export class AuthService implements OnModuleInit {
     return hash === storedHash;
   }
 
-  async validateUser(phone: string, password: string) {
-    const user = await this.findUserByPhone(phone);
-    if (!user) throw new UnauthorizedException('Invalid phone or password');
+  async validateUser(
+    identifier: { phone?: string; email?: string },
+    password: string,
+  ) {
+    const phone = identifier.phone?.trim();
+    const email = identifier.email?.trim();
+
+    let user = phone ? await this.findUserByPhone(phone) : null;
+    if (!user && email) {
+      user = await this.findUserByEmail(email);
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid email/phone or password');
+    }
 
     if (!user.passwordHash || !user.passwordSalt) {
       const hint =
@@ -531,10 +584,13 @@ export class AuthService implements OnModuleInit {
       user.passwordSalt,
     );
 
-    if (!isValid) throw new UnauthorizedException('Invalid phone or password');
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid email/phone or password');
+    }
 
-    if (user.isBanned)
+    if (user.isBanned) {
       throw new UnauthorizedException('Your account is blocked!');
+    }
 
     return user;
   }
@@ -828,6 +884,12 @@ export class AuthService implements OnModuleInit {
     }
 
     // Brand new phone + social → create account
+    if (!pending.terms_and_condition) {
+      throw new BadRequestException(
+        'terms_and_condition must be accepted to register',
+      );
+    }
+
     const countryId = data.country ?? pending.country;
     const languageId = data.language ?? pending.language;
     const { country, language } = await this.resolveCountryLanguage(
@@ -840,15 +902,7 @@ export class AuthService implements OnModuleInit {
         : undefined,
     );
 
-    if (pending.email) {
-      try {
-        await this.assertEmailAvailable(pending.email);
-      } catch {
-        throw new ConflictException(
-          'This social email is already used by another account. Use a different phone or contact support.',
-        );
-      }
-    }
+    await this.assertSocialKycEmailOk(pending, data.phone);
 
     let user = await this.userRepo.save(
       this.userRepo.create({
@@ -868,6 +922,7 @@ export class AuthService implements OnModuleInit {
         cityEntity,
         isVerified: true,
         isBanned: false,
+        terms_and_condition: true,
         kyc_status: 'phone_verified',
         filter_preferences: await this.filterService.getTopFiltersByJobs(9),
       }),
@@ -932,7 +987,12 @@ export class AuthService implements OnModuleInit {
 
   async loginWithGoogle(
     idToken: string,
-    options?: { fcmToken?: string; country?: number; language?: number },
+    options?: {
+      fcmToken?: string;
+      country?: number;
+      language?: number;
+      terms_and_condition?: boolean;
+    },
   ) {
     const profile = await this.googleAuthService.getProfileFromToken(idToken);
 
@@ -953,6 +1013,12 @@ export class AuthService implements OnModuleInit {
       );
     }
 
+    if (!options?.terms_and_condition) {
+      throw new BadRequestException(
+        'terms_and_condition must be true to register with Google',
+      );
+    }
+
     // Never match by email alone — always verify phone via KYC
     return this.pendingSocialWithEmailHint({
       purpose: 'kyc_pending',
@@ -965,12 +1031,18 @@ export class AuthService implements OnModuleInit {
       country: options?.country,
       language: options?.language,
       fcmToken: options?.fcmToken,
+      terms_and_condition: true,
     });
   }
 
   async loginWithFacebook(
     accessToken: string,
-    options?: { fcmToken?: string; country?: number; language?: number },
+    options?: {
+      fcmToken?: string;
+      country?: number;
+      language?: number;
+      terms_and_condition?: boolean;
+    },
   ) {
     const profile =
       await this.facebookAuthService.getProfileFromToken(accessToken);
@@ -995,6 +1067,12 @@ export class AuthService implements OnModuleInit {
       );
     }
 
+    if (!options?.terms_and_condition) {
+      throw new BadRequestException(
+        'terms_and_condition must be true to register with Facebook',
+      );
+    }
+
     return this.pendingSocialWithEmailHint({
       purpose: 'kyc_pending',
       provider: 'facebook',
@@ -1006,6 +1084,7 @@ export class AuthService implements OnModuleInit {
       country: options?.country,
       language: options?.language,
       fcmToken: options?.fcmToken,
+      terms_and_condition: true,
     });
   }
 

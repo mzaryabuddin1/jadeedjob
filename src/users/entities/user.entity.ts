@@ -67,6 +67,10 @@ export class User {
   @Column({ default: false })
   isBanned: boolean;
 
+  /** User accepted terms & conditions at registration */
+  @Column({ default: false })
+  terms_and_condition: boolean;
+
   // Basic details
   @Column({ nullable: true })
   full_name: string;

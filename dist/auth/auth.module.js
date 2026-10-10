@@ -46,7 +46,7 @@ exports.AuthModule = AuthModule = __decorate([
             language_module_1.LanguageModule,
             city_module_1.CityModule,
             twilio_module_1.TwilioModule,
-            filter_module_1.FilterModule,
+            (0, common_1.forwardRef)(() => filter_module_1.FilterModule),
             firebase_module_1.FirebaseModule,
         ],
         controllers: [auth_controller_1.AuthController],

@@ -26,9 +26,11 @@ const utils_util_1 = require("../common/utils/utils.util");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const filter_entity_1 = require("./entities/filter.entity");
+const auth_service_1 = require("../auth/auth.service");
 let FilterController = class FilterController {
-    constructor(filterService, filterRepo) {
+    constructor(filterService, authService, filterRepo) {
         this.filterService = filterService;
+        this.authService = authService;
         this.filterRepo = filterRepo;
     }
     async createFilter(body, req) {
@@ -48,8 +50,13 @@ let FilterController = class FilterController {
             filter: createdFilter,
         };
     }
-    async getFilter(query) {
-        return this.filterService.getFilters(query, { approvedOnly: true });
+    async getFilter(req, query) {
+        const userId = this.authService.tryGetUserIdFromAuthHeader(req.headers?.authorization) ??
+            undefined;
+        return this.filterService.getFilters(query, {
+            approvedOnly: true,
+            userId,
+        });
     }
     async getFilterById(id) {
         return this.filterService.filterById(Number(id), { approvedOnly: true });
@@ -68,13 +75,20 @@ __decorate([
             properties: {
                 name: { type: 'string', example: 'Construction' },
                 icon: { type: 'string', example: "{ icon: 'hammer' }" },
-                status: { type: 'string', enum: ['active', 'inactive'], example: 'active' },
+                status: {
+                    type: 'string',
+                    enum: ['active', 'inactive'],
+                    example: 'active',
+                },
             },
         },
     }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         name: joi_1.default.string().trim().required(),
-        icon: joi_1.default.string().trim().pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/).required(),
+        icon: joi_1.default.string()
+            .trim()
+            .pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/)
+            .required(),
         status: joi_1.default.string().valid('active', 'inactive').default('active'),
     }))),
     __param(0, (0, common_1.Body)()),
@@ -85,10 +99,15 @@ __decorate([
 ], FilterController.prototype, "createFilter", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'List approved filters (public)' }),
-    __param(0, (0, common_1.Query)()),
+    (0, swagger_1.ApiBearerAuth)('JWT'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'List approved filters (public)',
+        description: 'Optional Authorization: Bearer <token>. When logged in (and preference≠false), your filter_preferences come first, then the rest.',
+    }),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], FilterController.prototype, "getFilter", null);
 __decorate([
@@ -102,8 +121,9 @@ __decorate([
 exports.FilterController = FilterController = __decorate([
     (0, swagger_1.ApiTags)('Filters'),
     (0, common_1.Controller)('filters'),
-    __param(1, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
+    __param(2, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [filter_service_1.FilterService,
+        auth_service_1.AuthService,
         typeorm_2.Repository])
 ], FilterController);
 //# sourceMappingURL=filter.controller.js.map

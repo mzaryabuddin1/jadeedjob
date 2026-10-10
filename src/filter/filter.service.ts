@@ -50,6 +50,13 @@ export class FilterService {
       preference = true,
     } = query;
 
+    // Query strings arrive as "true"/"false" — normalize
+    const usePreference =
+      preference === true ||
+      preference === 'true' ||
+      preference === 1 ||
+      preference === '1';
+
     const where: any = {};
 
     if (options?.approvedOnly) {
@@ -75,9 +82,9 @@ export class FilterService {
 
     let orderedFilters = filters;
 
-    // 2️⃣ Reorder based on user preferences
+    // 2️⃣ Preferred filters first (order of user's filter_preferences), then others
     const userId = options?.userId;
-    if (preference === true && userId) {
+    if (usePreference && userId) {
       const user = await this.userRepo.findOne({
         where: { id: userId },
         select: ['filter_preferences'],
@@ -86,17 +93,19 @@ export class FilterService {
       const preferences = user?.filter_preferences ?? [];
 
       if (preferences.length) {
+        const byId = new Map(filters.map((f) => [f.id, f]));
         const preferred = [];
-        const others = [];
+        const preferredIds = new Set<number>();
 
-        for (const filter of filters) {
-          if (preferences.includes(filter.id)) {
-            preferred.push(filter);
-          } else {
-            others.push(filter);
+        for (const id of preferences) {
+          const f = byId.get(Number(id));
+          if (f) {
+            preferred.push(f);
+            preferredIds.add(f.id);
           }
         }
 
+        const others = filters.filter((f) => !preferredIds.has(f.id));
         orderedFilters = [...preferred, ...others];
       }
     }

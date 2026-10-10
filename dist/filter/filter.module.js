@@ -14,12 +14,16 @@ const typeorm_1 = require("@nestjs/typeorm");
 const filter_entity_1 = require("./entities/filter.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const job_entity_1 = require("../job/entities/job.entity");
+const auth_module_1 = require("../auth/auth.module");
 let FilterModule = class FilterModule {
 };
 exports.FilterModule = FilterModule;
 exports.FilterModule = FilterModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([filter_entity_1.Filter, user_entity_1.User, job_entity_1.Job])],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([filter_entity_1.Filter, user_entity_1.User, job_entity_1.Job]),
+            (0, common_1.forwardRef)(() => auth_module_1.AuthModule),
+        ],
         controllers: [filter_controller_1.FilterController],
         providers: [filter_service_1.FilterService],
         exports: [filter_service_1.FilterService],

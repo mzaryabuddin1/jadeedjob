@@ -258,10 +258,17 @@ let AuthService = class AuthService {
         });
     }
     async findUserByEmail(email) {
-        return this.userRepo.findOne({
-            where: { email },
-            relations: ['country', 'language', 'cityEntity', 'authIdentities'],
-        });
+        const normalized = String(email).trim().toLowerCase();
+        if (!normalized)
+            return null;
+        return this.userRepo
+            .createQueryBuilder('u')
+            .leftJoinAndSelect('u.country', 'country')
+            .leftJoinAndSelect('u.language', 'language')
+            .leftJoinAndSelect('u.cityEntity', 'cityEntity')
+            .leftJoinAndSelect('u.authIdentities', 'authIdentities')
+            .where('LOWER(u.email) = :email', { email: normalized })
+            .getOne();
     }
     async findUserByProvider(provider, providerId) {
         const identity = await this.identityRepo.findOne({
@@ -330,15 +337,29 @@ let AuthService = class AuthService {
             throw new common_1.BadRequestException('Email already linked to another account via Google/Facebook');
         }
     }
+    async assertSocialKycEmailOk(pending, phone) {
+        if (!pending.email)
+            return;
+        const phoneUser = await this.findUserByPhone(phone);
+        try {
+            await this.assertEmailAvailable(pending.email, phoneUser?.id);
+        }
+        catch {
+            throw new common_1.ConflictException('This social email is already used by another account. Use a different phone or contact support.');
+        }
+    }
     async createOrGetUser(data) {
         const existing = await this.findUserByPhone(data.phone);
         if (existing)
             return existing;
+        if (!data.terms_and_condition) {
+            throw new common_1.BadRequestException('terms_and_condition must be accepted to register');
+        }
         if (data.email) {
             await this.assertEmailAvailable(data.email);
             data = { ...data, email: String(data.email).trim().toLowerCase() };
         }
-        const { country: countryId, language: languageId, city: cityId, purpose: _purpose, ...rest } = data;
+        const { country: countryId, language: languageId, city: cityId, purpose: _purpose, emailPending: _emailPending, emailOtpSent: _emailOtpSent, ...rest } = data;
         const country = await this.countryRepo.findOne({
             where: { id: Number(countryId) },
         });
@@ -357,6 +378,7 @@ let AuthService = class AuthService {
             language,
             cityEntity,
             isBanned: false,
+            terms_and_condition: true,
             filter_preferences: defaultFilterPreferences,
         });
         return this.userRepo.save(user);
@@ -370,10 +392,16 @@ let AuthService = class AuthService {
         const hash = (0, crypto_1.pbkdf2Sync)(password, salt, 1000, 64, 'sha512').toString('hex');
         return hash === storedHash;
     }
-    async validateUser(phone, password) {
-        const user = await this.findUserByPhone(phone);
-        if (!user)
-            throw new common_1.UnauthorizedException('Invalid phone or password');
+    async validateUser(identifier, password) {
+        const phone = identifier.phone?.trim();
+        const email = identifier.email?.trim();
+        let user = phone ? await this.findUserByPhone(phone) : null;
+        if (!user && email) {
+            user = await this.findUserByEmail(email);
+        }
+        if (!user) {
+            throw new common_1.UnauthorizedException('Invalid email/phone or password');
+        }
         if (!user.passwordHash || !user.passwordSalt) {
             const hint = user.authProvider === 'facebook'
                 ? 'Facebook'
@@ -383,10 +411,12 @@ let AuthService = class AuthService {
             throw new common_1.UnauthorizedException(`This account uses ${hint} sign-in. Please log in with ${hint}.`);
         }
         const isValid = this.validatePassword(password, user.passwordHash, user.passwordSalt);
-        if (!isValid)
-            throw new common_1.UnauthorizedException('Invalid phone or password');
-        if (user.isBanned)
+        if (!isValid) {
+            throw new common_1.UnauthorizedException('Invalid email/phone or password');
+        }
+        if (user.isBanned) {
             throw new common_1.UnauthorizedException('Your account is blocked!');
+        }
         return user;
     }
     async resetPassword(phone, salt, hash) {
@@ -567,20 +597,16 @@ let AuthService = class AuthService {
             }
             return result;
         }
+        if (!pending.terms_and_condition) {
+            throw new common_1.BadRequestException('terms_and_condition must be accepted to register');
+        }
         const countryId = data.country ?? pending.country;
         const languageId = data.language ?? pending.language;
         const { country, language } = await this.resolveCountryLanguage(countryId, languageId);
         const cityEntity = await this.resolveCity(data.city !== undefined && data.city !== null
             ? Number(data.city)
             : undefined);
-        if (pending.email) {
-            try {
-                await this.assertEmailAvailable(pending.email);
-            }
-            catch {
-                throw new common_1.ConflictException('This social email is already used by another account. Use a different phone or contact support.');
-            }
-        }
+        await this.assertSocialKycEmailOk(pending, data.phone);
         let user = await this.userRepo.save(this.userRepo.create({
             googleId: pending.provider === 'google' ? pending.providerId : null,
             facebookId: pending.provider === 'facebook' ? pending.providerId : null,
@@ -597,6 +623,7 @@ let AuthService = class AuthService {
             cityEntity,
             isVerified: true,
             isBanned: false,
+            terms_and_condition: true,
             kyc_status: 'phone_verified',
             filter_preferences: await this.filterService.getTopFiltersByJobs(9),
         }));
@@ -640,6 +667,9 @@ let AuthService = class AuthService {
                 picture: profile.picture,
             }, options?.fcmToken);
         }
+        if (!options?.terms_and_condition) {
+            throw new common_1.BadRequestException('terms_and_condition must be true to register with Google');
+        }
         return this.pendingSocialWithEmailHint({
             purpose: 'kyc_pending',
             provider: 'google',
@@ -651,6 +681,7 @@ let AuthService = class AuthService {
             country: options?.country,
             language: options?.language,
             fcmToken: options?.fcmToken,
+            terms_and_condition: true,
         });
     }
     async loginWithFacebook(accessToken, options) {
@@ -666,6 +697,9 @@ let AuthService = class AuthService {
                 picture: profile.picture,
             }, options?.fcmToken);
         }
+        if (!options?.terms_and_condition) {
+            throw new common_1.BadRequestException('terms_and_condition must be true to register with Facebook');
+        }
         return this.pendingSocialWithEmailHint({
             purpose: 'kyc_pending',
             provider: 'facebook',
@@ -677,6 +711,7 @@ let AuthService = class AuthService {
             country: options?.country,
             language: options?.language,
             fcmToken: options?.fcmToken,
+            terms_and_condition: true,
         });
     }
     async attachFcmToken(userId, fcmToken) {

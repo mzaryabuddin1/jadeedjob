@@ -43,6 +43,10 @@ let FilterService = class FilterService {
     }
     async getFilters(query, options) {
         const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', createdBy, preference = true, } = query;
+        const usePreference = preference === true ||
+            preference === 'true' ||
+            preference === 1 ||
+            preference === '1';
         const where = {};
         if (options?.approvedOnly) {
             where.approvalStatus = 'approved';
@@ -62,23 +66,24 @@ let FilterService = class FilterService {
         });
         let orderedFilters = filters;
         const userId = options?.userId;
-        if (preference === true && userId) {
+        if (usePreference && userId) {
             const user = await this.userRepo.findOne({
                 where: { id: userId },
                 select: ['filter_preferences'],
             });
             const preferences = user?.filter_preferences ?? [];
             if (preferences.length) {
+                const byId = new Map(filters.map((f) => [f.id, f]));
                 const preferred = [];
-                const others = [];
-                for (const filter of filters) {
-                    if (preferences.includes(filter.id)) {
-                        preferred.push(filter);
-                    }
-                    else {
-                        others.push(filter);
+                const preferredIds = new Set();
+                for (const id of preferences) {
+                    const f = byId.get(Number(id));
+                    if (f) {
+                        preferred.push(f);
+                        preferredIds.add(f.id);
                     }
                 }
+                const others = filters.filter((f) => !preferredIds.has(f.id));
                 orderedFilters = [...preferred, ...others];
             }
         }
