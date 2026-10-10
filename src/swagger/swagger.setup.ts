@@ -44,7 +44,10 @@ export function setupSwagger(app: INestApplication) {
     .addTag('Countries', 'Country list')
     .addTag('Languages', 'Language CRUD')
     .addTag('Cities', 'Cities (seeded for Pakistan)')
-    .addTag('Filters', 'Job category filters')
+    .addTag(
+      'Filters',
+      'Job categories. Icons: Tabler (`type:tabler`) or custom SVG. Cache via `last_update_time`.',
+    )
     .addTag('Jobs', 'Job posts')
     .addTag('Job Applications', 'Apply & manage applications')
     .addTag('Organization', 'Organizations & members')

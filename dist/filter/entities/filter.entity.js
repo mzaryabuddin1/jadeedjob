@@ -25,8 +25,8 @@ __decorate([
     __metadata("design:type", String)
 ], Filter.prototype, "name", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: 'fas fa-user-tie' }),
-    __metadata("design:type", String)
+    (0, typeorm_1.Column)({ type: 'json' }),
+    __metadata("design:type", Object)
 ], Filter.prototype, "icon", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: 'active' }),
@@ -41,11 +41,11 @@ __decorate([
     __metadata("design:type", String)
 ], Filter.prototype, "rejectionReason", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", Number)
 ], Filter.prototype, "createdBy", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.createdFilters),
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.createdFilters, { nullable: true }),
     __metadata("design:type", user_entity_1.User)
 ], Filter.prototype, "creator", void 0);
 __decorate([

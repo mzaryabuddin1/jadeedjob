@@ -12,24 +12,31 @@ async function run() {
         ? Number(createdByArg.split('=')[1])
         : undefined;
     const pending = process.argv.includes('--pending');
+    const updateIcons = process.argv.includes('--update-icons');
     const app = await core_1.NestFactory.createApplicationContext(app_module_1.AppModule, {
         logger: ['error', 'warn', 'log'],
     });
     try {
         const filterService = app.get(filter_service_1.FilterService);
-        const { created, skipped } = await filterService.seedFakeFilters({
+        const { created, updated, skipped } = await filterService.seedFakeFilters({
             createdBy,
             approve: !pending,
+            updateIcons,
         });
-        console.log('\n✅ Filter seed finished');
+        console.log('\n✅ Filter seed finished (Tabler icons)');
         console.log(`   Created: ${created.length}`);
+        console.log(`   Updated icons: ${updated.length}`);
         console.log(`   Skipped (already exist): ${skipped.length}`);
         if (created.length) {
             console.log('\n   New filters:');
-            created.forEach((f) => console.log(`   - [${f.id}] ${f.name} (${f.approvalStatus})`));
+            created.forEach((f) => console.log(`   - [${f.id}] ${f.name} → ${JSON.stringify(f.icon)} (${f.approvalStatus})`));
+        }
+        if (updated.length) {
+            console.log('\n   Updated icons:');
+            updated.forEach((f) => console.log(`   - [${f.id}] ${f.name} → ${JSON.stringify(f.icon)}`));
         }
         if (skipped.length) {
-            console.log('\n   Skipped names:', skipped.join(', '));
+            console.log('\n   Skipped names (use --update-icons to refresh):', skipped.join(', '));
         }
         console.log('');
     }

@@ -25,21 +25,47 @@ let FilterService = class FilterService {
         this.filterRepo = filterRepo;
         this.userRepo = userRepo;
     }
-    async createFilter(data) {
-        const exists = await this.filterRepo.findOne({
-            where: { name: data.name },
-        });
-        if (exists) {
-            throw new common_1.BadRequestException('Filter already exists');
+    async getLastUpdateTime(options) {
+        const qb = this.filterRepo
+            .createQueryBuilder('filter')
+            .select('MAX(filter.updatedAt)', 'lastUpdate');
+        if (options?.approvedOnly) {
+            qb.where('filter.approvalStatus = :approval', {
+                approval: 'approved',
+            }).andWhere('filter.status = :status', { status: 'active' });
         }
-        const filter = this.filterRepo.create({
-            name: data.name,
-            icon: data.icon ?? "{icon: 'infinity'}",
-            status: data.status ?? 'active',
-            approvalStatus: 'pending',
-            createdBy: data.createdBy,
-        });
-        return this.filterRepo.save(filter);
+        const raw = await qb.getRawOne();
+        if (!raw?.lastUpdate)
+            return null;
+        return new Date(raw.lastUpdate).toISOString();
+    }
+    toPublicFilter(filter) {
+        return {
+            id: filter.id,
+            name: filter.name,
+            icon: this.normalizeIcon(filter.icon),
+            status: filter.status,
+            approvalStatus: filter.approvalStatus,
+            createdAt: filter.createdAt,
+            updatedAt: filter.updatedAt,
+        };
+    }
+    normalizeIcon(icon) {
+        if (!icon) {
+            return { type: 'tabler', name: 'briefcase' };
+        }
+        if (typeof icon === 'string') {
+            const match = icon.match(/icon:\s*'([^']+)'/);
+            const name = match?.[1] || icon.replace(/^fas\s+fa-/, '').trim() || 'briefcase';
+            return { type: 'tabler', name };
+        }
+        if (icon.type === 'tabler' && icon.name) {
+            return { type: 'tabler', name: String(icon.name).trim() };
+        }
+        if (icon.type === 'custom' && icon.svg) {
+            return { type: 'custom', svg: String(icon.svg) };
+        }
+        return { type: 'tabler', name: 'briefcase' };
     }
     async getFilters(query, options) {
         const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', createdBy, preference = true, } = query;
@@ -89,8 +115,12 @@ let FilterService = class FilterService {
         }
         const total = orderedFilters.length;
         const paginatedData = orderedFilters.slice((page - 1) * limit, page * limit);
+        const last_update_time = await this.getLastUpdateTime({
+            approvedOnly: options?.approvedOnly,
+        });
         return {
-            data: paginatedData,
+            last_update_time,
+            data: paginatedData.map((f) => this.toPublicFilter(f)),
             total,
             totalPages: Math.ceil(total / limit),
             currentPage: Number(page),
@@ -106,7 +136,13 @@ let FilterService = class FilterService {
         if (!filter) {
             throw new common_1.NotFoundException('Filter not found');
         }
-        return filter;
+        const last_update_time = await this.getLastUpdateTime({
+            approvedOnly: options?.approvedOnly,
+        });
+        return {
+            last_update_time,
+            filter: this.toPublicFilter(filter),
+        };
     }
     async getTopFiltersByJobs(limit = 9) {
         const result = await this.filterRepo
@@ -119,30 +155,38 @@ let FilterService = class FilterService {
             .orderBy('jobCount', 'DESC')
             .limit(limit)
             .getRawMany();
-        return result.map(r => Number(r.filterId));
+        return result.map((r) => Number(r.filterId));
     }
     async seedFakeFilters(options) {
         const approve = options?.approve !== false;
-        let createdBy = options?.createdBy;
-        if (!createdBy) {
+        const updateIcons = options?.updateIcons === true;
+        let createdBy = options?.createdBy ?? null;
+        if (createdBy == null) {
             const firstUser = await this.userRepo.findOne({
                 where: {},
                 order: { id: 'ASC' },
                 select: ['id'],
             });
-            if (!firstUser) {
-                throw new common_1.BadRequestException('No users in database. Register a user first, or pass createdBy.');
-            }
-            createdBy = firstUser.id;
+            createdBy = firstUser?.id ?? null;
         }
         const created = [];
+        const updated = [];
         const skipped = [];
         for (const item of seed_filters_data_1.SEED_FILTERS) {
             const name = (0, utils_util_1.toSentenceCase)(item.name);
-            const icon = `{icon: '${item.icon}'}`;
+            const icon = item.icon;
             const existing = await this.filterRepo.findOne({ where: { name } });
             if (existing) {
-                skipped.push(name);
+                if (updateIcons) {
+                    existing.icon = icon;
+                    existing.status = 'active';
+                    if (approve)
+                        existing.approvalStatus = 'approved';
+                    updated.push(await this.filterRepo.save(existing));
+                }
+                else {
+                    skipped.push(name);
+                }
                 continue;
             }
             const filter = await this.filterRepo.save(this.filterRepo.create({
@@ -154,7 +198,7 @@ let FilterService = class FilterService {
             }));
             created.push(filter);
         }
-        return { created, skipped };
+        return { created, updated, skipped };
     }
 };
 exports.FilterService = FilterService;

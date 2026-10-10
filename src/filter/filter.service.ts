@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
-import { Filter } from './entities/filter.entity';
+import { Filter, FilterIcon } from './entities/filter.entity';
 import { User } from 'src/users/entities/user.entity';
 import { toSentenceCase } from 'src/common/utils/utils.util';
 import { SEED_FILTERS } from './seed-filters.data';
@@ -16,24 +20,55 @@ export class FilterService {
     private userRepo: Repository<User>,
   ) {}
 
-  async createFilter(data: any) {
-    const exists = await this.filterRepo.findOne({
-      where: { name: data.name },
-    });
+  /** Max updatedAt across filters — use for client cache invalidation */
+  async getLastUpdateTime(
+    options?: { approvedOnly?: boolean },
+  ): Promise<string | null> {
+    const qb = this.filterRepo
+      .createQueryBuilder('filter')
+      .select('MAX(filter.updatedAt)', 'lastUpdate');
 
-    if (exists) {
-      throw new BadRequestException('Filter already exists');
+    if (options?.approvedOnly) {
+      qb.where('filter.approvalStatus = :approval', {
+        approval: 'approved',
+      }).andWhere('filter.status = :status', { status: 'active' });
     }
 
-    const filter = this.filterRepo.create({
-      name: data.name,
-      icon: data.icon ?? "{icon: 'infinity'}",
-      status: data.status ?? 'active',
-      approvalStatus: 'pending',
-      createdBy: data.createdBy,
-    });
+    const raw = await qb.getRawOne<{ lastUpdate: Date | string | null }>();
+    if (!raw?.lastUpdate) return null;
+    return new Date(raw.lastUpdate).toISOString();
+  }
 
-    return this.filterRepo.save(filter);
+  toPublicFilter(filter: Filter) {
+    return {
+      id: filter.id,
+      name: filter.name,
+      icon: this.normalizeIcon(filter.icon),
+      status: filter.status,
+      approvalStatus: filter.approvalStatus,
+      createdAt: filter.createdAt,
+      updatedAt: filter.updatedAt,
+    };
+  }
+
+  /** Normalize legacy string icons → tabler object */
+  normalizeIcon(icon: FilterIcon | string | null | undefined): FilterIcon {
+    if (!icon) {
+      return { type: 'tabler', name: 'briefcase' };
+    }
+    if (typeof icon === 'string') {
+      // Legacy: "{ icon: 'hammer' }" or "hammer" or "fas fa-..."
+      const match = icon.match(/icon:\s*'([^']+)'/);
+      const name = match?.[1] || icon.replace(/^fas\s+fa-/, '').trim() || 'briefcase';
+      return { type: 'tabler', name };
+    }
+    if (icon.type === 'tabler' && icon.name) {
+      return { type: 'tabler', name: String(icon.name).trim() };
+    }
+    if (icon.type === 'custom' && icon.svg) {
+      return { type: 'custom', svg: String(icon.svg) };
+    }
+    return { type: 'tabler', name: 'briefcase' };
   }
 
   async getFilters(
@@ -50,7 +85,6 @@ export class FilterService {
       preference = true,
     } = query;
 
-    // Query strings arrive as "true"/"false" — normalize
     const usePreference =
       preference === true ||
       preference === 'true' ||
@@ -72,7 +106,6 @@ export class FilterService {
       where.createdBy = createdBy;
     }
 
-    // 1️⃣ Get all filters (no pagination yet)
     const filters = await this.filterRepo.find({
       where,
       order: {
@@ -82,7 +115,6 @@ export class FilterService {
 
     let orderedFilters = filters;
 
-    // 2️⃣ Preferred filters first (order of user's filter_preferences), then others
     const userId = options?.userId;
     if (usePreference && userId) {
       const user = await this.userRepo.findOne({
@@ -110,21 +142,24 @@ export class FilterService {
       }
     }
 
-    // 3️⃣ Apply pagination AFTER reordering
     const total = orderedFilters.length;
     const paginatedData = orderedFilters.slice(
       (page - 1) * limit,
       page * limit,
     );
 
+    const last_update_time = await this.getLastUpdateTime({
+      approvedOnly: options?.approvedOnly,
+    });
+
     return {
-      data: paginatedData,
+      last_update_time,
+      data: paginatedData.map((f) => this.toPublicFilter(f)),
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
     };
   }
-
 
   async filterById(id: number, options?: { approvedOnly?: boolean }) {
     const where: Record<string, unknown> = { id };
@@ -140,7 +175,14 @@ export class FilterService {
       throw new NotFoundException('Filter not found');
     }
 
-    return filter;
+    const last_update_time = await this.getLastUpdateTime({
+      approvedOnly: options?.approvedOnly,
+    });
+
+    return {
+      last_update_time,
+      filter: this.toPublicFilter(filter),
+    };
   }
 
   async getTopFiltersByJobs(limit = 9): Promise<number[]> {
@@ -155,43 +197,49 @@ export class FilterService {
       .limit(limit)
       .getRawMany();
 
-    return result.map(r => Number(r.filterId));
+    return result.map((r) => Number(r.filterId));
   }
 
   /**
-   * Populate fake filters for testing (CLI: npm run seed:filters).
+   * Seed / refresh filters with Tabler icons (CLI: npm run seed:filters).
+   * Creates missing names; updates icon JSON on existing rows when --update-icons.
    */
   async seedFakeFilters(options?: {
     createdBy?: number;
     approve?: boolean;
-  }): Promise<{ created: Filter[]; skipped: string[] }> {
+    updateIcons?: boolean;
+  }): Promise<{ created: Filter[]; updated: Filter[]; skipped: string[] }> {
     const approve = options?.approve !== false;
+    const updateIcons = options?.updateIcons === true;
 
-    let createdBy = options?.createdBy;
-    if (!createdBy) {
+    let createdBy: number | null = options?.createdBy ?? null;
+    if (createdBy == null) {
       const firstUser = await this.userRepo.findOne({
         where: {},
         order: { id: 'ASC' },
         select: ['id'],
       });
-      if (!firstUser) {
-        throw new BadRequestException(
-          'No users in database. Register a user first, or pass createdBy.',
-        );
-      }
-      createdBy = firstUser.id;
+      createdBy = firstUser?.id ?? null;
     }
 
     const created: Filter[] = [];
+    const updated: Filter[] = [];
     const skipped: string[] = [];
 
     for (const item of SEED_FILTERS) {
       const name = toSentenceCase(item.name);
-      const icon = `{icon: '${item.icon}'}`;
+      const icon = item.icon as FilterIcon;
 
       const existing = await this.filterRepo.findOne({ where: { name } });
       if (existing) {
-        skipped.push(name);
+        if (updateIcons) {
+          existing.icon = icon;
+          existing.status = 'active';
+          if (approve) existing.approvalStatus = 'approved';
+          updated.push(await this.filterRepo.save(existing));
+        } else {
+          skipped.push(name);
+        }
         continue;
       }
 
@@ -208,6 +256,6 @@ export class FilterService {
       created.push(filter);
     }
 
-    return { created, skipped };
+    return { created, updated, skipped };
   }
 }

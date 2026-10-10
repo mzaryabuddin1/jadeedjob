@@ -10,6 +10,20 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+/** Tabler Icons name for RN: `@tabler/icons-react-native` → IconBriefcase from "briefcase" */
+export type TablerFilterIcon = {
+  type: 'tabler';
+  name: string;
+};
+
+/** Inline SVG for custom icons (app renders with SvgXml / similar) */
+export type CustomFilterIcon = {
+  type: 'custom';
+  svg: string;
+};
+
+export type FilterIcon = TablerFilterIcon | CustomFilterIcon;
+
 @Entity('filters')
 export class Filter {
   @PrimaryGeneratedColumn()
@@ -18,8 +32,13 @@ export class Filter {
   @Column()
   name: string;
 
-  @Column({ default: 'fas fa-user-tie' })
-  icon: string;
+  /**
+   * Icon payload for mobile:
+   * - `{ "type": "tabler", "name": "briefcase" }`
+   * - `{ "type": "custom", "svg": "<svg>...</svg>" }`
+   */
+  @Column({ type: 'json' })
+  icon: FilterIcon;
 
   @Column({ default: 'active' })
   status: 'active' | 'inactive';
@@ -30,14 +49,12 @@ export class Filter {
   @Column({ nullable: true })
   rejectionReason: string;
 
-  @Column()
-  createdBy: number;
+  @Column({ nullable: true })
+  createdBy: number | null;
 
-  // A user can create many filters → One-to-Many on user side, Many-to-One here
-  @ManyToOne(() => User, (user) => user.createdFilters)
+  @ManyToOne(() => User, (user) => user.createdFilters, { nullable: true })
   creator: User;
 
-  // FILTER → JOBS (One-to-Many)
   @OneToMany(() => Job, (job) => job.filter)
   jobs: Job[];
 

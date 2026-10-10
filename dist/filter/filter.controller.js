@@ -11,44 +11,16 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FilterController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const filter_service_1 = require("./filter.service");
-const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
-const joi_1 = __importDefault(require("joi"));
-const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
-const utils_util_1 = require("../common/utils/utils.util");
-const typeorm_1 = require("@nestjs/typeorm");
-const typeorm_2 = require("typeorm");
-const filter_entity_1 = require("./entities/filter.entity");
 const auth_service_1 = require("../auth/auth.service");
 let FilterController = class FilterController {
-    constructor(filterService, authService, filterRepo) {
+    constructor(filterService, authService) {
         this.filterService = filterService;
         this.authService = authService;
-        this.filterRepo = filterRepo;
-    }
-    async createFilter(body, req) {
-        body.name = (0, utils_util_1.toSentenceCase)(body.name);
-        const existing = await this.filterRepo.findOne({
-            where: { name: body.name },
-        });
-        if (existing) {
-            throw new common_1.BadRequestException('Filter with this name already exists');
-        }
-        const createdFilter = await this.filterService.createFilter({
-            ...body,
-            createdBy: Number(req.user.id),
-        });
-        return {
-            message: 'Filter submitted for review',
-            filter: createdFilter,
-        };
     }
     async getFilter(req, query) {
         const userId = this.authService.tryGetUserIdFromAuthHeader(req.headers?.authorization) ??
@@ -64,45 +36,16 @@ let FilterController = class FilterController {
 };
 exports.FilterController = FilterController;
 __decorate([
-    (0, common_1.Post)(),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    (0, swagger_1.ApiBearerAuth)('JWT'),
-    (0, swagger_1.ApiOperation)({ summary: 'Create filter (JWT)' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            required: ['name', 'icon'],
-            properties: {
-                name: { type: 'string', example: 'Construction' },
-                icon: { type: 'string', example: "{ icon: 'hammer' }" },
-                status: {
-                    type: 'string',
-                    enum: ['active', 'inactive'],
-                    example: 'active',
-                },
-            },
-        },
-    }),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        name: joi_1.default.string().trim().required(),
-        icon: joi_1.default.string()
-            .trim()
-            .pattern(/^\{\s*icon:\s*'[^']+'\s*\}$/)
-            .required(),
-        status: joi_1.default.string().valid('active', 'inactive').default('active'),
-    }))),
-    __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
-    __metadata("design:returntype", Promise)
-], FilterController.prototype, "createFilter", null);
-__decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, swagger_1.ApiOperation)({
-        summary: 'List approved filters (public)',
-        description: 'Optional Authorization: Bearer <token>. When logged in (and preference≠false), your filter_preferences come first, then the rest.',
+        summary: 'List approved filters',
+        description: [
+            'Returns approved + active filters.',
+            'Each `icon` is either `{ type: "tabler", name }` or `{ type: "custom", svg }`.',
+            'Use `last_update_time` (ISO) for React Native cache invalidation.',
+            'Optional Authorization: Bearer — preferred filters first.',
+        ].join(' '),
     }),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)()),
@@ -112,7 +55,10 @@ __decorate([
 ], FilterController.prototype, "getFilter", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get filter by id (public)' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get filter by id',
+        description: 'Includes `last_update_time` and normalized `icon` (tabler | custom).',
+    }),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -121,9 +67,7 @@ __decorate([
 exports.FilterController = FilterController = __decorate([
     (0, swagger_1.ApiTags)('Filters'),
     (0, common_1.Controller)('filters'),
-    __param(2, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [filter_service_1.FilterService,
-        auth_service_1.AuthService,
-        typeorm_2.Repository])
+        auth_service_1.AuthService])
 ], FilterController);
 //# sourceMappingURL=filter.controller.js.map
