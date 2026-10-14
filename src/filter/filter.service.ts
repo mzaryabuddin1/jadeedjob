@@ -117,28 +117,38 @@ export class FilterService {
 
     const userId = options?.userId;
     if (usePreference && userId) {
-      const user = await this.userRepo.findOne({
-        where: { id: userId },
-        select: ['filter_preferences'],
-      });
+      try {
+        // QueryBuilder avoids TypeORM MySQL bug:
+        // "Unknown column distinctAlias.User_id" with partial findOne select
+        const row = await this.userRepo
+          .createQueryBuilder('u')
+          .select(['u.id', 'u.filter_preferences'])
+          .where('u.id = :userId', { userId })
+          .getOne();
 
-      const preferences = user?.filter_preferences ?? [];
+        const preferences = Array.isArray(row?.filter_preferences)
+          ? row.filter_preferences.map(Number).filter((n) => !Number.isNaN(n))
+          : [];
 
-      if (preferences.length) {
-        const byId = new Map(filters.map((f) => [f.id, f]));
-        const preferred = [];
-        const preferredIds = new Set<number>();
+        if (preferences.length) {
+          const byId = new Map(filters.map((f) => [f.id, f]));
+          const preferred = [];
+          const preferredIds = new Set<number>();
 
-        for (const id of preferences) {
-          const f = byId.get(Number(id));
-          if (f) {
-            preferred.push(f);
-            preferredIds.add(f.id);
+          for (const id of preferences) {
+            const f = byId.get(Number(id));
+            if (f) {
+              preferred.push(f);
+              preferredIds.add(f.id);
+            }
           }
-        }
 
-        const others = filters.filter((f) => !preferredIds.has(f.id));
-        orderedFilters = [...preferred, ...others];
+          const others = filters.filter((f) => !preferredIds.has(f.id));
+          orderedFilters = [...preferred, ...others];
+        }
+      } catch {
+        // Preference reorder is best-effort — never fail the whole filters list
+        orderedFilters = filters;
       }
     }
 
