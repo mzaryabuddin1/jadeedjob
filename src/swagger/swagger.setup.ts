@@ -26,6 +26,15 @@ export function setupSwagger(app: INestApplication) {
         '',
         '### Email update',
         'Use `/auth/update-email/*` (JWT required). Email must be unique.',
+        '',
+        '### Filters',
+        '`GET /filters` — approved categories. Icons: `{ type: "tabler", name }` or `{ type: "custom", svg }`.',
+        '`last_update_time` for RN cache. Optional Bearer → preferred filters first.',
+        'Update prefs: `PATCH /users/me` with `filter_preferences` (min **4**, max **30**).',
+        'Seed: `npm run seed:filters`',
+        '',
+        '### Jobs',
+        'Create/update with `filterIds: number[]` (1–10 categories). Legacy `filterId` still works.',
       ].join('\n'),
     )
     .setVersion('1.0')
@@ -40,15 +49,15 @@ export function setupSwagger(app: INestApplication) {
     )
     .addTag('Health', 'App health check')
     .addTag('Auth', 'Register, login, social (kyc_token until phone OTP), KYC, email update')
-    .addTag('Users', 'Profile & preferences')
+    .addTag('Users', 'Profile & filter_preferences (min 4, max 30)')
     .addTag('Countries', 'Country list')
     .addTag('Languages', 'Language CRUD')
     .addTag('Cities', 'Cities (seeded for Pakistan)')
     .addTag(
       'Filters',
-      'Job categories. Icons: Tabler (`type:tabler`) or custom SVG. Cache via `last_update_time`.',
+      'Job categories. Tabler/custom icons. Cache via last_update_time. Optional JWT for preferred-first.',
     )
-    .addTag('Jobs', 'Job posts')
+    .addTag('Jobs', 'Job posts — multi filterIds (1–10)')
     .addTag('Job Applications', 'Apply & manage applications')
     .addTag('Organization', 'Organizations & members')
     .addTag('Pages', 'Company pages')

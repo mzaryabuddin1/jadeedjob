@@ -30,13 +30,16 @@ export class JobController {
   constructor(private readonly jobService: JobService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create job' })
+  @ApiOperation({
+    summary: 'Create job',
+    description:
+      'Tag one or more categories via `filterIds` (preferred) or single `filterId`. Max 10.',
+  })
   @ApiBody({
     schema: {
       type: 'object',
       required: [
         'title',
-        'filterId',
         'description',
         'salaryType',
         'salaryAmount',
@@ -44,7 +47,17 @@ export class JobController {
       ],
       properties: {
         title: { type: 'string', example: 'Warehouse Helper' },
-        filterId: { type: 'number', example: 1 },
+        filterIds: {
+          type: 'array',
+          items: { type: 'number' },
+          example: [1, 11, 17],
+          description: 'One or more filter category ids (preferred)',
+        },
+        filterId: {
+          type: 'number',
+          example: 1,
+          description: 'Legacy single category — use filterIds instead',
+        },
         description: { type: 'string', example: 'Need helpers for loading' },
         pageId: { type: 'number', nullable: true },
         requirements: { type: 'string' },
@@ -108,7 +121,13 @@ export class JobController {
     new JoiValidationPipe(
       Joi.object({
         title: Joi.string().required(),
-        filterId: Joi.number().required(),
+        filterIds: Joi.array()
+          .items(Joi.number().integer().positive())
+          .min(1)
+          .max(10)
+          .unique()
+          .optional(),
+        filterId: Joi.number().integer().positive().optional(),
         description: Joi.string().required(),
         pageId: Joi.number().optional(),
         requirements: Joi.string().optional(),
@@ -151,7 +170,11 @@ export class JobController {
         educationLevel: Joi.string().optional(),
         experienceRequired: Joi.string().optional(),
         languageRequirements: Joi.array().items(Joi.string()).optional(),
-      }),
+      })
+        .or('filterIds', 'filterId')
+        .messages({
+          'object.missing': 'Provide filterIds or filterId',
+        }),
     ),
   )
   async createJob(@Body() body: any, @Req() req: any) {
@@ -172,7 +195,84 @@ export class JobController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update job' })
+  @ApiOperation({
+    summary: 'Update job',
+    description:
+      'Optionally replace categories with `filterIds` (1–10) or legacy `filterId`.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        filterIds: {
+          type: 'array',
+          items: { type: 'number' },
+          example: [1, 11, 17],
+          description: 'Replace all job categories (1–10 ids)',
+        },
+        filterId: {
+          type: 'number',
+          description: 'Legacy single category — use filterIds instead',
+        },
+        pageId: { type: 'number' },
+        requirements: { type: 'string' },
+        benefits: { type: 'array', items: { type: 'string' } },
+        shifts: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['morning', 'evening', 'night', 'rotational'],
+          },
+        },
+        jobTypes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: [
+              'full-time',
+              'part-time',
+              'contract',
+              'temporary',
+              'freelance',
+              'internship',
+            ],
+          },
+        },
+        salaryType: {
+          type: 'string',
+          enum: [
+            'piece-rate',
+            'daily-wage',
+            'hourly',
+            'monthly',
+            'fixed',
+            'commission',
+            'negotiable',
+          ],
+        },
+        salaryAmount: { type: 'number' },
+        currency: { type: 'string' },
+        location: {
+          type: 'object',
+          properties: {
+            lat: { type: 'number' },
+            lng: { type: 'number' },
+          },
+        },
+        startDate: { type: 'string', format: 'date' },
+        endDate: { type: 'string', format: 'date' },
+        industry: { type: 'string' },
+        educationLevel: { type: 'string' },
+        experienceRequired: { type: 'string' },
+        languageRequirements: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
+  })
   async patchJob(
     @Param('id', ParseIntPipe) id: number,
     @Body(new JoiValidationPipe(
@@ -180,7 +280,13 @@ export class JobController {
         title: Joi.string().optional(),
         description: Joi.string().optional(),
         pageId: Joi.number().optional(),
-        filterId: Joi.number().optional(),
+        filterIds: Joi.array()
+          .items(Joi.number().integer().positive())
+          .min(1)
+          .max(10)
+          .unique()
+          .optional(),
+        filterId: Joi.number().integer().positive().optional(),
         requirements: Joi.string().optional(),
         benefits: Joi.array().items(Joi.string()).optional(),
         shifts: Joi.array().items(

@@ -3,6 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  ManyToMany,
+  JoinTable,
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
@@ -18,12 +20,22 @@ export class Job {
   @PrimaryGeneratedColumn()
   id: number;
 
+  /** Primary / first category — kept for backward compatibility */
   @ManyToOne(() => Filter, (filter) => filter.jobs, { eager: true })
   @JoinColumn({ name: 'filterId' })
   filter: Filter;
 
   @Column()
   filterId: number;
+
+  /** All categories tagged on this job (1 or more) */
+  @ManyToMany(() => Filter, (filter) => filter.taggedJobs, { eager: true })
+  @JoinTable({
+    name: 'job_filters',
+    joinColumn: { name: 'jobId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'filterId', referencedColumnName: 'id' },
+  })
+  filters: Filter[];
 
   @Column()
   title: string;

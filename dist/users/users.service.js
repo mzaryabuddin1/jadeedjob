@@ -54,18 +54,27 @@ let UsersService = class UsersService {
         return { data: user.filter_preferences ?? [] };
     }
     async updateUserFilterPreferences(userId, newFilters) {
-        const user = await this.userRepo.findOne({
-            where: { id: userId },
-            select: ['id', 'filter_preferences', 'fcmTokens'],
-        });
+        const unique = [...new Set(newFilters.map(Number))].filter((n) => !Number.isNaN(n) && n > 0);
+        if (unique.length < 4) {
+            throw new common_1.BadRequestException('Select at least 4 filter preferences');
+        }
+        if (unique.length > 30) {
+            throw new common_1.BadRequestException('You can select at most 30 filter preferences');
+        }
+        const user = await this.userRepo
+            .createQueryBuilder('u')
+            .select(['u.id', 'u.filter_preferences', 'u.fcmTokens'])
+            .where('u.id = :userId', { userId })
+            .getOne();
         if (!user)
             return;
         const oldFilters = user.filter_preferences || [];
-        user.filter_preferences = newFilters;
+        user.filter_preferences = unique;
         await this.userRepo.save(user);
         for (const token of user.fcmTokens || []) {
-            await this.firebaseService.updateFilterSubscriptions(token, oldFilters, newFilters);
+            await this.firebaseService.updateFilterSubscriptions(token, oldFilters, unique);
         }
+        return user;
     }
 };
 exports.UsersService = UsersService;

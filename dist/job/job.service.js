@@ -20,12 +20,41 @@ const job_entity_1 = require("./entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
 const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const filter_entity_1 = require("../filter/entities/filter.entity");
 let JobService = class JobService {
-    constructor(jobRepo, userRepo, pageRepo, firebaseService) {
+    constructor(jobRepo, userRepo, pageRepo, filterRepo, firebaseService) {
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
         this.pageRepo = pageRepo;
+        this.filterRepo = filterRepo;
         this.firebaseService = firebaseService;
+    }
+    async resolveJobFilters(data) {
+        let ids = [];
+        if (Array.isArray(data.filterIds) && data.filterIds.length) {
+            ids = [...new Set(data.filterIds.map(Number))].filter((n) => !Number.isNaN(n) && n > 0);
+        }
+        else if (data.filterId != null) {
+            ids = [Number(data.filterId)];
+        }
+        if (!ids.length) {
+            throw new common_1.BadRequestException('Provide filterIds (array) or filterId — at least 1 category required');
+        }
+        if (ids.length > 10) {
+            throw new common_1.BadRequestException('A job can have at most 10 filter categories');
+        }
+        const filters = await this.filterRepo.find({
+            where: {
+                id: (0, typeorm_2.In)(ids),
+                status: 'active',
+                approvalStatus: 'approved',
+            },
+        });
+        if (filters.length !== ids.length) {
+            throw new common_1.BadRequestException('One or more filterIds are invalid or not approved');
+        }
+        const byId = new Map(filters.map((f) => [f.id, f]));
+        return ids.map((id) => byId.get(id));
     }
     async createJob(data, userId) {
         let pageId = null;
@@ -54,9 +83,12 @@ let JobService = class JobService {
         const location = data.isRemote === true
             ? null
             : () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
-        const { location: _location, pageId: _pageId, ...jobData } = data;
+        const filters = await this.resolveJobFilters(data);
+        const primaryFilterId = filters[0].id;
+        const { location: _location, pageId: _pageId, filterIds: _filterIds, filterId: _filterId, filters: _filters, ...jobData } = data;
         const insertResult = await this.jobRepo.insert({
             ...jobData,
+            filterId: primaryFilterId,
             createdBy: userId,
             pageId: pageId ?? null,
             location,
@@ -66,17 +98,31 @@ let JobService = class JobService {
         if (!insertedId) {
             throw new common_1.BadRequestException('Failed to create job');
         }
-        const savedJob = await this.jobRepo.findOne({ where: { id: insertedId } });
+        const savedJob = await this.jobRepo.findOne({
+            where: { id: insertedId },
+            relations: ['filters', 'filter'],
+        });
         if (!savedJob) {
             throw new common_1.BadRequestException('Failed to load created job');
         }
-        if (savedJob.filterId) {
-            await this.firebaseService.sendToFilterTopic(savedJob.filterId, 'New Job Posted', savedJob.title ?? 'A new job matches your preferences!', {
-                jobId: savedJob.id.toString(),
-                filterId: savedJob.filterId.toString(),
-            });
+        savedJob.filters = filters;
+        await this.jobRepo.save(savedJob);
+        const withFilters = await this.jobRepo.findOne({
+            where: { id: insertedId },
+            relations: ['filters', 'filter', 'page'],
+        });
+        for (const f of filters) {
+            try {
+                await this.firebaseService.sendToFilterTopic(f.id, 'New Job Posted', withFilters?.title ?? 'A new job matches your preferences!', {
+                    jobId: String(insertedId),
+                    filterId: String(f.id),
+                    filterIds: filters.map((x) => x.id).join(','),
+                });
+            }
+            catch {
+            }
         }
-        return savedJob;
+        return withFilters;
     }
     async findNearbyJobs(query) {
         const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', sortBy = 'createdAt', sortOrder = 'DESC', } = query;
@@ -148,31 +194,37 @@ let JobService = class JobService {
         if (lat && lng && myjobs !== 'true') {
             return this.findNearbyJobs(query);
         }
-        const where = {};
+        const qb = this.jobRepo
+            .createQueryBuilder('job')
+            .leftJoinAndSelect('job.page', 'page')
+            .leftJoinAndSelect('job.filter', 'filter')
+            .leftJoinAndSelect('job.filters', 'filters');
         if (myjobs === 'true') {
             if (!userId) {
                 throw new common_1.BadRequestException('User not authenticated');
             }
-            where.createdBy = userId;
+            qb.andWhere('job.createdBy = :userId', { userId });
         }
         else {
-            where.isActive = true;
+            qb.andWhere('job.isActive = true');
         }
-        if (filter)
-            where.filterId = Number(filter);
+        if (filter) {
+            const filterId = Number(filter);
+            qb.andWhere('(job.filterId = :filterId OR filters.id = :filterId)', { filterId });
+        }
         if (search) {
-            where.description = (0, typeorm_2.Raw)((alias) => `${alias} LIKE '%${search}%'`);
+            qb.andWhere('job.description LIKE :search', {
+                search: `%${search}%`,
+            });
         }
-        const [jobs, total] = await this.jobRepo.findAndCount({
-            where,
-            relations: ['page'],
-            order: { [sortBy]: sortOrder.toUpperCase() },
-            take: limit,
-            skip: (page - 1) * limit,
-        });
+        qb.orderBy(`job.${sortBy}`, String(sortOrder).toUpperCase())
+            .take(Number(limit))
+            .skip((Number(page) - 1) * Number(limit));
+        const [jobs, total] = await qb.getManyAndCount();
         return {
             data: jobs.map((job) => ({
                 ...job,
+                filterIds: (job.filters || []).map((f) => f.id),
                 pageTaggedJob: job.pageId ? true : false,
                 page: job.pageId
                     ? {
@@ -184,7 +236,7 @@ let JobService = class JobService {
                     : null,
             })),
             total,
-            totalPages: Math.ceil(total / limit),
+            totalPages: Math.ceil(total / Number(limit)),
             currentPage: Number(page),
         };
     }
@@ -194,11 +246,15 @@ let JobService = class JobService {
                 id,
                 isActive: true,
             },
+            relations: ['filters', 'filter', 'page'],
         });
         if (!job) {
             throw new common_1.NotFoundException(`Job with ID ${id} not found`);
         }
-        return job;
+        return {
+            ...job,
+            filterIds: (job.filters || []).map((f) => f.id),
+        };
     }
     async updateJob(id, data, userId) {
         const job = await this.jobRepo.findOne({ where: { id } });
@@ -235,7 +291,7 @@ let JobService = class JobService {
             }
             locationUpdate = () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
         }
-        const { createdBy, location, ...patch } = data;
+        const { createdBy, location, filterIds, filterId, filters: _filters, ...patch } = data;
         const updatePayload = {
             ...patch,
         };
@@ -245,11 +301,32 @@ let JobService = class JobService {
         if (locationUpdate !== undefined) {
             updatePayload.location = locationUpdate;
         }
+        let nextFilters;
+        if (filterIds !== undefined || filterId !== undefined) {
+            nextFilters = await this.resolveJobFilters({ filterIds, filterId });
+            updatePayload.filterId = nextFilters[0].id;
+        }
         await this.jobRepo.update({ id }, updatePayload);
-        const updated = await this.jobRepo.findOne({ where: { id } });
+        if (nextFilters) {
+            const jobWithRelations = await this.jobRepo.findOne({
+                where: { id },
+                relations: ['filters'],
+            });
+            if (jobWithRelations) {
+                jobWithRelations.filters = nextFilters;
+                await this.jobRepo.save(jobWithRelations);
+            }
+        }
+        const updated = await this.jobRepo.findOne({
+            where: { id },
+            relations: ['filters', 'filter', 'page'],
+        });
         if (!updated)
             throw new common_1.BadRequestException('Failed to load updated job');
-        return updated;
+        return {
+            ...updated,
+            filterIds: (updated.filters || []).map((f) => f.id),
+        };
     }
 };
 exports.JobService = JobService;
@@ -258,7 +335,9 @@ exports.JobService = JobService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(2, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
+    __param(3, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         firebase_service_1.FirebaseService])

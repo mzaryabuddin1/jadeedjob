@@ -9,7 +9,12 @@ import {
   Get,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Request } from 'express';
@@ -33,7 +38,61 @@ export class UsersController {
   @ApiOperation({
     summary: 'Update my profile',
     description:
-      'Email/phone cannot be changed here — use /auth/update-email/* and /auth/kyc/*',
+      'Email/phone cannot be changed here — use `/auth/update-email/*` and `/auth/kyc/*`. `filter_preferences`: min **4**, max **30** unique filter ids (drives preferred-first order on `GET /filters`).',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        firstName: { type: 'string' },
+        lastName: { type: 'string' },
+        password: {
+          type: 'string',
+          description:
+            'Min 6; must include uppercase, lowercase, number, special char',
+        },
+        filter_preferences: {
+          type: 'array',
+          items: { type: 'number' },
+          minItems: 4,
+          maxItems: 30,
+          uniqueItems: true,
+          example: [1, 11, 15, 17],
+          description: 'Preferred filter category ids (min 4, max 30)',
+        },
+        full_name: { type: 'string' },
+        father_name: { type: 'string' },
+        gender: { type: 'string', enum: ['Male', 'Female', 'Other'] },
+        date_of_birth: { type: 'string', format: 'date' },
+        nationality: { type: 'string' },
+        marital_status: {
+          type: 'string',
+          enum: ['Single', 'Married', 'Other'],
+        },
+        profile_photo: { type: 'string', format: 'uri' },
+        alternate_phone: { type: 'string' },
+        address_line1: { type: 'string' },
+        address_line2: { type: 'string' },
+        city: { type: 'string' },
+        state: { type: 'string' },
+        postal_code: { type: 'string' },
+        contact_country: { type: 'string' },
+        professional_summary: { type: 'string' },
+        skills: { type: 'array', items: { type: 'string' } },
+        technical_skills: { type: 'array', items: { type: 'string' } },
+        soft_skills: { type: 'array', items: { type: 'string' } },
+        linkedin_url: { type: 'string', format: 'uri' },
+        github_url: { type: 'string', format: 'uri' },
+        portfolio_url: { type: 'string', format: 'uri' },
+        behance_url: { type: 'string', format: 'uri' },
+        bank_name: { type: 'string' },
+        account_number: { type: 'string' },
+        iban: { type: 'string' },
+        branch_name: { type: 'string' },
+        swift_code: { type: 'string' },
+        notes: { type: 'string' },
+      },
+    },
   })
   @UsePipes(
     new JoiValidationPipe(
@@ -48,8 +107,17 @@ export class UsersController {
           )
           .optional(),
 
-        // 🔥 filter_preferences allowed here
-        filter_preferences: Joi.array().items(Joi.number()).optional(),
+        filter_preferences: Joi.array()
+          .items(Joi.number().integer().positive())
+          .min(4)
+          .max(30)
+          .unique()
+          .optional()
+          .messages({
+            'array.min': 'Select at least 4 filter preferences',
+            'array.max': 'You can select at most 30 filter preferences',
+            'array.unique': 'filter_preferences must not contain duplicates',
+          }),
 
         full_name: Joi.string().optional(),
         father_name: Joi.string().optional(),
@@ -131,14 +199,14 @@ export class UsersController {
     // Update normal profile fields
     const updatedUser = await this.usersService.updateUser(userId, body);
 
-    // 🔥 If filter_preferences changed, update DB + Firebase topics
+    // If filter_preferences changed, update DB + Firebase topics (min 4, max 30)
     if (newFilterPreferences) {
-      await this.usersService.updateUserFilterPreferences(
+      const saved = await this.usersService.updateUserFilterPreferences(
         userId,
         newFilterPreferences,
       );
-      // reflect in response
-      (updatedUser as any).filter_preferences = newFilterPreferences;
+      (updatedUser as any).filter_preferences =
+        saved?.filter_preferences ?? newFilterPreferences;
     }
 
     return {

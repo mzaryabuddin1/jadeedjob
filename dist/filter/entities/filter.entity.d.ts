@@ -19,6 +19,7 @@ export declare class Filter {
     createdBy: number | null;
     creator: User;
     jobs: Job[];
+    taggedJobs: Job[];
     createdAt: Date;
     updatedAt: Date;
 }

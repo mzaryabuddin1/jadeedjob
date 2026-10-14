@@ -32,6 +32,15 @@ __decorate([
     __metadata("design:type", Number)
 ], Job.prototype, "filterId", void 0);
 __decorate([
+    (0, typeorm_1.ManyToMany)(() => filter_entity_1.Filter, (filter) => filter.taggedJobs, { eager: true }),
+    (0, typeorm_1.JoinTable)({
+        name: 'job_filters',
+        joinColumn: { name: 'jobId', referencedColumnName: 'id' },
+        inverseJoinColumn: { name: 'filterId', referencedColumnName: 'id' },
+    }),
+    __metadata("design:type", Array)
+], Job.prototype, "filters", void 0);
+__decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
 ], Job.prototype, "title", void 0);

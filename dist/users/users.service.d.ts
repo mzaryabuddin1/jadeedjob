@@ -11,5 +11,5 @@ export declare class UsersService {
     getUserPreference(userId: number): Promise<{
         data: number[];
     }>;
-    updateUserFilterPreferences(userId: number, newFilters: number[]): Promise<void>;
+    updateUserFilterPreferences(userId: number, newFilters: number[]): Promise<User>;
 }

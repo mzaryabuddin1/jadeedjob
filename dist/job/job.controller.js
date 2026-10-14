@@ -43,13 +43,15 @@ let JobController = class JobController {
 exports.JobController = JobController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create job' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Create job',
+        description: 'Tag one or more categories via `filterIds` (preferred) or single `filterId`. Max 10.',
+    }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
             required: [
                 'title',
-                'filterId',
                 'description',
                 'salaryType',
                 'salaryAmount',
@@ -57,7 +59,17 @@ __decorate([
             ],
             properties: {
                 title: { type: 'string', example: 'Warehouse Helper' },
-                filterId: { type: 'number', example: 1 },
+                filterIds: {
+                    type: 'array',
+                    items: { type: 'number' },
+                    example: [1, 11, 17],
+                    description: 'One or more filter category ids (preferred)',
+                },
+                filterId: {
+                    type: 'number',
+                    example: 1,
+                    description: 'Legacy single category — use filterIds instead',
+                },
                 description: { type: 'string', example: 'Need helpers for loading' },
                 pageId: { type: 'number', nullable: true },
                 requirements: { type: 'string' },
@@ -119,7 +131,13 @@ __decorate([
     }),
     (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         title: joi_1.default.string().required(),
-        filterId: joi_1.default.number().required(),
+        filterIds: joi_1.default.array()
+            .items(joi_1.default.number().integer().positive())
+            .min(1)
+            .max(10)
+            .unique()
+            .optional(),
+        filterId: joi_1.default.number().integer().positive().optional(),
         description: joi_1.default.string().required(),
         pageId: joi_1.default.number().optional(),
         requirements: joi_1.default.string().optional(),
@@ -141,6 +159,10 @@ __decorate([
         educationLevel: joi_1.default.string().optional(),
         experienceRequired: joi_1.default.string().optional(),
         languageRequirements: joi_1.default.array().items(joi_1.default.string()).optional(),
+    })
+        .or('filterIds', 'filterId')
+        .messages({
+        'object.missing': 'Provide filterIds or filterId',
     }))),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -167,13 +189,95 @@ __decorate([
 ], JobController.prototype, "findJob", null);
 __decorate([
     (0, common_1.Patch)(':id'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update job' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update job',
+        description: 'Optionally replace categories with `filterIds` (1–10) or legacy `filterId`.',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                filterIds: {
+                    type: 'array',
+                    items: { type: 'number' },
+                    example: [1, 11, 17],
+                    description: 'Replace all job categories (1–10 ids)',
+                },
+                filterId: {
+                    type: 'number',
+                    description: 'Legacy single category — use filterIds instead',
+                },
+                pageId: { type: 'number' },
+                requirements: { type: 'string' },
+                benefits: { type: 'array', items: { type: 'string' } },
+                shifts: {
+                    type: 'array',
+                    items: {
+                        type: 'string',
+                        enum: ['morning', 'evening', 'night', 'rotational'],
+                    },
+                },
+                jobTypes: {
+                    type: 'array',
+                    items: {
+                        type: 'string',
+                        enum: [
+                            'full-time',
+                            'part-time',
+                            'contract',
+                            'temporary',
+                            'freelance',
+                            'internship',
+                        ],
+                    },
+                },
+                salaryType: {
+                    type: 'string',
+                    enum: [
+                        'piece-rate',
+                        'daily-wage',
+                        'hourly',
+                        'monthly',
+                        'fixed',
+                        'commission',
+                        'negotiable',
+                    ],
+                },
+                salaryAmount: { type: 'number' },
+                currency: { type: 'string' },
+                location: {
+                    type: 'object',
+                    properties: {
+                        lat: { type: 'number' },
+                        lng: { type: 'number' },
+                    },
+                },
+                startDate: { type: 'string', format: 'date' },
+                endDate: { type: 'string', format: 'date' },
+                industry: { type: 'string' },
+                educationLevel: { type: 'string' },
+                experienceRequired: { type: 'string' },
+                languageRequirements: {
+                    type: 'array',
+                    items: { type: 'string' },
+                },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
         title: joi_1.default.string().optional(),
         description: joi_1.default.string().optional(),
         pageId: joi_1.default.number().optional(),
-        filterId: joi_1.default.number().optional(),
+        filterIds: joi_1.default.array()
+            .items(joi_1.default.number().integer().positive())
+            .min(1)
+            .max(10)
+            .unique()
+            .optional(),
+        filterId: joi_1.default.number().integer().positive().optional(),
         requirements: joi_1.default.string().optional(),
         benefits: joi_1.default.array().items(joi_1.default.string()).optional(),
         shifts: joi_1.default.array().items(joi_1.default.string().valid('morning', 'evening', 'night', 'rotational')),

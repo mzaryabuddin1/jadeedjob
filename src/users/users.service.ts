@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
@@ -51,17 +55,31 @@ export class UsersService {
   }
 
   async updateUserFilterPreferences(userId: number, newFilters: number[]) {
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: ['id', 'filter_preferences', 'fcmTokens'],
-    });
+    const unique = [...new Set(newFilters.map(Number))].filter(
+      (n) => !Number.isNaN(n) && n > 0,
+    );
+
+    if (unique.length < 4) {
+      throw new BadRequestException('Select at least 4 filter preferences');
+    }
+    if (unique.length > 30) {
+      throw new BadRequestException(
+        'You can select at most 30 filter preferences',
+      );
+    }
+
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .select(['u.id', 'u.filter_preferences', 'u.fcmTokens'])
+      .where('u.id = :userId', { userId })
+      .getOne();
 
     if (!user) return;
 
     const oldFilters = user.filter_preferences || [];
 
     // update in DB
-    user.filter_preferences = newFilters;
+    user.filter_preferences = unique;
     await this.userRepo.save(user);
 
     // sync Firebase topics for all user's tokens
@@ -69,8 +87,10 @@ export class UsersService {
       await this.firebaseService.updateFilterSubscriptions(
         token,
         oldFilters,
-        newFilters,
+        unique,
       );
     }
+
+    return user;
   }
 }

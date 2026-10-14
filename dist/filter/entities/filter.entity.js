@@ -53,6 +53,10 @@ __decorate([
     __metadata("design:type", Array)
 ], Filter.prototype, "jobs", void 0);
 __decorate([
+    (0, typeorm_1.ManyToMany)(() => job_entity_1.Job, (job) => job.filters),
+    __metadata("design:type", Array)
+], Filter.prototype, "taggedJobs", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Filter.prototype, "createdAt", void 0);

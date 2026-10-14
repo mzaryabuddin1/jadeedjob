@@ -155,15 +155,30 @@ let FilterService = class FilterService {
     async getTopFiltersByJobs(limit = 9) {
         const result = await this.filterRepo
             .createQueryBuilder('filter')
-            .leftJoin('filter.jobs', 'job')
+            .leftJoin('filter.taggedJobs', 'tagged')
+            .leftJoin('filter.jobs', 'primaryJob')
             .select('filter.id', 'filterId')
-            .addSelect('COUNT(job.id)', 'jobCount')
+            .addSelect('COUNT(DISTINCT COALESCE(tagged.id, primaryJob.id))', 'jobCount')
             .where('filter.status = :status', { status: 'active' })
+            .andWhere('filter.approvalStatus = :approval', {
+            approval: 'approved',
+        })
             .groupBy('filter.id')
             .orderBy('jobCount', 'DESC')
+            .addOrderBy('filter.id', 'ASC')
             .limit(limit)
             .getRawMany();
-        return result.map((r) => Number(r.filterId));
+        const ids = result.map((r) => Number(r.filterId)).filter(Boolean);
+        if (ids.length >= limit)
+            return ids.slice(0, limit);
+        const extras = await this.filterRepo.find({
+            where: { status: 'active', approvalStatus: 'approved' },
+            order: { id: 'ASC' },
+            take: limit,
+            select: ['id'],
+        });
+        const merged = [...new Set([...ids, ...extras.map((f) => f.id)])];
+        return merged.slice(0, limit);
     }
     async seedFakeFilters(options) {
         const approve = options?.approve !== false;
