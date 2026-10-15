@@ -214,15 +214,23 @@ let JobService = JobService_1 = class JobService {
         };
     }
     async findNearbyJobs(query) {
-        const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', filter, sortBy = 'createdAt', sortOrder = 'DESC', } = query;
+        const { lat, lng, page = 1, limit = 10, radiusKm, search = '', filter, sortBy = 'createdAt', sortOrder = 'DESC', } = query;
         const currentPage = Math.max(1, Number(page) || 1);
         const take = Math.min(100, Math.max(1, Number(limit) || 10));
         const offset = (currentPage - 1) * take;
-        const radiusMeters = (Number(radiusKm) || 1) * 1000;
+        const hasRadius = radiusKm !== undefined && radiusKm !== null && radiusKm !== '';
+        const radiusMeters = hasRadius ? Number(radiusKm) * 1000 : null;
+        if (hasRadius && !(radiusMeters > 0)) {
+            throw new common_1.BadRequestException('radiusKm must be a number greater than 0');
+        }
         const point = this.toPointSql(Number(lat), Number(lng));
         const distanceSql = `ST_Distance_Sphere(ST_SRID(j.location, 4326), ${point})`;
-        const where = ['j.isActive = 1', `${distanceSql} <= ?`];
-        const params = [radiusMeters];
+        const where = ['j.isActive = 1'];
+        const params = [];
+        if (hasRadius) {
+            where.push(`${distanceSql} <= ?`);
+            params.push(radiusMeters);
+        }
         if (search) {
             where.push('j.description LIKE ?');
             params.push(`%${search}%`);

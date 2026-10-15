@@ -230,7 +230,7 @@ __decorate([
         description: [
             'Every job includes `filterIds` and `filters` (all categories as `{ id, name, icon }`). `icon` is `{ type: "tabler", name }` or `{ type: "custom", svg }`.',
             '- **My jobs:** `myjobs=true` → only jobs created by the logged-in user (active + inactive)',
-            '- **Nearby:** send `lat` + `lng` (+ `radiusKm`) → geo search, adds `distance` (meters)',
+            '- **Nearby:** send `lat` + `lng` → adds `distance` (meters; null for remote jobs). Add `radiusKm` to limit results to that radius — without it, no radius filter is applied',
             '- **Category:** `filter=11` or `filter=1,11,17` → jobs tagged with any of these',
         ].join('\n'),
     }),
@@ -255,7 +255,7 @@ __decorate([
         required: false,
         type: Number,
         example: 1,
-        description: 'Only with lat/lng (default 1)',
+        description: 'Optional, only with lat/lng. If sent, only jobs within this radius are returned. If omitted, no radius filter is applied.',
     }),
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number, example: 1 }),
     (0, swagger_1.ApiQuery)({

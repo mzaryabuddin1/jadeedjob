@@ -315,7 +315,7 @@ export class JobService {
       lng,
       page = 1,
       limit = 10,
-      radiusKm = 1,
+      radiusKm,
       search = '',
       filter,
       sortBy = 'createdAt',
@@ -325,14 +325,26 @@ export class JobService {
     const currentPage = Math.max(1, Number(page) || 1);
     const take = Math.min(100, Math.max(1, Number(limit) || 10));
     const offset = (currentPage - 1) * take;
-    const radiusMeters = (Number(radiusKm) || 1) * 1000;
+
+    // Radius is opt-in: only filter by distance when radiusKm is passed
+    const hasRadius =
+      radiusKm !== undefined && radiusKm !== null && radiusKm !== '';
+    const radiusMeters = hasRadius ? Number(radiusKm) * 1000 : null;
+    if (hasRadius && !(radiusMeters > 0)) {
+      throw new BadRequestException('radiusKm must be a number greater than 0');
+    }
 
     // Google Maps order + MySQL long-lat axis (validated numbers only)
     const point = this.toPointSql(Number(lat), Number(lng));
     const distanceSql = `ST_Distance_Sphere(ST_SRID(j.location, 4326), ${point})`;
 
-    const where = ['j.isActive = 1', `${distanceSql} <= ?`];
-    const params: any[] = [radiusMeters];
+    const where = ['j.isActive = 1'];
+    const params: any[] = [];
+
+    if (hasRadius) {
+      where.push(`${distanceSql} <= ?`);
+      params.push(radiusMeters);
+    }
 
     if (search) {
       where.push('j.description LIKE ?');
