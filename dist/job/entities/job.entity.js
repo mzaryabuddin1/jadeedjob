@@ -94,8 +94,11 @@ __decorate([
             from: (value) => {
                 if (!value)
                     return null;
-                if (value.x !== undefined) {
-                    return { lng: value.x, lat: value.y };
+                if (value.x !== undefined && value.y !== undefined) {
+                    if (value.lat != null && value.lng != null) {
+                        return { lat: +value.lat, lng: +value.lng };
+                    }
+                    return { lng: +value.x, lat: +value.y };
                 }
                 if (typeof value === 'string') {
                     const m = value.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);

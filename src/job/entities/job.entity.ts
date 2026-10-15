@@ -82,12 +82,16 @@ export class Job {
       from: (value: any) => {
         if (!value) return null;
 
-        // mysql2 object
-        if (value.x !== undefined) {
-          return { lng: value.x, lat: value.y };
+        // mysql2 / geographic SRS: with axis-order=long-lat, x=lng y=lat
+        if (value.x !== undefined && value.y !== undefined) {
+          // Prefer explicit lat/lng if driver already labeled them
+          if (value.lat != null && value.lng != null) {
+            return { lat: +value.lat, lng: +value.lng };
+          }
+          return { lng: +value.x, lat: +value.y };
         }
 
-        // raw SQL WKT
+        // raw SQL WKT POINT(lng lat) when stored with axis-order=long-lat
         if (typeof value === 'string') {
           const m = value.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
           if (m) return { lng: +m[1], lat: +m[2] };

@@ -29,6 +29,24 @@ export class JobService {
     private firebaseService: FirebaseService,
   ) {}
 
+  /**
+   * Google Maps / GeoJSON order: `{ lat, lng }` → WKT `POINT(lng lat)`.
+   * MySQL SRID 4326 defaults to lat-lng axis order, so we force `axis-order=long-lat`.
+   */
+  private toPointSql(lat: number, lng: number): string {
+    if (lat < -90 || lat > 90) {
+      throw new BadRequestException(
+        `Invalid latitude ${lat}. Must be between -90 and 90 (Google Maps lat).`,
+      );
+    }
+    if (lng < -180 || lng > 180) {
+      throw new BadRequestException(
+        `Invalid longitude ${lng}. Must be between -180 and 180 (Google Maps lng).`,
+      );
+    }
+    return `ST_GeomFromText('POINT(${lng} ${lat})', 4326, 'axis-order=long-lat')`;
+  }
+
   /** Resolve filterIds / legacy filterId → approved Filter entities (1–10) */
   private async resolveJobFilters(data: {
     filterIds?: number[];
@@ -157,8 +175,7 @@ export class JobService {
       languageRequirements: data.languageRequirements ?? null,
       isActive: true,
       location: hasLocation
-        ? () =>
-            `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`
+        ? () => this.toPointSql(data.location.lat, data.location.lng)
         : null,
     };
 
@@ -244,8 +261,8 @@ export class JobService {
     const offset = (currentPage - 1) * take;
     const radiusMeters = Number(radiusKm) * 1000;
 
-    // 🔥 SRID-safe point
-    const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
+    // Google Maps order + MySQL long-lat axis
+    const point = this.toPointSql(Number(lat), Number(lng));
 
     // ────────────────────────────────────────────────
     // 1️⃣ DATA QUERY
@@ -253,8 +270,8 @@ export class JobService {
     const jobs = await this.jobRepo.query(`
     SELECT
       j.*,
-      ST_X(j.location) AS lng,
-      ST_Y(j.location) AS lat,
+      ST_Longitude(j.location) AS lng,
+      ST_Latitude(j.location) AS lat,
       p.id AS page_id,
       p.company_name,
       p.username AS page_username,
@@ -462,7 +479,7 @@ export class JobService {
         throw new BadRequestException('Valid location (lat/lng) is required');
       }
       locationUpdate = () =>
-        `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+        this.toPointSql(data.location.lat, data.location.lng);
     } else if (becomingOnSite && !job.location) {
       throw new BadRequestException(
         'Location (lat/lng) is required for on-site jobs',

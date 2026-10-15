@@ -29,6 +29,15 @@ let JobService = class JobService {
         this.filterRepo = filterRepo;
         this.firebaseService = firebaseService;
     }
+    toPointSql(lat, lng) {
+        if (lat < -90 || lat > 90) {
+            throw new common_1.BadRequestException(`Invalid latitude ${lat}. Must be between -90 and 90 (Google Maps lat).`);
+        }
+        if (lng < -180 || lng > 180) {
+            throw new common_1.BadRequestException(`Invalid longitude ${lng}. Must be between -180 and 180 (Google Maps lng).`);
+        }
+        return `ST_GeomFromText('POINT(${lng} ${lat})', 4326, 'axis-order=long-lat')`;
+    }
     async resolveJobFilters(data) {
         let ids = [];
         if (Array.isArray(data.filterIds) && data.filterIds.length) {
@@ -114,7 +123,7 @@ let JobService = class JobService {
             languageRequirements: data.languageRequirements ?? null,
             isActive: true,
             location: hasLocation
-                ? () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`
+                ? () => this.toPointSql(data.location.lat, data.location.lng)
                 : null,
         };
         let insertedId;
@@ -168,12 +177,12 @@ let JobService = class JobService {
         const take = Number(limit);
         const offset = (currentPage - 1) * take;
         const radiusMeters = Number(radiusKm) * 1000;
-        const point = `ST_GeomFromText('POINT(${lng} ${lat})', 4326)`;
+        const point = this.toPointSql(Number(lat), Number(lng));
         const jobs = await this.jobRepo.query(`
     SELECT
       j.*,
-      ST_X(j.location) AS lng,
-      ST_Y(j.location) AS lat,
+      ST_Longitude(j.location) AS lng,
+      ST_Latitude(j.location) AS lat,
       p.id AS page_id,
       p.company_name,
       p.username AS page_username,
@@ -329,7 +338,7 @@ let JobService = class JobService {
                 typeof data.location?.lng !== 'number') {
                 throw new common_1.BadRequestException('Valid location (lat/lng) is required');
             }
-            locationUpdate = () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+            locationUpdate = () => this.toPointSql(data.location.lat, data.location.lng);
         }
         else if (becomingOnSite && !job.location) {
             throw new common_1.BadRequestException('Location (lat/lng) is required for on-site jobs');
