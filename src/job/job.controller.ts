@@ -209,17 +209,26 @@ export class JobController {
   })
   @UseInterceptors(FilesInterceptor('pictures', 4, picturesMulter))
   async createJob(
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Body() body: any,
     @Req() req: any,
   ) {
-    const parsed = parseJobBody(body);
+    // JSON body from app — multer leaves files empty; multipart uploads attach files
+    const raw = body && Object.keys(body).length ? body : {};
+    const parsed = parseJobBody(raw);
     const data = validateBody(createJobSchema, parsed);
-    const pictures = mergePictures(data.pictures, files, this.filesService);
+    const pictures = mergePictures(
+      Array.isArray(data.pictures) && data.pictures.length
+        ? data.pictures
+        : undefined,
+      files,
+      this.filesService,
+    );
 
     return this.jobService.createJob(
       {
         ...data,
+        pageId: data.pageId ?? data.companyId ?? undefined,
         pictures: pictures ?? null,
         description: data.description || null,
         createdBy: req.user.id,

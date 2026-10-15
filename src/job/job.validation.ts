@@ -99,7 +99,12 @@ export const createJobSchema = Joi.object({
   filterId: Joi.number().integer().positive().optional(),
   description: Joi.string().allow('', null).optional(),
   isRemote: Joi.boolean().default(false),
-  pageId: Joi.number().optional(),
+  pageId: Joi.number().optional().allow(null),
+  /** App alias for pageId */
+  companyId: Joi.number().optional().allow(null),
+  postingMode: Joi.string().optional().allow(null),
+  branchId: Joi.number().optional().allow(null),
+  status: Joi.string().optional().allow(null),
   requirements: Joi.string().optional(),
   benefits: Joi.array().items(Joi.string()).optional(),
   shifts: shiftsSchema.optional(),

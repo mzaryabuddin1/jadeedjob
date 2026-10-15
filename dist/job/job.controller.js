@@ -158,11 +158,15 @@ let JobController = class JobController {
         this.filesService = filesService;
     }
     async createJob(files, body, req) {
-        const parsed = (0, job_validation_1.parseJobBody)(body);
+        const raw = body && Object.keys(body).length ? body : {};
+        const parsed = (0, job_validation_1.parseJobBody)(raw);
         const data = validateBody(job_validation_1.createJobSchema, parsed);
-        const pictures = mergePictures(data.pictures, files, this.filesService);
+        const pictures = mergePictures(Array.isArray(data.pictures) && data.pictures.length
+            ? data.pictures
+            : undefined, files, this.filesService);
         return this.jobService.createJob({
             ...data,
+            pageId: data.pageId ?? data.companyId ?? undefined,
             pictures: pictures ?? null,
             description: data.description || null,
             createdBy: req.user.id,

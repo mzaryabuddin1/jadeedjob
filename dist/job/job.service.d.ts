@@ -12,7 +12,42 @@ export declare class JobService {
     private firebaseService;
     constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, filterRepo: Repository<Filter>, firebaseService: FirebaseService);
     private resolveJobFilters;
-    createJob(data: any, userId: number): Promise<Job>;
+    createJob(data: any, userId: number): Promise<{
+        filterIds: number[];
+        id: number;
+        filter: Filter;
+        filterId: number;
+        filters: Filter[];
+        title: string;
+        description: string | null;
+        pictures: string[] | null;
+        isRemote: boolean;
+        requirements: string;
+        benefits: string[];
+        shifts: string[];
+        jobTypes: string[];
+        salaryType: string;
+        salaryAmount: number;
+        currency: string;
+        location: {
+            lat: number;
+            lng: number;
+        };
+        startDate: Date;
+        endDate: Date;
+        industry: string;
+        educationLevel: string;
+        experienceRequired: string;
+        languageRequirements: string[];
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: number;
+        creator: User;
+        applications: import("../job-application/entities/job-application.entity").JobApplication[];
+        pageId?: number;
+        page?: CompanyPage;
+    }>;
     findNearbyJobs(query: any): Promise<{
         data: any;
         total: number;

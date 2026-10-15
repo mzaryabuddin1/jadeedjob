@@ -57,10 +57,13 @@ let JobService = class JobService {
         return ids.map((id) => byId.get(id));
     }
     async createJob(data, userId) {
+        const requestedPageId = data.pageId != null ? Number(data.pageId) : data.companyId != null
+            ? Number(data.companyId)
+            : null;
         let pageId = null;
-        if (data.pageId) {
+        if (requestedPageId) {
             const page = await this.pageRepo.findOne({
-                where: { id: data.pageId },
+                where: { id: requestedPageId },
                 relations: ['members'],
             });
             if (!page) {
@@ -83,39 +86,62 @@ let JobService = class JobService {
         }
         const hasLocation = typeof data.location?.lat === 'number' &&
             typeof data.location?.lng === 'number';
-        const location = hasLocation
-            ? () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`
-            : null;
         const filters = await this.resolveJobFilters(data);
         const primaryFilterId = filters[0].id;
         const pictures = Array.isArray(data.pictures) && data.pictures.length
             ? data.pictures.slice(0, 4)
             : null;
-        const { location: _location, pageId: _pageId, filterIds: _filterIds, filterId: _filterId, filters: _filters, pictures: _pictures, ...jobData } = data;
-        const insertResult = await this.jobRepo.insert({
-            ...jobData,
+        const values = {
+            title: data.title,
+            description: data.description ?? null,
             filterId: primaryFilterId,
             createdBy: userId,
             pageId: pageId ?? null,
-            location,
             isRemote,
             pictures,
-            description: data.description ?? null,
+            salaryType: data.salaryType,
+            salaryAmount: data.salaryAmount,
+            currency: data.currency ?? null,
+            requirements: data.requirements ?? null,
+            benefits: data.benefits ?? null,
+            shifts: data.shifts ?? null,
+            jobTypes: data.jobTypes ?? null,
+            startDate: data.startDate ?? null,
+            endDate: data.endDate ?? null,
+            industry: data.industry ?? null,
+            educationLevel: data.educationLevel ?? null,
+            experienceRequired: data.experienceRequired ?? null,
+            languageRequirements: data.languageRequirements ?? null,
             isActive: true,
-        });
-        const insertedId = insertResult.identifiers?.[0]?.id;
+            location: hasLocation
+                ? () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`
+                : null,
+        };
+        let insertedId;
+        try {
+            const insertResult = await this.jobRepo
+                .createQueryBuilder()
+                .insert()
+                .into(job_entity_1.Job)
+                .values(values)
+                .execute();
+            insertedId = insertResult.identifiers?.[0]?.id;
+        }
+        catch (err) {
+            const msg = err?.message || String(err);
+            if (/Unknown column|ER_BAD_FIELD_ERROR|doesn't exist/i.test(msg)) {
+                throw new common_1.BadRequestException(`Database schema missing columns (isRemote/pictures?). Restart app with synchronize or run ALTER. Detail: ${msg}`);
+            }
+            throw err;
+        }
         if (!insertedId) {
             throw new common_1.BadRequestException('Failed to create job');
         }
-        const savedJob = await this.jobRepo.findOne({
-            where: { id: insertedId },
-            relations: ['filters', 'filter'],
-        });
-        if (!savedJob) {
-            throw new common_1.BadRequestException('Failed to load created job');
-        }
-        savedJob.filters = filters;
-        await this.jobRepo.save(savedJob);
+        await this.jobRepo
+            .createQueryBuilder()
+            .relation(job_entity_1.Job, 'filters')
+            .of(insertedId)
+            .add(filters.map((f) => f.id));
         const withFilters = await this.jobRepo.findOne({
             where: { id: insertedId },
             relations: ['filters', 'filter', 'page'],
@@ -131,7 +157,10 @@ let JobService = class JobService {
             catch {
             }
         }
-        return withFilters;
+        return {
+            ...withFilters,
+            filterIds: (withFilters?.filters || []).map((f) => f.id),
+        };
     }
     async findNearbyJobs(query) {
         const { lat, lng, page = 1, limit = 10, radiusKm = 1, search = '', sortBy = 'createdAt', sortOrder = 'DESC', } = query;
@@ -329,16 +358,30 @@ let JobService = class JobService {
             nextFilters = await this.resolveJobFilters({ filterIds, filterId });
             updatePayload.filterId = nextFilters[0].id;
         }
-        await this.jobRepo.update({ id }, updatePayload);
+        const { location: locRaw, ...scalarPatch } = updatePayload;
+        if (Object.keys(scalarPatch).length) {
+            await this.jobRepo.update({ id }, scalarPatch);
+        }
+        if (locRaw !== undefined) {
+            await this.jobRepo
+                .createQueryBuilder()
+                .update(job_entity_1.Job)
+                .set({ location: locRaw })
+                .where('id = :id', { id })
+                .execute();
+        }
         if (nextFilters) {
-            const jobWithRelations = await this.jobRepo.findOne({
+            const current = await this.jobRepo.findOne({
                 where: { id },
                 relations: ['filters'],
             });
-            if (jobWithRelations) {
-                jobWithRelations.filters = nextFilters;
-                await this.jobRepo.save(jobWithRelations);
-            }
+            const oldIds = (current?.filters || []).map((f) => f.id);
+            const newIds = nextFilters.map((f) => f.id);
+            await this.jobRepo
+                .createQueryBuilder()
+                .relation(job_entity_1.Job, 'filters')
+                .of(id)
+                .addAndRemove(newIds, oldIds);
         }
         const updated = await this.jobRepo.findOne({
             where: { id },
