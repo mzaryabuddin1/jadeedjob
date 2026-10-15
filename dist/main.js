@@ -38,8 +38,10 @@ const app_module_1 = require("./app.module");
 const express = __importStar(require("express"));
 const path_1 = require("path");
 const swagger_setup_1 = require("./swagger/swagger.setup");
+const all_exceptions_filter_1 = require("./common/filters/all-exceptions.filter");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.useGlobalFilters(new all_exceptions_filter_1.AllExceptionsFilter());
     app.enableCors();
     app.use('/uploads', express.static((0, path_1.join)(__dirname, '..', 'uploads')));
     app.use(express.static((0, path_1.join)(__dirname, '..', 'public')));
