@@ -37,6 +37,8 @@ function setupSwagger(app) {
         'Create/update: `filterIds` (1–10), optional `pictures` (max 4 images),',
         '`isRemote: true` → location optional; otherwise location required.',
         'Description optional. Multipart or JSON supported.',
+        'Categories are stored in the `job_filters` join table (`jobs.filterId` = primary/first only).',
+        'All job responses return `filterIds` + `filters`. My jobs: `GET /job?myjobs=true`.',
     ].join('\n'))
         .setVersion('1.0')
         .addBearerAuth({

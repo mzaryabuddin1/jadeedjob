@@ -19,6 +19,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { JobService } from './job.service';
@@ -111,7 +112,8 @@ const jobBodyProperties = {
   isRemote: {
     type: 'boolean',
     example: false,
-    description: 'If true, location is optional; otherwise location is required',
+    description:
+      'If true, location is optional; otherwise location is required',
   },
   pageId: { type: 'number', nullable: true },
   requirements: { type: 'string' },
@@ -165,7 +167,8 @@ const jobBodyProperties = {
     type: 'array',
     items: { type: 'string', format: 'binary' },
     maxItems: 4,
-    description: 'Optional image files (max 4). Or send picture URLs as JSON array.',
+    description:
+      'Optional image files (max 4). Or send picture URLs as JSON array.',
   },
   startDate: { type: 'string', format: 'date' },
   endDate: { type: 'string', format: 'date' },
@@ -192,7 +195,8 @@ export class JobController {
   @ApiOperation({
     summary: 'Create job',
     description: [
-      '- **Categories:** `filterIds` (1–10) or legacy `filterId`',
+      '- **Categories:** `filterIds` (1–10) or legacy `filterId`. Saved in the `job_filters` table; `jobs.filterId` keeps only the first (primary) one',
+      '- Response returns `filterIds` + `filters` with all selected categories',
       '- **Pictures:** optional, max **4** images (`multipart` field `pictures`) or URL array',
       '- **Remote:** `isRemote: true` → `location` optional; otherwise `location` required',
       '- **Description:** optional',
@@ -238,13 +242,72 @@ export class JobController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List jobs' })
+  @ApiOperation({
+    summary: 'List jobs',
+    description: [
+      'Every job in the response includes `filterIds` (all selected categories) and `filters` (full category objects).',
+      '- **My jobs:** `myjobs=true` → only jobs created by the logged-in user (active + inactive)',
+      '- **Nearby:** send `lat` + `lng` (+ `radiusKm`) → geo search, adds `distance` (meters)',
+      '- **Category:** `filter=11` or `filter=1,11,17` → jobs tagged with any of these',
+    ].join('\n'),
+  })
+  @ApiQuery({ name: 'myjobs', required: false, type: Boolean, example: true })
+  @ApiQuery({
+    name: 'filter',
+    required: false,
+    type: String,
+    example: '1,11',
+    description: 'Single category id or comma-separated ids',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Matches job description',
+  })
+  @ApiQuery({ name: 'lat', required: false, type: Number, example: 24.8607 })
+  @ApiQuery({ name: 'lng', required: false, type: Number, example: 67.0011 })
+  @ApiQuery({
+    name: 'radiusKm',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Only with lat/lng (default 1)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Max 100',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: [
+      'createdAt',
+      'updatedAt',
+      'title',
+      'salaryAmount',
+      'startDate',
+      'endDate',
+      'id',
+      'distance',
+    ],
+    description: '`distance` only with lat/lng',
+  })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['DESC', 'ASC'] })
   async findJobs(@Query() query: any, @Req() req: any) {
     return this.jobService.findJobs(query, req.user.id);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get job by id' })
+  @ApiOperation({
+    summary: 'Get job by id',
+    description:
+      'Response includes `filterIds` and `filters` (all categories of the job).',
+  })
   async findJob(@Param('id') id: number) {
     return this.jobService.findJobById(id);
   }
@@ -279,7 +342,8 @@ export class JobController {
     const hasPictureInput =
       data.pictures !== undefined || (files && files.length > 0);
     if (hasPictureInput) {
-      data.pictures = mergePictures(data.pictures, files, this.filesService) ?? [];
+      data.pictures =
+        mergePictures(data.pictures, files, this.filesService) ?? [];
     }
 
     // If switching to remote without location, clear it in service via isRemote

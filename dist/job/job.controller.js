@@ -183,7 +183,8 @@ let JobController = class JobController {
         const data = validateBody(job_validation_1.updateJobSchema, parsed);
         const hasPictureInput = data.pictures !== undefined || (files && files.length > 0);
         if (hasPictureInput) {
-            data.pictures = mergePictures(data.pictures, files, this.filesService) ?? [];
+            data.pictures =
+                mergePictures(data.pictures, files, this.filesService) ?? [];
         }
         if (data.isRemote === true && data.location === undefined) {
         }
@@ -198,7 +199,8 @@ __decorate([
     (0, swagger_1.ApiOperation)({
         summary: 'Create job',
         description: [
-            '- **Categories:** `filterIds` (1–10) or legacy `filterId`',
+            '- **Categories:** `filterIds` (1–10) or legacy `filterId`. Saved in the `job_filters` table; `jobs.filterId` keeps only the first (primary) one',
+            '- Response returns `filterIds` + `filters` with all selected categories',
             '- **Pictures:** optional, max **4** images (`multipart` field `pictures`) or URL array',
             '- **Remote:** `isRemote: true` → `location` optional; otherwise `location` required',
             '- **Description:** optional',
@@ -223,7 +225,62 @@ __decorate([
 ], JobController.prototype, "createJob", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'List jobs' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'List jobs',
+        description: [
+            'Every job in the response includes `filterIds` (all selected categories) and `filters` (full category objects).',
+            '- **My jobs:** `myjobs=true` → only jobs created by the logged-in user (active + inactive)',
+            '- **Nearby:** send `lat` + `lng` (+ `radiusKm`) → geo search, adds `distance` (meters)',
+            '- **Category:** `filter=11` or `filter=1,11,17` → jobs tagged with any of these',
+        ].join('\n'),
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'myjobs', required: false, type: Boolean, example: true }),
+    (0, swagger_1.ApiQuery)({
+        name: 'filter',
+        required: false,
+        type: String,
+        example: '1,11',
+        description: 'Single category id or comma-separated ids',
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'search',
+        required: false,
+        type: String,
+        description: 'Matches job description',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'lat', required: false, type: Number, example: 24.8607 }),
+    (0, swagger_1.ApiQuery)({ name: 'lng', required: false, type: Number, example: 67.0011 }),
+    (0, swagger_1.ApiQuery)({
+        name: 'radiusKm',
+        required: false,
+        type: Number,
+        example: 1,
+        description: 'Only with lat/lng (default 1)',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number, example: 1 }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        example: 10,
+        description: 'Max 100',
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'sortBy',
+        required: false,
+        enum: [
+            'createdAt',
+            'updatedAt',
+            'title',
+            'salaryAmount',
+            'startDate',
+            'endDate',
+            'id',
+            'distance',
+        ],
+        description: '`distance` only with lat/lng',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, enum: ['DESC', 'ASC'] }),
     __param(0, (0, common_1.Query)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -232,7 +289,10 @@ __decorate([
 ], JobController.prototype, "findJobs", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get job by id' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get job by id',
+        description: 'Response includes `filterIds` and `filters` (all categories of the job).',
+    }),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Number]),

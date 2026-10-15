@@ -34,6 +34,9 @@ export class JobService {
    * MySQL SRID 4326 defaults to lat-lng axis order, so we force `axis-order=long-lat`.
    */
   private toPointSql(lat: number, lng: number): string {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequestException('lat and lng must be valid numbers');
+    }
     if (lat < -90 || lat > 90) {
       throw new BadRequestException(
         `Invalid latitude ${lat}. Must be between -90 and 90 (Google Maps lat).`,
@@ -45,6 +48,67 @@ export class JobService {
       );
     }
     return `ST_GeomFromText('POINT(${lng} ${lat})', 4326, 'axis-order=long-lat')`;
+  }
+
+  private static readonly SORTABLE_COLUMNS = [
+    'id',
+    'createdAt',
+    'updatedAt',
+    'title',
+    'salaryAmount',
+    'startDate',
+    'endDate',
+  ];
+
+  /** Whitelist sort column — query params must never reach ORDER BY raw */
+  private safeSortColumn(sortBy: any): string {
+    return JobService.SORTABLE_COLUMNS.includes(sortBy) ? sortBy : 'createdAt';
+  }
+
+  private safeSortOrder(sortOrder: any): 'ASC' | 'DESC' {
+    return String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+  }
+
+  /** `filter` query param: single id or comma list (`1,11,17`) */
+  private parseFilterQuery(filter: any): number[] {
+    if (filter == null || filter === '') return [];
+    const parts = Array.isArray(filter) ? filter : String(filter).split(',');
+    return [
+      ...new Set(
+        parts.map((s) => Number(String(s).trim())).filter((n) => n > 0),
+      ),
+    ];
+  }
+
+  /**
+   * Categories live in the `job_filters` join table (not a column on `jobs`).
+   * Older jobs may only have `jobs.filterId` — fall back to that.
+   */
+  private toFilterIds(job: {
+    filters?: Filter[];
+    filterId?: number;
+  }): number[] {
+    const ids = (job.filters || []).map((f) => f.id);
+    if (!ids.length && job.filterId) return [job.filterId];
+    return ids;
+  }
+
+  /** Load tagged filters for many jobs in one query (for raw SQL results) */
+  private async loadFiltersByJobIds(
+    jobIds: number[],
+  ): Promise<Map<number, Filter[]>> {
+    const map = new Map<number, Filter[]>();
+    if (!jobIds.length) return map;
+
+    const jobs = await this.jobRepo
+      .createQueryBuilder('job')
+      .select('job.id')
+      .leftJoinAndSelect('job.filters', 'filters')
+      .whereInIds(jobIds)
+      .getMany();
+
+    for (const job of jobs) map.set(job.id, job.filters || []);
+    return map;
   }
 
   /** Resolve filterIds / legacy filterId → approved Filter entities (1–10) */
@@ -68,7 +132,9 @@ export class JobService {
       );
     }
     if (ids.length > 10) {
-      throw new BadRequestException('A job can have at most 10 filter categories');
+      throw new BadRequestException(
+        'A job can have at most 10 filter categories',
+      );
     }
 
     const filters = await this.filterRepo.find({
@@ -96,9 +162,11 @@ export class JobService {
   async createJob(data: any, userId: number) {
     // App may send companyId instead of pageId
     const requestedPageId =
-      data.pageId != null ? Number(data.pageId) : data.companyId != null
-        ? Number(data.companyId)
-        : null;
+      data.pageId != null
+        ? Number(data.pageId)
+        : data.companyId != null
+          ? Number(data.companyId)
+          : null;
 
     let pageId: number | null = null;
 
@@ -191,9 +259,7 @@ export class JobService {
       insertedId = insertResult.identifiers?.[0]?.id;
     } catch (err: any) {
       const msg = err?.message || String(err);
-      if (
-        /Unknown column|ER_BAD_FIELD_ERROR|doesn't exist/i.test(msg)
-      ) {
+      if (/Unknown column|ER_BAD_FIELD_ERROR|doesn't exist/i.test(msg)) {
         throw new BadRequestException(
           `Database schema missing columns (isRemote/pictures?). Restart app with synchronize or run ALTER. Detail: ${msg}`,
         );
@@ -237,7 +303,7 @@ export class JobService {
 
     return {
       ...withFilters,
-      filterIds: (withFilters?.filters || []).map((f) => f.id),
+      filterIds: withFilters ? this.toFilterIds(withFilters) : [],
     };
   }
 
@@ -252,22 +318,45 @@ export class JobService {
       limit = 10,
       radiusKm = 1,
       search = '',
+      filter,
       sortBy = 'createdAt',
       sortOrder = 'DESC',
     } = query;
 
-    const currentPage = Number(page);
-    const take = Number(limit);
+    const currentPage = Math.max(1, Number(page) || 1);
+    const take = Math.min(100, Math.max(1, Number(limit) || 10));
     const offset = (currentPage - 1) * take;
-    const radiusMeters = Number(radiusKm) * 1000;
+    const radiusMeters = (Number(radiusKm) || 1) * 1000;
 
-    // Google Maps order + MySQL long-lat axis
+    // Google Maps order + MySQL long-lat axis (validated numbers only)
     const point = this.toPointSql(Number(lat), Number(lng));
+    const distanceSql = `ST_Distance_Sphere(ST_SRID(j.location, 4326), ${point})`;
+
+    const where = ['j.isActive = 1', `${distanceSql} <= ?`];
+    const params: any[] = [radiusMeters];
+
+    if (search) {
+      where.push('j.description LIKE ?');
+      params.push(`%${search}%`);
+    }
+
+    const filterIds = this.parseFilterQuery(filter);
+    if (filterIds.length) {
+      where.push(
+        '(j.filterId IN (?) OR EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = j.id AND jf.filterId IN (?)))',
+      );
+      params.push(filterIds, filterIds);
+    }
+
+    const orderBy =
+      sortBy === 'distance' ? 'distance' : `j.${this.safeSortColumn(sortBy)}`;
+    const direction = this.safeSortOrder(sortOrder);
 
     // ────────────────────────────────────────────────
     // 1️⃣ DATA QUERY
     // ────────────────────────────────────────────────
-    const jobs = await this.jobRepo.query(`
+    const jobs = await this.jobRepo.query(
+      `
     SELECT
       j.*,
       ST_Longitude(j.location) AS lng,
@@ -276,38 +365,32 @@ export class JobService {
       p.company_name,
       p.username AS page_username,
       p.company_logo,
-      ST_Distance_Sphere(
-        ST_SRID(j.location, 4326),
-        ${point}
-      ) AS distance
+      ${distanceSql} AS distance
     FROM jobs j
     LEFT JOIN pages p ON p.id = j.pageId
-    WHERE j.isActive = 1
-      AND ST_Distance_Sphere(
-        ST_SRID(j.location, 4326),
-        ${point}
-      ) <= ${radiusMeters}
-      ${search ? `AND j.description LIKE '%${search}%'` : ''}
-    ORDER BY ${sortBy} ${sortOrder}
-    LIMIT ${take}
-    OFFSET ${offset}
-  `);
+    WHERE ${where.join(' AND ')}
+    ORDER BY ${orderBy} ${direction}
+    LIMIT ? OFFSET ?
+  `,
+      [...params, take, offset],
+    );
 
     // ────────────────────────────────────────────────
     // 2️⃣ COUNT QUERY
     // ────────────────────────────────────────────────
-    const countResult = await this.jobRepo.query(`
+    const countResult = await this.jobRepo.query(
+      `
     SELECT COUNT(*) AS total
     FROM jobs j
-    WHERE j.isActive = 1
-      AND ST_Distance_Sphere(
-        ST_SRID(j.location, 4326),
-        ${point}
-      ) <= ${radiusMeters}
-      ${search ? `AND j.description LIKE '%${search}%'` : ''}
-  `);
+    WHERE ${where.join(' AND ')}
+  `,
+      params,
+    );
 
     const total = Number(countResult[0]?.total || 0);
+
+    // Raw SQL can't load the M2M — attach tagged categories separately
+    const filtersByJob = await this.loadFiltersByJobIds(jobs.map((j) => j.id));
 
     // ────────────────────────────────────────────────
     // 3️⃣ RESPONSE NORMALIZATION
@@ -315,6 +398,11 @@ export class JobService {
     return {
       data: jobs.map((j) => ({
         ...j,
+        filters: filtersByJob.get(j.id) || [],
+        filterIds: this.toFilterIds({
+          filters: filtersByJob.get(j.id),
+          filterId: j.filterId,
+        }),
         location: {
           lat: j.lat,
           lng: j.lng,
@@ -371,11 +459,13 @@ export class JobService {
       qb.andWhere('job.isActive = true');
     }
 
-    if (filter) {
-      const filterId = Number(filter);
+    // Match via subquery — filtering on the joined `filters` alias would
+    // strip every other category from the returned job
+    const filterIds = this.parseFilterQuery(filter);
+    if (filterIds.length) {
       qb.andWhere(
-        '(job.filterId = :filterId OR filters.id = :filterId)',
-        { filterId },
+        '(job.filterId IN (:...filterIds) OR EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = job.id AND jf.filterId IN (:...filterIds)))',
+        { filterIds },
       );
     }
 
@@ -385,16 +475,22 @@ export class JobService {
       });
     }
 
-    qb.orderBy(`job.${sortBy}`, String(sortOrder).toUpperCase() as 'ASC' | 'DESC')
-      .take(Number(limit))
-      .skip((Number(page) - 1) * Number(limit));
+    const currentPage = Math.max(1, Number(page) || 1);
+    const take = Math.min(100, Math.max(1, Number(limit) || 10));
+
+    qb.orderBy(
+      `job.${this.safeSortColumn(sortBy)}`,
+      this.safeSortOrder(sortOrder),
+    )
+      .take(take)
+      .skip((currentPage - 1) * take);
 
     const [jobs, total] = await qb.getManyAndCount();
 
     return {
       data: jobs.map((job) => ({
         ...job,
-        filterIds: (job.filters || []).map((f) => f.id),
+        filterIds: this.toFilterIds(job),
         pageTaggedJob: job.pageId ? true : false,
         page: job.pageId
           ? {
@@ -406,8 +502,8 @@ export class JobService {
           : null,
       })),
       total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
+      totalPages: Math.ceil(total / take),
+      currentPage,
     };
   }
 
@@ -426,7 +522,7 @@ export class JobService {
 
     return {
       ...job,
-      filterIds: (job.filters || []).map((f) => f.id),
+      filterIds: this.toFilterIds(job),
     };
   }
 
@@ -562,7 +658,7 @@ export class JobService {
 
     return {
       ...updated,
-      filterIds: (updated.filters || []).map((f) => f.id),
+      filterIds: this.toFilterIds(updated),
     };
   }
 }

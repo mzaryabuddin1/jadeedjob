@@ -12,6 +12,12 @@ export declare class JobService {
     private firebaseService;
     constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, filterRepo: Repository<Filter>, firebaseService: FirebaseService);
     private toPointSql;
+    private static readonly SORTABLE_COLUMNS;
+    private safeSortColumn;
+    private safeSortOrder;
+    private parseFilterQuery;
+    private toFilterIds;
+    private loadFiltersByJobIds;
     private resolveJobFilters;
     createJob(data: any, userId: number): Promise<{
         filterIds: number[];
