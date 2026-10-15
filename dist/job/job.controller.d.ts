@@ -5,11 +5,6 @@ export declare class JobController {
     private readonly filesService;
     constructor(jobService: JobService, filesService: FilesService);
     createJob(files: Express.Multer.File[] | undefined, body: any, req: any): Promise<{
-        filter: {
-            id: number;
-            name: string;
-            icon: import("../filter/entities/filter.entity").FilterIcon;
-        };
         filters: {
             id: number;
             name: string;
@@ -17,7 +12,6 @@ export declare class JobController {
         }[];
         filterIds?: number[];
         id: number;
-        filterId: number;
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -55,11 +49,6 @@ export declare class JobController {
         currentPage: number;
     }>;
     findJob(id: number): Promise<{
-        filter: {
-            id: number;
-            name: string;
-            icon: import("../filter/entities/filter.entity").FilterIcon;
-        };
         filters: {
             id: number;
             name: string;
@@ -67,7 +56,6 @@ export declare class JobController {
         }[];
         filterIds: number[];
         id: number;
-        filterId: number;
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -99,11 +87,6 @@ export declare class JobController {
         page?: import("../pages/entities/company-page.entity").CompanyPage;
     }>;
     patchJob(id: number, files: Express.Multer.File[], body: any, req: any): Promise<{
-        filter: {
-            id: number;
-            name: string;
-            icon: import("../filter/entities/filter.entity").FilterIcon;
-        };
         filters: {
             id: number;
             name: string;
@@ -111,7 +94,6 @@ export declare class JobController {
         }[];
         filterIds: number[];
         id: number;
-        filterId: number;
         title: string;
         description: string | null;
         pictures: string[] | null;

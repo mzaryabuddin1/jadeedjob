@@ -21,11 +21,6 @@ export declare class JobService {
     private loadFiltersByJobIds;
     private resolveJobFilters;
     createJob(data: any, userId: number): Promise<{
-        filter: {
-            id: number;
-            name: string;
-            icon: import("src/filter/entities/filter.entity").FilterIcon;
-        };
         filters: {
             id: number;
             name: string;
@@ -33,7 +28,6 @@ export declare class JobService {
         }[];
         filterIds?: number[];
         id: number;
-        filterId: number;
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -77,11 +71,6 @@ export declare class JobService {
         currentPage: number;
     }>;
     findJobById(id: number): Promise<{
-        filter: {
-            id: number;
-            name: string;
-            icon: import("src/filter/entities/filter.entity").FilterIcon;
-        };
         filters: {
             id: number;
             name: string;
@@ -89,7 +78,6 @@ export declare class JobService {
         }[];
         filterIds: number[];
         id: number;
-        filterId: number;
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -121,11 +109,6 @@ export declare class JobService {
         page?: CompanyPage;
     }>;
     updateJob(id: number, data: any, userId: number): Promise<{
-        filter: {
-            id: number;
-            name: string;
-            icon: import("src/filter/entities/filter.entity").FilterIcon;
-        };
         filters: {
             id: number;
             name: string;
@@ -133,7 +116,6 @@ export declare class JobService {
         }[];
         filterIds: number[];
         id: number;
-        filterId: number;
         title: string;
         description: string | null;
         pictures: string[] | null;

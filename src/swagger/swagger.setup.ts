@@ -37,8 +37,8 @@ export function setupSwagger(app: INestApplication) {
         'Create/update: `filterIds` (1–10), optional `pictures` (max 4 images),',
         '`isRemote: true` → location optional; otherwise location required.',
         'Description optional. Multipart or JSON supported.',
-        'Categories are stored in the `job_filters` join table (`jobs.filterId` = primary/first only).',
-        'All job responses return `filterIds`, `filters` and primary `filter` — each category is `{ id, name, icon }`. My jobs: `GET /job?myjobs=true`.',
+        'Categories are stored only in the `job_filters` join table (the `jobs` table has no category column).',
+        'All job responses return `filterIds` and `filters` — each category is `{ id, name, icon }`. My jobs: `GET /job?myjobs=true`.',
       ].join('\n'),
     )
     .setVersion('1.0')

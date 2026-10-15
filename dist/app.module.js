@@ -28,6 +28,7 @@ const organization_module_1 = require("./organization/organization.module");
 const files_module_1 = require("./files/files.module");
 const pages_module_1 = require("./pages/pages.module");
 const typeorm_1 = require("@nestjs/typeorm");
+const migrate_legacy_filter_column_1 = require("./job/migrate-legacy-filter-column");
 const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
@@ -41,16 +42,21 @@ exports.AppModule = AppModule = __decorate([
                 isGlobal: true,
                 envFilePath: '.env',
             }),
-            typeorm_1.TypeOrmModule.forRoot({
-                type: 'mysql',
-                host: process.env.DB_HOST,
-                port: parseInt(process.env.DB_PORT),
-                username: process.env.DB_USERNAME,
-                password: process.env.DB_PASSWORD,
-                database: process.env.DB_DATABASE,
-                autoLoadEntities: true,
-                synchronize: true,
-                legacySpatialSupport: false,
+            typeorm_1.TypeOrmModule.forRootAsync({
+                useFactory: async () => {
+                    await (0, migrate_legacy_filter_column_1.migrateLegacyJobFilterColumn)();
+                    return {
+                        type: 'mysql',
+                        host: process.env.DB_HOST,
+                        port: parseInt(process.env.DB_PORT),
+                        username: process.env.DB_USERNAME,
+                        password: process.env.DB_PASSWORD,
+                        database: process.env.DB_DATABASE,
+                        autoLoadEntities: true,
+                        synchronize: true,
+                        legacySpatialSupport: false,
+                    };
+                },
             }),
             auth_module_1.AuthModule,
             users_module_1.UsersModule,

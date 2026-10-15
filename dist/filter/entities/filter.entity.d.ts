@@ -19,7 +19,6 @@ export declare class Filter {
     rejectionReason: string;
     createdBy: number | null;
     creator: User;
-    jobs: Job[];
     taggedJobs: Job[];
     createdAt: Date;
     updatedAt: Date;

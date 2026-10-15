@@ -4,8 +4,6 @@ import { User } from 'src/users/entities/user.entity';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 export declare class Job {
     id: number;
-    filter: Filter;
-    filterId: number;
     filters: Filter[];
     title: string;
     description: string | null;

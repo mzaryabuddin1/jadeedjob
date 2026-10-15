@@ -21,7 +21,8 @@
     "seed:filters": "ts-node -r tsconfig-paths/register src/commands/seed-filters.ts",
     "seed:countries": "ts-node -r tsconfig-paths/register src/commands/seed-countries.ts",
     "seed:languages": "ts-node -r tsconfig-paths/register src/commands/seed-languages.ts",
-    "seed:cities": "ts-node -r tsconfig-paths/register src/commands/seed-cities.ts"
+    "seed:cities": "ts-node -r tsconfig-paths/register src/commands/seed-cities.ts",
+    "migrate:job-filters": "ts-node -r tsconfig-paths/register src/job/migrate-legacy-filter-column.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

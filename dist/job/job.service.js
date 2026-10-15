@@ -60,21 +60,10 @@ let JobService = JobService_1 = class JobService {
         return { id: f.id, name: f.name, icon: (0, filter_entity_1.normalizeFilterIcon)(f.icon) };
     }
     jobCategories(job) {
-        let filters = job.filters || [];
-        if (!filters.length && job.filter)
-            filters = [job.filter];
-        const primary = job.filter ??
-            filters.find((f) => f.id === job.filterId) ??
-            filters[0] ??
-            null;
+        const filters = job.filters || [];
         return {
-            filter: primary ? this.toJobFilter(primary) : null,
             filters: filters.map((f) => this.toJobFilter(f)),
-            filterIds: filters.length
-                ? filters.map((f) => f.id)
-                : job.filterId
-                    ? [job.filterId]
-                    : [],
+            filterIds: filters.map((f) => f.id),
         };
     }
     async loadFiltersByJobIds(jobIds) {
@@ -83,17 +72,12 @@ let JobService = JobService_1 = class JobService {
             return map;
         const jobs = await this.jobRepo
             .createQueryBuilder('job')
-            .select(['job.id', 'job.filterId'])
-            .leftJoinAndSelect('job.filter', 'filter')
+            .select('job.id')
             .leftJoinAndSelect('job.filters', 'filters')
             .whereInIds(jobIds)
             .getMany();
-        for (const job of jobs) {
-            map.set(job.id, {
-                filter: job.filter || null,
-                filters: job.filters || [],
-            });
-        }
+        for (const job of jobs)
+            map.set(job.id, job.filters || []);
         return map;
     }
     async resolveJobFilters(data) {
@@ -156,14 +140,12 @@ let JobService = JobService_1 = class JobService {
         const hasLocation = typeof data.location?.lat === 'number' &&
             typeof data.location?.lng === 'number';
         const filters = await this.resolveJobFilters(data);
-        const primaryFilterId = filters[0].id;
         const pictures = Array.isArray(data.pictures) && data.pictures.length
             ? data.pictures.slice(0, 4)
             : null;
         const values = {
             title: data.title,
             description: data.description ?? null,
-            filterId: primaryFilterId,
             createdBy: userId,
             pageId: pageId ?? null,
             isRemote,
@@ -213,7 +195,7 @@ let JobService = JobService_1 = class JobService {
             .add(filters.map((f) => f.id));
         const withFilters = await this.jobRepo.findOne({
             where: { id: insertedId },
-            relations: ['filters', 'filter', 'page'],
+            relations: ['filters', 'page'],
         });
         for (const f of filters) {
             try {
@@ -247,8 +229,8 @@ let JobService = JobService_1 = class JobService {
         }
         const filterIds = this.parseFilterQuery(filter);
         if (filterIds.length) {
-            where.push('(j.filterId IN (?) OR EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = j.id AND jf.filterId IN (?)))');
-            params.push(filterIds, filterIds);
+            where.push('EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = j.id AND jf.filterId IN (?))');
+            params.push(filterIds);
         }
         const orderBy = sortBy === 'distance' ? 'distance' : `j.${this.safeSortColumn(sortBy)}`;
         const direction = this.safeSortOrder(sortOrder);
@@ -278,10 +260,7 @@ let JobService = JobService_1 = class JobService {
         return {
             data: jobs.map((j) => ({
                 ...j,
-                ...this.jobCategories({
-                    ...filtersByJob.get(j.id),
-                    filterId: j.filterId,
-                }),
+                ...this.jobCategories({ filters: filtersByJob.get(j.id) }),
                 location: {
                     lat: j.lat,
                     lng: j.lng,
@@ -309,7 +288,6 @@ let JobService = JobService_1 = class JobService {
         const qb = this.jobRepo
             .createQueryBuilder('job')
             .leftJoinAndSelect('job.page', 'page')
-            .leftJoinAndSelect('job.filter', 'filter')
             .leftJoinAndSelect('job.filters', 'filters');
         if (myjobs === 'true') {
             if (!userId) {
@@ -322,7 +300,7 @@ let JobService = JobService_1 = class JobService {
         }
         const filterIds = this.parseFilterQuery(filter);
         if (filterIds.length) {
-            qb.andWhere('(job.filterId IN (:...filterIds) OR EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = job.id AND jf.filterId IN (:...filterIds)))', { filterIds });
+            qb.andWhere('EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = job.id AND jf.filterId IN (:...filterIds))', { filterIds });
         }
         if (search) {
             qb.andWhere('job.description LIKE :search', {
@@ -360,7 +338,7 @@ let JobService = JobService_1 = class JobService {
                 id,
                 isActive: true,
             },
-            relations: ['filters', 'filter', 'page'],
+            relations: ['filters', 'page'],
         });
         if (!job) {
             throw new common_1.NotFoundException(`Job with ID ${id} not found`);
@@ -432,7 +410,6 @@ let JobService = JobService_1 = class JobService {
         let nextFilters;
         if (filterIds !== undefined || filterId !== undefined) {
             nextFilters = await this.resolveJobFilters({ filterIds, filterId });
-            updatePayload.filterId = nextFilters[0].id;
         }
         const { location: locRaw, ...scalarPatch } = updatePayload;
         if (Object.keys(scalarPatch).length) {
@@ -461,7 +438,7 @@ let JobService = JobService_1 = class JobService {
         }
         const updated = await this.jobRepo.findOne({
             where: { id },
-            relations: ['filters', 'filter', 'page'],
+            relations: ['filters', 'page'],
         });
         if (!updated)
             throw new common_1.BadRequestException('Failed to load updated job');

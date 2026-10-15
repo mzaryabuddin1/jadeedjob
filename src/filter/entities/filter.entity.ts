@@ -6,7 +6,6 @@ import {
   Column,
   ManyToOne,
   ManyToMany,
-  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -78,10 +77,6 @@ export class Filter {
 
   @ManyToOne(() => User, (user) => user.createdFilters, { nullable: true })
   creator: User;
-
-  /** Jobs where this filter is the primary filterId */
-  @OneToMany(() => Job, (job) => job.filter)
-  jobs: Job[];
 
   /** Jobs tagged with this filter (many-to-many via job_filters) */
   @ManyToMany(() => Job, (job) => job.filters)

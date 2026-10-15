@@ -185,16 +185,11 @@ export class FilterService {
   }
 
   async getTopFiltersByJobs(limit = 9): Promise<number[]> {
-    // Prefer many-to-many tags; fall back to primary filterId jobs
     const result = await this.filterRepo
       .createQueryBuilder('filter')
       .leftJoin('filter.taggedJobs', 'tagged')
-      .leftJoin('filter.jobs', 'primaryJob')
       .select('filter.id', 'filterId')
-      .addSelect(
-        'COUNT(DISTINCT COALESCE(tagged.id, primaryJob.id))',
-        'jobCount',
-      )
+      .addSelect('COUNT(DISTINCT tagged.id)', 'jobCount')
       .where('filter.status = :status', { status: 'active' })
       .andWhere('filter.approvalStatus = :approval', {
         approval: 'approved',

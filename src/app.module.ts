@@ -25,6 +25,7 @@ import { OrganizationModule } from './organization/organization.module';
 import { FilesModule } from './files/files.module';
 import { PagesModule } from './pages/pages.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { migrateLegacyJobFilterColumn } from './job/migrate-legacy-filter-column';
 import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
@@ -36,16 +37,23 @@ import { RatingModule } from './rating/rating.module';
       envFilePath: '.env',
     }),
     // MongooseModule.forRoot(process.env.MONGODB_URI),
-    TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT)  ,
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_DATABASE,
-      autoLoadEntities: true,
-      synchronize: true,
-      legacySpatialSupport: false, 
+    TypeOrmModule.forRootAsync({
+      useFactory: async () => {
+        // Must run before synchronize drops jobs.filterId (app + seed commands)
+        await migrateLegacyJobFilterColumn();
+
+        return {
+          type: 'mysql',
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT),
+          username: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_DATABASE,
+          autoLoadEntities: true,
+          synchronize: true,
+          legacySpatialSupport: false,
+        };
+      },
     }),
     // Application Modules
     AuthModule,
@@ -59,7 +67,7 @@ import { RatingModule } from './rating/rating.module';
       throttlers: [
         {
           ttl: 30000, // 30 seconds window
-          limit: 10,   // 1 request per IP per window
+          limit: 10, // 1 request per IP per window
         },
       ],
     }),

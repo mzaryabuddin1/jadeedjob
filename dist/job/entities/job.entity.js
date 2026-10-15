@@ -23,15 +23,6 @@ __decorate([
     __metadata("design:type", Number)
 ], Job.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => filter_entity_1.Filter, (filter) => filter.jobs, { eager: true }),
-    (0, typeorm_1.JoinColumn)({ name: 'filterId' }),
-    __metadata("design:type", filter_entity_1.Filter)
-], Job.prototype, "filter", void 0);
-__decorate([
-    (0, typeorm_1.Column)(),
-    __metadata("design:type", Number)
-], Job.prototype, "filterId", void 0);
-__decorate([
     (0, typeorm_1.ManyToMany)(() => filter_entity_1.Filter, (filter) => filter.taggedJobs, { eager: true }),
     (0, typeorm_1.JoinTable)({
         name: 'job_filters',

@@ -67,10 +67,6 @@ __decorate([
     __metadata("design:type", user_entity_1.User)
 ], Filter.prototype, "creator", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => job_entity_1.Job, (job) => job.filter),
-    __metadata("design:type", Array)
-], Filter.prototype, "jobs", void 0);
-__decorate([
     (0, typeorm_1.ManyToMany)(() => job_entity_1.Job, (job) => job.filters),
     __metadata("design:type", Array)
 ], Filter.prototype, "taggedJobs", void 0);

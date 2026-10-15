@@ -101,7 +101,8 @@ const jobBodyProperties = {
   filterId: {
     type: 'number',
     example: 1,
-    description: 'Legacy single category — use filterIds instead',
+    description:
+      'Legacy input alias for `filterIds: [id]` — use filterIds instead',
   },
   description: {
     type: 'string',
@@ -195,8 +196,8 @@ export class JobController {
   @ApiOperation({
     summary: 'Create job',
     description: [
-      '- **Categories:** `filterIds` (1–10) or legacy `filterId`. Saved in the `job_filters` table; `jobs.filterId` keeps only the first (primary) one',
-      '- Response returns `filterIds`, `filters` (`{ id, name, icon }` each) and primary `filter`',
+      '- **Categories:** `filterIds` (1–10). All are saved in the `job_filters` table (legacy `filterId` input = one-item `filterIds`)',
+      '- Response returns `filterIds` and `filters` (`{ id, name, icon }` each)',
       '- **Pictures:** optional, max **4** images (`multipart` field `pictures`) or URL array',
       '- **Remote:** `isRemote: true` → `location` optional; otherwise `location` required',
       '- **Description:** optional',
@@ -245,7 +246,7 @@ export class JobController {
   @ApiOperation({
     summary: 'List jobs',
     description: [
-      'Every job includes `filterIds`, `filters` (all categories as `{ id, name, icon }`) and `filter` (primary category). `icon` is `{ type: "tabler", name }` or `{ type: "custom", svg }`.',
+      'Every job includes `filterIds` and `filters` (all categories as `{ id, name, icon }`). `icon` is `{ type: "tabler", name }` or `{ type: "custom", svg }`.',
       '- **My jobs:** `myjobs=true` → only jobs created by the logged-in user (active + inactive)',
       '- **Nearby:** send `lat` + `lng` (+ `radiusKm`) → geo search, adds `distance` (meters)',
       '- **Category:** `filter=11` or `filter=1,11,17` → jobs tagged with any of these',
@@ -306,7 +307,7 @@ export class JobController {
   @ApiOperation({
     summary: 'Get job by id',
     description:
-      'Response includes `filterIds`, `filters` (`{ id, name, icon }` for every category) and `filter` (primary).',
+      'Response includes `filterIds` and `filters` (`{ id, name, icon }` for every category).',
   })
   async findJob(@Param('id') id: number) {
     return this.jobService.findJobById(id);

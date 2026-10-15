@@ -85,57 +85,30 @@ export class JobService {
     return { id: f.id, name: f.name, icon: normalizeFilterIcon(f.icon) };
   }
 
-  /**
-   * Categories live in the `job_filters` join table (not a column on `jobs`).
-   * Older jobs may only have `jobs.filterId` — fall back to the primary filter.
-   * Returns `filter` (primary), `filters` and `filterIds`, each with icons.
-   */
-  private jobCategories(job: {
-    filters?: Filter[] | null;
-    filter?: Filter | null;
-    filterId?: number;
-  }) {
-    let filters = job.filters || [];
-    if (!filters.length && job.filter) filters = [job.filter];
-
-    const primary =
-      job.filter ??
-      filters.find((f) => f.id === job.filterId) ??
-      filters[0] ??
-      null;
-
+  /** Categories of a job (from `job_filters`) as `filters` + `filterIds` */
+  private jobCategories(job: { filters?: Filter[] | null }) {
+    const filters = job.filters || [];
     return {
-      filter: primary ? this.toJobFilter(primary) : null,
       filters: filters.map((f) => this.toJobFilter(f)),
-      filterIds: filters.length
-        ? filters.map((f) => f.id)
-        : job.filterId
-          ? [job.filterId]
-          : [],
+      filterIds: filters.map((f) => f.id),
     };
   }
 
-  /** Load primary + tagged filters for many jobs in one query (for raw SQL results) */
+  /** Load filters for many jobs in one query (for raw SQL results) */
   private async loadFiltersByJobIds(
     jobIds: number[],
-  ): Promise<Map<number, { filter: Filter | null; filters: Filter[] }>> {
-    const map = new Map<number, { filter: Filter | null; filters: Filter[] }>();
+  ): Promise<Map<number, Filter[]>> {
+    const map = new Map<number, Filter[]>();
     if (!jobIds.length) return map;
 
     const jobs = await this.jobRepo
       .createQueryBuilder('job')
-      .select(['job.id', 'job.filterId'])
-      .leftJoinAndSelect('job.filter', 'filter')
+      .select('job.id')
       .leftJoinAndSelect('job.filters', 'filters')
       .whereInIds(jobIds)
       .getMany();
 
-    for (const job of jobs) {
-      map.set(job.id, {
-        filter: job.filter || null,
-        filters: job.filters || [],
-      });
-    }
+    for (const job of jobs) map.set(job.id, job.filters || []);
     return map;
   }
 
@@ -240,7 +213,6 @@ export class JobService {
       typeof data.location?.lng === 'number';
 
     const filters = await this.resolveJobFilters(data);
-    const primaryFilterId = filters[0].id;
 
     const pictures =
       Array.isArray(data.pictures) && data.pictures.length
@@ -251,7 +223,6 @@ export class JobService {
     const values: Record<string, any> = {
       title: data.title,
       description: data.description ?? null,
-      filterId: primaryFilterId,
       createdBy: userId,
       pageId: pageId ?? null,
       isRemote,
@@ -308,7 +279,7 @@ export class JobService {
 
     const withFilters = await this.jobRepo.findOne({
       where: { id: insertedId },
-      relations: ['filters', 'filter', 'page'],
+      relations: ['filters', 'page'],
     });
 
     // Notify subscribers of every tagged category
@@ -371,9 +342,9 @@ export class JobService {
     const filterIds = this.parseFilterQuery(filter);
     if (filterIds.length) {
       where.push(
-        '(j.filterId IN (?) OR EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = j.id AND jf.filterId IN (?)))',
+        'EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = j.id AND jf.filterId IN (?))',
       );
-      params.push(filterIds, filterIds);
+      params.push(filterIds);
     }
 
     const orderBy =
@@ -426,10 +397,7 @@ export class JobService {
     return {
       data: jobs.map((j) => ({
         ...j,
-        ...this.jobCategories({
-          ...filtersByJob.get(j.id),
-          filterId: j.filterId,
-        }),
+        ...this.jobCategories({ filters: filtersByJob.get(j.id) }),
         location: {
           lat: j.lat,
           lng: j.lng,
@@ -474,7 +442,6 @@ export class JobService {
     const qb = this.jobRepo
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.page', 'page')
-      .leftJoinAndSelect('job.filter', 'filter')
       .leftJoinAndSelect('job.filters', 'filters');
 
     if (myjobs === 'true') {
@@ -491,7 +458,7 @@ export class JobService {
     const filterIds = this.parseFilterQuery(filter);
     if (filterIds.length) {
       qb.andWhere(
-        '(job.filterId IN (:...filterIds) OR EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = job.id AND jf.filterId IN (:...filterIds)))',
+        'EXISTS (SELECT 1 FROM job_filters jf WHERE jf.jobId = job.id AND jf.filterId IN (:...filterIds))',
         { filterIds },
       );
     }
@@ -540,7 +507,7 @@ export class JobService {
         id,
         isActive: true,
       },
-      relations: ['filters', 'filter', 'page'],
+      relations: ['filters', 'page'],
     });
 
     if (!job) {
@@ -646,7 +613,6 @@ export class JobService {
     let nextFilters: Filter[] | undefined;
     if (filterIds !== undefined || filterId !== undefined) {
       nextFilters = await this.resolveJobFilters({ filterIds, filterId });
-      updatePayload.filterId = nextFilters[0].id;
     }
 
     // Never pass location object through .update() — use QueryBuilder raw SQL
@@ -679,7 +645,7 @@ export class JobService {
 
     const updated = await this.jobRepo.findOne({
       where: { id },
-      relations: ['filters', 'filter', 'page'],
+      relations: ['filters', 'page'],
     });
     if (!updated) throw new BadRequestException('Failed to load updated job');
 
