@@ -8,7 +8,9 @@ export declare class Job {
     filterId: number;
     filters: Filter[];
     title: string;
-    description: string;
+    description: string | null;
+    pictures: string[] | null;
+    isRemote: boolean;
     requirements: string;
     benefits: string[];
     shifts: string[];

@@ -74,24 +74,33 @@ let JobService = class JobService {
             }
             pageId = page.id;
         }
-        if (!data.location || data.isRemote === false) {
+        const isRemote = data.isRemote === true;
+        if (!isRemote) {
             if (typeof data.location?.lat !== 'number' ||
                 typeof data.location?.lng !== 'number') {
-                throw new common_1.BadRequestException('Valid location is required');
+                throw new common_1.BadRequestException('Location (lat/lng) is required for on-site jobs');
             }
         }
-        const location = data.isRemote === true
-            ? null
-            : () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+        const hasLocation = typeof data.location?.lat === 'number' &&
+            typeof data.location?.lng === 'number';
+        const location = hasLocation
+            ? () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`
+            : null;
         const filters = await this.resolveJobFilters(data);
         const primaryFilterId = filters[0].id;
-        const { location: _location, pageId: _pageId, filterIds: _filterIds, filterId: _filterId, filters: _filters, ...jobData } = data;
+        const pictures = Array.isArray(data.pictures) && data.pictures.length
+            ? data.pictures.slice(0, 4)
+            : null;
+        const { location: _location, pageId: _pageId, filterIds: _filterIds, filterId: _filterId, filters: _filters, pictures: _pictures, ...jobData } = data;
         const insertResult = await this.jobRepo.insert({
             ...jobData,
             filterId: primaryFilterId,
             createdBy: userId,
             pageId: pageId ?? null,
             location,
+            isRemote,
+            pictures,
+            description: data.description ?? null,
             isActive: true,
         });
         const insertedId = insertResult.identifiers?.[0]?.id;
@@ -281,17 +290,22 @@ let JobService = class JobService {
             }
         }
         let locationUpdate = undefined;
-        if (data.isRemote === true) {
+        const becomingRemote = data.isRemote === true;
+        const becomingOnSite = data.isRemote === false;
+        if (becomingRemote && data.location == null) {
             locationUpdate = null;
         }
         else if (data.location) {
             if (typeof data.location?.lat !== 'number' ||
                 typeof data.location?.lng !== 'number') {
-                throw new common_1.BadRequestException('Valid location is required');
+                throw new common_1.BadRequestException('Valid location (lat/lng) is required');
             }
             locationUpdate = () => `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
         }
-        const { createdBy, location, filterIds, filterId, filters: _filters, ...patch } = data;
+        else if (becomingOnSite && !job.location) {
+            throw new common_1.BadRequestException('Location (lat/lng) is required for on-site jobs');
+        }
+        const { createdBy, location, filterIds, filterId, filters: _filters, pictures, ...patch } = data;
         const updatePayload = {
             ...patch,
         };
@@ -300,6 +314,15 @@ let JobService = class JobService {
         }
         if (locationUpdate !== undefined) {
             updatePayload.location = locationUpdate;
+        }
+        if (pictures !== undefined) {
+            updatePayload.pictures =
+                Array.isArray(pictures) && pictures.length
+                    ? pictures.slice(0, 4)
+                    : null;
+        }
+        if (data.description !== undefined) {
+            updatePayload.description = data.description || null;
         }
         let nextFilters;
         if (filterIds !== undefined || filterId !== undefined) {

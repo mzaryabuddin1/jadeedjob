@@ -40,8 +40,16 @@ export class Job {
   @Column()
   title: string;
 
-  @Column()
-  description: string;
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  /** Optional job photos (max 4 URLs) */
+  @Column({ type: 'simple-json', nullable: true })
+  pictures: string[] | null;
+
+  /** When true, location is optional */
+  @Column({ default: false })
+  isRemote: boolean;
 
   @Column({ nullable: true })
   requirements: string;

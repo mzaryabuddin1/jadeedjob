@@ -102,23 +102,35 @@ export class JobService {
       pageId = page.id;
     }
 
-    if (!data.location || data.isRemote === false) {
+    const isRemote = data.isRemote === true;
+
+    if (!isRemote) {
       if (
         typeof data.location?.lat !== 'number' ||
         typeof data.location?.lng !== 'number'
       ) {
-        throw new BadRequestException('Valid location is required');
+        throw new BadRequestException(
+          'Location (lat/lng) is required for on-site jobs',
+        );
       }
     }
 
-    const location =
-      data.isRemote === true
-        ? null
-        : () =>
-            `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+    const hasLocation =
+      typeof data.location?.lat === 'number' &&
+      typeof data.location?.lng === 'number';
+
+    const location = hasLocation
+      ? () =>
+          `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`
+      : null;
 
     const filters = await this.resolveJobFilters(data);
     const primaryFilterId = filters[0].id;
+
+    const pictures =
+      Array.isArray(data.pictures) && data.pictures.length
+        ? data.pictures.slice(0, 4)
+        : null;
 
     const {
       location: _location,
@@ -126,6 +138,7 @@ export class JobService {
       filterIds: _filterIds,
       filterId: _filterId,
       filters: _filters,
+      pictures: _pictures,
       ...jobData
     } = data;
 
@@ -135,6 +148,9 @@ export class JobService {
       createdBy: userId,
       pageId: pageId ?? null,
       location,
+      isRemote,
+      pictures,
+      description: data.description ?? null,
       isActive: true,
     });
 
@@ -401,26 +417,28 @@ export class JobService {
       }
     }
 
-    // ────────────────────────────────────────────────
-    // 2️⃣ LOCATION (optional)
-    // If location is provided:
-    //   - isRemote === true => location null
-    //   - else require lat/lng and build POINT
-    // ────────────────────────────────────────────────
+    // Location / remote:
+    // - isRemote true → location optional (omit or clear if not provided)
+    // - isRemote false (or becoming on-site) → location required when provided/needed
     let locationUpdate: any = undefined;
+    const becomingRemote = data.isRemote === true;
+    const becomingOnSite = data.isRemote === false;
 
-    if (data.isRemote === true) {
+    if (becomingRemote && data.location == null) {
       locationUpdate = null;
     } else if (data.location) {
       if (
         typeof data.location?.lat !== 'number' ||
         typeof data.location?.lng !== 'number'
       ) {
-        throw new BadRequestException('Valid location is required');
+        throw new BadRequestException('Valid location (lat/lng) is required');
       }
-
       locationUpdate = () =>
         `ST_GeomFromText('POINT(${data.location.lng} ${data.location.lat})', 4326)`;
+    } else if (becomingOnSite && !job.location) {
+      throw new BadRequestException(
+        'Location (lat/lng) is required for on-site jobs',
+      );
     }
 
     const {
@@ -429,6 +447,7 @@ export class JobService {
       filterIds,
       filterId,
       filters: _filters,
+      pictures,
       ...patch
     } = data;
 
@@ -442,6 +461,17 @@ export class JobService {
 
     if (locationUpdate !== undefined) {
       updatePayload.location = locationUpdate;
+    }
+
+    if (pictures !== undefined) {
+      updatePayload.pictures =
+        Array.isArray(pictures) && pictures.length
+          ? pictures.slice(0, 4)
+          : null;
+    }
+
+    if (data.description !== undefined) {
+      updatePayload.description = data.description || null;
     }
 
     // Update categories if provided

@@ -1,8 +1,10 @@
 import { JobService } from './job.service';
+import { FilesService } from 'src/files/files.service';
 export declare class JobController {
     private readonly jobService;
-    constructor(jobService: JobService);
-    createJob(body: any, req: any): Promise<import("./entities/job.entity").Job>;
+    private readonly filesService;
+    constructor(jobService: JobService, filesService: FilesService);
+    createJob(files: Express.Multer.File[], body: any, req: any): Promise<import("./entities/job.entity").Job>;
     findJobs(query: any, req: any): Promise<{
         data: any;
         total: number;
@@ -16,7 +18,9 @@ export declare class JobController {
         filterId: number;
         filters: import("../filter/entities/filter.entity").Filter[];
         title: string;
-        description: string;
+        description: string | null;
+        pictures: string[] | null;
+        isRemote: boolean;
         requirements: string;
         benefits: string[];
         shifts: string[];
@@ -43,14 +47,16 @@ export declare class JobController {
         pageId?: number;
         page?: import("../pages/entities/company-page.entity").CompanyPage;
     }>;
-    patchJob(id: number, body: any, req: any): Promise<{
+    patchJob(id: number, files: Express.Multer.File[], body: any, req: any): Promise<{
         filterIds: number[];
         id: number;
         filter: import("../filter/entities/filter.entity").Filter;
         filterId: number;
         filters: import("../filter/entities/filter.entity").Filter[];
         title: string;
-        description: string;
+        description: string | null;
+        pictures: string[] | null;
+        isRemote: boolean;
         requirements: string;
         benefits: string[];
         shifts: string[];

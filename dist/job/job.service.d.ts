@@ -32,7 +32,9 @@ export declare class JobService {
         filterId: number;
         filters: Filter[];
         title: string;
-        description: string;
+        description: string | null;
+        pictures: string[] | null;
+        isRemote: boolean;
         requirements: string;
         benefits: string[];
         shifts: string[];
@@ -66,7 +68,9 @@ export declare class JobService {
         filterId: number;
         filters: Filter[];
         title: string;
-        description: string;
+        description: string | null;
+        pictures: string[] | null;
+        isRemote: boolean;
         requirements: string;
         benefits: string[];
         shifts: string[];

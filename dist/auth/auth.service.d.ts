@@ -228,7 +228,7 @@ export declare class AuthService implements OnModuleInit {
         lastName: string;
         phone: string;
         email: string;
-        authProvider: "phone" | "google" | "facebook";
+        authProvider: "google" | "facebook" | "phone";
         googleId: string;
         facebookId: string;
         kyc_complete: boolean;

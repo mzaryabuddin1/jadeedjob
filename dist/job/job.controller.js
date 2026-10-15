@@ -11,24 +11,162 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JobController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const swagger_1 = require("@nestjs/swagger");
 const job_service_1 = require("./job.service");
-const joi_1 = __importDefault(require("joi"));
-const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
-let JobController = class JobController {
-    constructor(jobService) {
-        this.jobService = jobService;
+const files_service_1 = require("../files/files.service");
+const job_validation_1 = require("./job.validation");
+const multer_1 = require("multer");
+const path_1 = require("path");
+const imageFileFilter = (_req, file, cb) => {
+    if (!file.mimetype?.match(/^image\/(jpeg|jpg|png|webp|gif)$/)) {
+        return cb(new Error('Only image files are allowed (jpeg, png, webp, gif)'), false);
     }
-    async createJob(body, req) {
-        body.createdBy = req.user.id;
-        return this.jobService.createJob(body, req.user.id);
+    cb(null, true);
+};
+const picturesMulter = {
+    storage: (0, multer_1.diskStorage)({
+        destination: './uploads',
+        filename: (_req, file, callback) => {
+            const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${(0, path_1.extname)(file.originalname)}`;
+            callback(null, uniqueName);
+        },
+    }),
+    fileFilter: imageFileFilter,
+    limits: { files: 4, fileSize: 5 * 1024 * 1024 },
+};
+function validateBody(schema, body) {
+    const { error, value } = schema.validate(body, {
+        abortEarly: false,
+        stripUnknown: true,
+    });
+    if (error) {
+        throw new common_1.BadRequestException({
+            message: 'Validation failed',
+            errors: error.details.map((err) => err.message),
+        });
+    }
+    return value;
+}
+function mergePictures(urlsFromBody, files, filesService) {
+    const urls = [...(urlsFromBody || [])];
+    if (files?.length) {
+        for (const f of files) {
+            urls.push(filesService.getFileUrl(f.filename));
+        }
+    }
+    if (urls.length > 4) {
+        throw new common_1.BadRequestException('Maximum 4 pictures allowed');
+    }
+    return urls.length ? urls : undefined;
+}
+const jobBodyProperties = {
+    title: { type: 'string', example: 'Warehouse Helper' },
+    filterIds: {
+        type: 'array',
+        items: { type: 'number' },
+        example: [1, 11, 17],
+        description: 'One or more filter category ids (preferred, max 10)',
+    },
+    filterId: {
+        type: 'number',
+        example: 1,
+        description: 'Legacy single category — use filterIds instead',
+    },
+    description: {
+        type: 'string',
+        example: 'Need helpers for loading',
+        nullable: true,
+        description: 'Optional',
+    },
+    isRemote: {
+        type: 'boolean',
+        example: false,
+        description: 'If true, location is optional; otherwise location is required',
+    },
+    pageId: { type: 'number', nullable: true },
+    requirements: { type: 'string' },
+    benefits: { type: 'array', items: { type: 'string' }, example: ['Meals'] },
+    shifts: {
+        type: 'array',
+        items: {
+            type: 'string',
+            enum: ['morning', 'evening', 'night', 'rotational'],
+        },
+    },
+    jobTypes: {
+        type: 'array',
+        items: {
+            type: 'string',
+            enum: [
+                'full-time',
+                'part-time',
+                'contract',
+                'temporary',
+                'freelance',
+                'internship',
+            ],
+        },
+    },
+    salaryType: {
+        type: 'string',
+        enum: [
+            'piece-rate',
+            'daily-wage',
+            'hourly',
+            'monthly',
+            'fixed',
+            'commission',
+            'negotiable',
+        ],
+        example: 'daily-wage',
+    },
+    salaryAmount: { type: 'number', example: 1500 },
+    currency: { type: 'string', example: 'PKR' },
+    location: {
+        type: 'object',
+        nullable: true,
+        properties: {
+            lat: { type: 'number', example: 24.8607 },
+            lng: { type: 'number', example: 67.0011 },
+        },
+        description: 'Required when isRemote is false; optional when remote',
+    },
+    pictures: {
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
+        maxItems: 4,
+        description: 'Optional image files (max 4). Or send picture URLs as JSON array.',
+    },
+    startDate: { type: 'string', format: 'date' },
+    endDate: { type: 'string', format: 'date' },
+    industry: { type: 'string' },
+    educationLevel: { type: 'string' },
+    experienceRequired: { type: 'string' },
+    languageRequirements: {
+        type: 'array',
+        items: { type: 'string' },
+    },
+};
+let JobController = class JobController {
+    constructor(jobService, filesService) {
+        this.jobService = jobService;
+        this.filesService = filesService;
+    }
+    async createJob(files, body, req) {
+        const parsed = (0, job_validation_1.parseJobBody)(body);
+        const data = validateBody(job_validation_1.createJobSchema, parsed);
+        const pictures = mergePictures(data.pictures, files, this.filesService);
+        return this.jobService.createJob({
+            ...data,
+            pictures: pictures ?? null,
+            description: data.description || null,
+            createdBy: req.user.id,
+        }, req.user.id);
     }
     async findJobs(query, req) {
         return this.jobService.findJobs(query, req.user.id);
@@ -36,8 +174,18 @@ let JobController = class JobController {
     async findJob(id) {
         return this.jobService.findJobById(id);
     }
-    async patchJob(id, body, req) {
-        return this.jobService.updateJob(id, body, req.user.id);
+    async patchJob(id, files, body, req) {
+        const parsed = (0, job_validation_1.parseJobBody)(body);
+        const data = validateBody(job_validation_1.updateJobSchema, parsed);
+        const hasPictureInput = data.pictures !== undefined || (files && files.length > 0);
+        if (hasPictureInput) {
+            data.pictures = mergePictures(data.pictures, files, this.filesService) ?? [];
+        }
+        if (data.isRemote === true && data.location === undefined) {
+        }
+        if (data.isRemote === false && data.location !== undefined) {
+        }
+        return this.jobService.updateJob(id, data, req.user.id);
     }
 };
 exports.JobController = JobController;
@@ -45,129 +193,28 @@ __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Create job',
-        description: 'Tag one or more categories via `filterIds` (preferred) or single `filterId`. Max 10.',
+        description: [
+            '- **Categories:** `filterIds` (1–10) or legacy `filterId`',
+            '- **Pictures:** optional, max **4** images (`multipart` field `pictures`) or URL array',
+            '- **Remote:** `isRemote: true` → `location` optional; otherwise `location` required',
+            '- **Description:** optional',
+            '- Other fields remain optional',
+        ].join('\n'),
     }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data', 'application/json'),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
-            required: [
-                'title',
-                'description',
-                'salaryType',
-                'salaryAmount',
-                'location',
-            ],
-            properties: {
-                title: { type: 'string', example: 'Warehouse Helper' },
-                filterIds: {
-                    type: 'array',
-                    items: { type: 'number' },
-                    example: [1, 11, 17],
-                    description: 'One or more filter category ids (preferred)',
-                },
-                filterId: {
-                    type: 'number',
-                    example: 1,
-                    description: 'Legacy single category — use filterIds instead',
-                },
-                description: { type: 'string', example: 'Need helpers for loading' },
-                pageId: { type: 'number', nullable: true },
-                requirements: { type: 'string' },
-                benefits: { type: 'array', items: { type: 'string' }, example: ['Meals'] },
-                shifts: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: ['morning', 'evening', 'night', 'rotational'],
-                    },
-                },
-                jobTypes: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: [
-                            'full-time',
-                            'part-time',
-                            'contract',
-                            'temporary',
-                            'freelance',
-                            'internship',
-                        ],
-                    },
-                },
-                salaryType: {
-                    type: 'string',
-                    enum: [
-                        'piece-rate',
-                        'daily-wage',
-                        'hourly',
-                        'monthly',
-                        'fixed',
-                        'commission',
-                        'negotiable',
-                    ],
-                    example: 'daily-wage',
-                },
-                salaryAmount: { type: 'number', example: 1500 },
-                currency: { type: 'string', example: 'PKR' },
-                location: {
-                    type: 'object',
-                    properties: {
-                        lat: { type: 'number', example: 24.8607 },
-                        lng: { type: 'number', example: 67.0011 },
-                    },
-                },
-                startDate: { type: 'string', format: 'date' },
-                endDate: { type: 'string', format: 'date' },
-                industry: { type: 'string' },
-                educationLevel: { type: 'string' },
-                experienceRequired: { type: 'string' },
-                languageRequirements: {
-                    type: 'array',
-                    items: { type: 'string' },
-                },
-            },
+            required: ['title', 'salaryType', 'salaryAmount'],
+            properties: jobBodyProperties,
         },
     }),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        title: joi_1.default.string().required(),
-        filterIds: joi_1.default.array()
-            .items(joi_1.default.number().integer().positive())
-            .min(1)
-            .max(10)
-            .unique()
-            .optional(),
-        filterId: joi_1.default.number().integer().positive().optional(),
-        description: joi_1.default.string().required(),
-        pageId: joi_1.default.number().optional(),
-        requirements: joi_1.default.string().optional(),
-        benefits: joi_1.default.array().items(joi_1.default.string()).optional(),
-        shifts: joi_1.default.array().items(joi_1.default.string().valid('morning', 'evening', 'night', 'rotational')),
-        jobTypes: joi_1.default.array().items(joi_1.default.string().valid('full-time', 'part-time', 'contract', 'temporary', 'freelance', 'internship')),
-        salaryType: joi_1.default.string()
-            .valid('piece-rate', 'daily-wage', 'hourly', 'monthly', 'fixed', 'commission', 'negotiable')
-            .required(),
-        salaryAmount: joi_1.default.number().required(),
-        currency: joi_1.default.string().optional(),
-        location: joi_1.default.object({
-            lat: joi_1.default.number().required(),
-            lng: joi_1.default.number().required(),
-        }).required(),
-        startDate: joi_1.default.date().optional(),
-        endDate: joi_1.default.date().optional(),
-        industry: joi_1.default.string().optional(),
-        educationLevel: joi_1.default.string().optional(),
-        experienceRequired: joi_1.default.string().optional(),
-        languageRequirements: joi_1.default.array().items(joi_1.default.string()).optional(),
-    })
-        .or('filterIds', 'filterId')
-        .messages({
-        'object.missing': 'Provide filterIds or filterId',
-    }))),
-    __param(0, (0, common_1.Body)()),
-    __param(1, (0, common_1.Req)()),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('pictures', 4, picturesMulter)),
+    __param(0, (0, common_1.UploadedFiles)()),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:paramtypes", [Array, Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "createJob", null);
 __decorate([
@@ -191,116 +238,27 @@ __decorate([
     (0, common_1.Patch)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Update job',
-        description: 'Optionally replace categories with `filterIds` (1–10) or legacy `filterId`.',
+        description: [
+            'Partial update. Same rules as create:',
+            '- `filterIds` / `filterId` to replace categories',
+            '- `isRemote: true` clears requirement for location (sets remote)',
+            '- `pictures` files or URLs replace existing (max 4)',
+        ].join('\n'),
     }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data', 'application/json'),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
-            properties: {
-                title: { type: 'string' },
-                description: { type: 'string' },
-                filterIds: {
-                    type: 'array',
-                    items: { type: 'number' },
-                    example: [1, 11, 17],
-                    description: 'Replace all job categories (1–10 ids)',
-                },
-                filterId: {
-                    type: 'number',
-                    description: 'Legacy single category — use filterIds instead',
-                },
-                pageId: { type: 'number' },
-                requirements: { type: 'string' },
-                benefits: { type: 'array', items: { type: 'string' } },
-                shifts: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: ['morning', 'evening', 'night', 'rotational'],
-                    },
-                },
-                jobTypes: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: [
-                            'full-time',
-                            'part-time',
-                            'contract',
-                            'temporary',
-                            'freelance',
-                            'internship',
-                        ],
-                    },
-                },
-                salaryType: {
-                    type: 'string',
-                    enum: [
-                        'piece-rate',
-                        'daily-wage',
-                        'hourly',
-                        'monthly',
-                        'fixed',
-                        'commission',
-                        'negotiable',
-                    ],
-                },
-                salaryAmount: { type: 'number' },
-                currency: { type: 'string' },
-                location: {
-                    type: 'object',
-                    properties: {
-                        lat: { type: 'number' },
-                        lng: { type: 'number' },
-                    },
-                },
-                startDate: { type: 'string', format: 'date' },
-                endDate: { type: 'string', format: 'date' },
-                industry: { type: 'string' },
-                educationLevel: { type: 'string' },
-                experienceRequired: { type: 'string' },
-                languageRequirements: {
-                    type: 'array',
-                    items: { type: 'string' },
-                },
-            },
+            properties: jobBodyProperties,
         },
     }),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('pictures', 4, picturesMulter)),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
-    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        title: joi_1.default.string().optional(),
-        description: joi_1.default.string().optional(),
-        pageId: joi_1.default.number().optional(),
-        filterIds: joi_1.default.array()
-            .items(joi_1.default.number().integer().positive())
-            .min(1)
-            .max(10)
-            .unique()
-            .optional(),
-        filterId: joi_1.default.number().integer().positive().optional(),
-        requirements: joi_1.default.string().optional(),
-        benefits: joi_1.default.array().items(joi_1.default.string()).optional(),
-        shifts: joi_1.default.array().items(joi_1.default.string().valid('morning', 'evening', 'night', 'rotational')),
-        jobTypes: joi_1.default.array().items(joi_1.default.string().valid('full-time', 'part-time', 'contract', 'temporary', 'freelance', 'internship')),
-        salaryType: joi_1.default.string()
-            .valid('piece-rate', 'daily-wage', 'hourly', 'monthly', 'fixed', 'commission', 'negotiable')
-            .optional(),
-        salaryAmount: joi_1.default.number().optional(),
-        currency: joi_1.default.string().optional(),
-        location: joi_1.default.object({
-            lat: joi_1.default.number().required(),
-            lng: joi_1.default.number().required(),
-        }).optional(),
-        startDate: joi_1.default.date().optional(),
-        endDate: joi_1.default.date().optional(),
-        industry: joi_1.default.string().optional(),
-        educationLevel: joi_1.default.string().optional(),
-        experienceRequired: joi_1.default.string().optional(),
-        languageRequirements: joi_1.default.array().items(joi_1.default.string()).optional(),
-    })))),
-    __param(2, (0, common_1.Req)()),
+    __param(1, (0, common_1.UploadedFiles)()),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:paramtypes", [Number, Array, Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobController.prototype, "patchJob", null);
 exports.JobController = JobController = __decorate([
@@ -308,6 +266,7 @@ exports.JobController = JobController = __decorate([
     (0, swagger_1.ApiBearerAuth)('JWT'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('job'),
-    __metadata("design:paramtypes", [job_service_1.JobService])
+    __metadata("design:paramtypes", [job_service_1.JobService,
+        files_service_1.FilesService])
 ], JobController);
 //# sourceMappingURL=job.controller.js.map

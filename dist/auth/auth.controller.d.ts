@@ -679,7 +679,7 @@ export declare class AuthController {
             lastName: string;
             phone: string;
             email: string;
-            authProvider: "phone" | "google" | "facebook";
+            authProvider: "google" | "facebook" | "phone";
             googleId: string;
             facebookId: string;
             kyc_complete: boolean;

@@ -34,7 +34,9 @@ function setupSwagger(app) {
         'Seed: `npm run seed:filters`',
         '',
         '### Jobs',
-        'Create/update with `filterIds: number[]` (1–10 categories). Legacy `filterId` still works.',
+        'Create/update: `filterIds` (1–10), optional `pictures` (max 4 images),',
+        '`isRemote: true` → location optional; otherwise location required.',
+        'Description optional. Multipart or JSON supported.',
     ].join('\n'))
         .setVersion('1.0')
         .addBearerAuth({
