@@ -9,6 +9,7 @@ export type CustomFilterIcon = {
     svg: string;
 };
 export type FilterIcon = TablerFilterIcon | CustomFilterIcon;
+export declare function normalizeFilterIcon(icon: FilterIcon | string | null | undefined): FilterIcon;
 export declare class Filter {
     id: number;
     name: string;

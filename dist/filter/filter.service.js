@@ -51,21 +51,7 @@ let FilterService = class FilterService {
         };
     }
     normalizeIcon(icon) {
-        if (!icon) {
-            return { type: 'tabler', name: 'briefcase' };
-        }
-        if (typeof icon === 'string') {
-            const match = icon.match(/icon:\s*'([^']+)'/);
-            const name = match?.[1] || icon.replace(/^fas\s+fa-/, '').trim() || 'briefcase';
-            return { type: 'tabler', name };
-        }
-        if (icon.type === 'tabler' && icon.name) {
-            return { type: 'tabler', name: String(icon.name).trim() };
-        }
-        if (icon.type === 'custom' && icon.svg) {
-            return { type: 'custom', svg: String(icon.svg) };
-        }
-        return { type: 'tabler', name: 'briefcase' };
+        return (0, filter_entity_1.normalizeFilterIcon)(icon);
     }
     async getFilters(query, options) {
         const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'DESC', createdBy, preference = true, } = query;

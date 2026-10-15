@@ -196,7 +196,7 @@ export class JobController {
     summary: 'Create job',
     description: [
       '- **Categories:** `filterIds` (1–10) or legacy `filterId`. Saved in the `job_filters` table; `jobs.filterId` keeps only the first (primary) one',
-      '- Response returns `filterIds` + `filters` with all selected categories',
+      '- Response returns `filterIds`, `filters` (`{ id, name, icon }` each) and primary `filter`',
       '- **Pictures:** optional, max **4** images (`multipart` field `pictures`) or URL array',
       '- **Remote:** `isRemote: true` → `location` optional; otherwise `location` required',
       '- **Description:** optional',
@@ -245,7 +245,7 @@ export class JobController {
   @ApiOperation({
     summary: 'List jobs',
     description: [
-      'Every job in the response includes `filterIds` (all selected categories) and `filters` (full category objects).',
+      'Every job includes `filterIds`, `filters` (all categories as `{ id, name, icon }`) and `filter` (primary category). `icon` is `{ type: "tabler", name }` or `{ type: "custom", svg }`.',
       '- **My jobs:** `myjobs=true` → only jobs created by the logged-in user (active + inactive)',
       '- **Nearby:** send `lat` + `lng` (+ `radiusKm`) → geo search, adds `distance` (meters)',
       '- **Category:** `filter=11` or `filter=1,11,17` → jobs tagged with any of these',
@@ -306,7 +306,7 @@ export class JobController {
   @ApiOperation({
     summary: 'Get job by id',
     description:
-      'Response includes `filterIds` and `filters` (all categories of the job).',
+      'Response includes `filterIds`, `filters` (`{ id, name, icon }` for every category) and `filter` (primary).',
   })
   async findJob(@Param('id') id: number) {
     return this.jobService.findJobById(id);

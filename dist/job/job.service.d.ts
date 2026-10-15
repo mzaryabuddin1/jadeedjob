@@ -16,15 +16,24 @@ export declare class JobService {
     private safeSortColumn;
     private safeSortOrder;
     private parseFilterQuery;
-    private toFilterIds;
+    private toJobFilter;
+    private jobCategories;
     private loadFiltersByJobIds;
     private resolveJobFilters;
     createJob(data: any, userId: number): Promise<{
-        filterIds: number[];
+        filter: {
+            id: number;
+            name: string;
+            icon: import("src/filter/entities/filter.entity").FilterIcon;
+        };
+        filters: {
+            id: number;
+            name: string;
+            icon: import("src/filter/entities/filter.entity").FilterIcon;
+        }[];
+        filterIds?: number[];
         id: number;
-        filter: Filter;
         filterId: number;
-        filters: Filter[];
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -68,11 +77,19 @@ export declare class JobService {
         currentPage: number;
     }>;
     findJobById(id: number): Promise<{
+        filter: {
+            id: number;
+            name: string;
+            icon: import("src/filter/entities/filter.entity").FilterIcon;
+        };
+        filters: {
+            id: number;
+            name: string;
+            icon: import("src/filter/entities/filter.entity").FilterIcon;
+        }[];
         filterIds: number[];
         id: number;
-        filter: Filter;
         filterId: number;
-        filters: Filter[];
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -104,11 +121,19 @@ export declare class JobService {
         page?: CompanyPage;
     }>;
     updateJob(id: number, data: any, userId: number): Promise<{
+        filter: {
+            id: number;
+            name: string;
+            icon: import("src/filter/entities/filter.entity").FilterIcon;
+        };
+        filters: {
+            id: number;
+            name: string;
+            icon: import("src/filter/entities/filter.entity").FilterIcon;
+        }[];
         filterIds: number[];
         id: number;
-        filter: Filter;
         filterId: number;
-        filters: Filter[];
         title: string;
         description: string | null;
         pictures: string[] | null;

@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
-import { Filter, FilterIcon } from './entities/filter.entity';
+import {
+  Filter,
+  FilterIcon,
+  normalizeFilterIcon,
+} from './entities/filter.entity';
 import { User } from 'src/users/entities/user.entity';
 import { toSentenceCase } from 'src/common/utils/utils.util';
 import { SEED_FILTERS } from './seed-filters.data';
@@ -21,9 +25,9 @@ export class FilterService {
   ) {}
 
   /** Max updatedAt across filters — use for client cache invalidation */
-  async getLastUpdateTime(
-    options?: { approvedOnly?: boolean },
-  ): Promise<string | null> {
+  async getLastUpdateTime(options?: {
+    approvedOnly?: boolean;
+  }): Promise<string | null> {
     const qb = this.filterRepo
       .createQueryBuilder('filter')
       .select('MAX(filter.updatedAt)', 'lastUpdate');
@@ -53,22 +57,7 @@ export class FilterService {
 
   /** Normalize legacy string icons → tabler object */
   normalizeIcon(icon: FilterIcon | string | null | undefined): FilterIcon {
-    if (!icon) {
-      return { type: 'tabler', name: 'briefcase' };
-    }
-    if (typeof icon === 'string') {
-      // Legacy: "{ icon: 'hammer' }" or "hammer" or "fas fa-..."
-      const match = icon.match(/icon:\s*'([^']+)'/);
-      const name = match?.[1] || icon.replace(/^fas\s+fa-/, '').trim() || 'briefcase';
-      return { type: 'tabler', name };
-    }
-    if (icon.type === 'tabler' && icon.name) {
-      return { type: 'tabler', name: String(icon.name).trim() };
-    }
-    if (icon.type === 'custom' && icon.svg) {
-      return { type: 'custom', svg: String(icon.svg) };
-    }
-    return { type: 'tabler', name: 'briefcase' };
+    return normalizeFilterIcon(icon);
   }
 
   async getFilters(

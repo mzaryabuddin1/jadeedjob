@@ -56,11 +56,26 @@ let JobService = JobService_1 = class JobService {
             ...new Set(parts.map((s) => Number(String(s).trim())).filter((n) => n > 0)),
         ];
     }
-    toFilterIds(job) {
-        const ids = (job.filters || []).map((f) => f.id);
-        if (!ids.length && job.filterId)
-            return [job.filterId];
-        return ids;
+    toJobFilter(f) {
+        return { id: f.id, name: f.name, icon: (0, filter_entity_1.normalizeFilterIcon)(f.icon) };
+    }
+    jobCategories(job) {
+        let filters = job.filters || [];
+        if (!filters.length && job.filter)
+            filters = [job.filter];
+        const primary = job.filter ??
+            filters.find((f) => f.id === job.filterId) ??
+            filters[0] ??
+            null;
+        return {
+            filter: primary ? this.toJobFilter(primary) : null,
+            filters: filters.map((f) => this.toJobFilter(f)),
+            filterIds: filters.length
+                ? filters.map((f) => f.id)
+                : job.filterId
+                    ? [job.filterId]
+                    : [],
+        };
     }
     async loadFiltersByJobIds(jobIds) {
         const map = new Map();
@@ -68,12 +83,17 @@ let JobService = JobService_1 = class JobService {
             return map;
         const jobs = await this.jobRepo
             .createQueryBuilder('job')
-            .select('job.id')
+            .select(['job.id', 'job.filterId'])
+            .leftJoinAndSelect('job.filter', 'filter')
             .leftJoinAndSelect('job.filters', 'filters')
             .whereInIds(jobIds)
             .getMany();
-        for (const job of jobs)
-            map.set(job.id, job.filters || []);
+        for (const job of jobs) {
+            map.set(job.id, {
+                filter: job.filter || null,
+                filters: job.filters || [],
+            });
+        }
         return map;
     }
     async resolveJobFilters(data) {
@@ -208,7 +228,7 @@ let JobService = JobService_1 = class JobService {
         }
         return {
             ...withFilters,
-            filterIds: withFilters ? this.toFilterIds(withFilters) : [],
+            ...(withFilters ? this.jobCategories(withFilters) : {}),
         };
     }
     async findNearbyJobs(query) {
@@ -258,9 +278,8 @@ let JobService = JobService_1 = class JobService {
         return {
             data: jobs.map((j) => ({
                 ...j,
-                filters: filtersByJob.get(j.id) || [],
-                filterIds: this.toFilterIds({
-                    filters: filtersByJob.get(j.id),
+                ...this.jobCategories({
+                    ...filtersByJob.get(j.id),
                     filterId: j.filterId,
                 }),
                 location: {
@@ -319,7 +338,7 @@ let JobService = JobService_1 = class JobService {
         return {
             data: jobs.map((job) => ({
                 ...job,
-                filterIds: this.toFilterIds(job),
+                ...this.jobCategories(job),
                 pageTaggedJob: job.pageId ? true : false,
                 page: job.pageId
                     ? {
@@ -348,7 +367,7 @@ let JobService = JobService_1 = class JobService {
         }
         return {
             ...job,
-            filterIds: this.toFilterIds(job),
+            ...this.jobCategories(job),
         };
     }
     async updateJob(id, data, userId) {
@@ -448,7 +467,7 @@ let JobService = JobService_1 = class JobService {
             throw new common_1.BadRequestException('Failed to load updated job');
         return {
             ...updated,
-            filterIds: this.toFilterIds(updated),
+            ...this.jobCategories(updated),
         };
     }
 };

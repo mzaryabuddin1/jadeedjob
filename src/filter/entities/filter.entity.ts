@@ -25,6 +25,29 @@ export type CustomFilterIcon = {
 
 export type FilterIcon = TablerFilterIcon | CustomFilterIcon;
 
+/** Normalize legacy string icons → tabler object (shared by filters + jobs) */
+export function normalizeFilterIcon(
+  icon: FilterIcon | string | null | undefined,
+): FilterIcon {
+  if (!icon) {
+    return { type: 'tabler', name: 'briefcase' };
+  }
+  if (typeof icon === 'string') {
+    // Legacy: "{ icon: 'hammer' }" or "hammer" or "fas fa-..."
+    const match = icon.match(/icon:\s*'([^']+)'/);
+    const name =
+      match?.[1] || icon.replace(/^fas\s+fa-/, '').trim() || 'briefcase';
+    return { type: 'tabler', name };
+  }
+  if (icon.type === 'tabler' && icon.name) {
+    return { type: 'tabler', name: String(icon.name).trim() };
+  }
+  if (icon.type === 'custom' && icon.svg) {
+    return { type: 'custom', svg: String(icon.svg) };
+  }
+  return { type: 'tabler', name: 'briefcase' };
+}
+
 @Entity('filters')
 export class Filter {
   @PrimaryGeneratedColumn()

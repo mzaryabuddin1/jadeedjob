@@ -9,7 +9,7 @@ import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
 import { FirebaseService } from '../firebase/firebase.service';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
-import { Filter } from 'src/filter/entities/filter.entity';
+import { Filter, normalizeFilterIcon } from 'src/filter/entities/filter.entity';
 
 @Injectable()
 export class JobService {
@@ -80,34 +80,62 @@ export class JobService {
     ];
   }
 
-  /**
-   * Categories live in the `job_filters` join table (not a column on `jobs`).
-   * Older jobs may only have `jobs.filterId` — fall back to that.
-   */
-  private toFilterIds(job: {
-    filters?: Filter[];
-    filterId?: number;
-  }): number[] {
-    const ids = (job.filters || []).map((f) => f.id);
-    if (!ids.length && job.filterId) return [job.filterId];
-    return ids;
+  /** Slim category for job responses — what the app needs to render a chip */
+  private toJobFilter(f: Filter) {
+    return { id: f.id, name: f.name, icon: normalizeFilterIcon(f.icon) };
   }
 
-  /** Load tagged filters for many jobs in one query (for raw SQL results) */
+  /**
+   * Categories live in the `job_filters` join table (not a column on `jobs`).
+   * Older jobs may only have `jobs.filterId` — fall back to the primary filter.
+   * Returns `filter` (primary), `filters` and `filterIds`, each with icons.
+   */
+  private jobCategories(job: {
+    filters?: Filter[] | null;
+    filter?: Filter | null;
+    filterId?: number;
+  }) {
+    let filters = job.filters || [];
+    if (!filters.length && job.filter) filters = [job.filter];
+
+    const primary =
+      job.filter ??
+      filters.find((f) => f.id === job.filterId) ??
+      filters[0] ??
+      null;
+
+    return {
+      filter: primary ? this.toJobFilter(primary) : null,
+      filters: filters.map((f) => this.toJobFilter(f)),
+      filterIds: filters.length
+        ? filters.map((f) => f.id)
+        : job.filterId
+          ? [job.filterId]
+          : [],
+    };
+  }
+
+  /** Load primary + tagged filters for many jobs in one query (for raw SQL results) */
   private async loadFiltersByJobIds(
     jobIds: number[],
-  ): Promise<Map<number, Filter[]>> {
-    const map = new Map<number, Filter[]>();
+  ): Promise<Map<number, { filter: Filter | null; filters: Filter[] }>> {
+    const map = new Map<number, { filter: Filter | null; filters: Filter[] }>();
     if (!jobIds.length) return map;
 
     const jobs = await this.jobRepo
       .createQueryBuilder('job')
-      .select('job.id')
+      .select(['job.id', 'job.filterId'])
+      .leftJoinAndSelect('job.filter', 'filter')
       .leftJoinAndSelect('job.filters', 'filters')
       .whereInIds(jobIds)
       .getMany();
 
-    for (const job of jobs) map.set(job.id, job.filters || []);
+    for (const job of jobs) {
+      map.set(job.id, {
+        filter: job.filter || null,
+        filters: job.filters || [],
+      });
+    }
     return map;
   }
 
@@ -303,7 +331,7 @@ export class JobService {
 
     return {
       ...withFilters,
-      filterIds: withFilters ? this.toFilterIds(withFilters) : [],
+      ...(withFilters ? this.jobCategories(withFilters) : {}),
     };
   }
 
@@ -398,9 +426,8 @@ export class JobService {
     return {
       data: jobs.map((j) => ({
         ...j,
-        filters: filtersByJob.get(j.id) || [],
-        filterIds: this.toFilterIds({
-          filters: filtersByJob.get(j.id),
+        ...this.jobCategories({
+          ...filtersByJob.get(j.id),
           filterId: j.filterId,
         }),
         location: {
@@ -490,7 +517,7 @@ export class JobService {
     return {
       data: jobs.map((job) => ({
         ...job,
-        filterIds: this.toFilterIds(job),
+        ...this.jobCategories(job),
         pageTaggedJob: job.pageId ? true : false,
         page: job.pageId
           ? {
@@ -522,7 +549,7 @@ export class JobService {
 
     return {
       ...job,
-      filterIds: this.toFilterIds(job),
+      ...this.jobCategories(job),
     };
   }
 
@@ -658,7 +685,7 @@ export class JobService {
 
     return {
       ...updated,
-      filterIds: this.toFilterIds(updated),
+      ...this.jobCategories(updated),
     };
   }
 }

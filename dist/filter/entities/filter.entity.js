@@ -10,9 +10,27 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Filter = void 0;
+exports.normalizeFilterIcon = normalizeFilterIcon;
 const job_entity_1 = require("../../job/entities/job.entity");
 const user_entity_1 = require("../../users/entities/user.entity");
 const typeorm_1 = require("typeorm");
+function normalizeFilterIcon(icon) {
+    if (!icon) {
+        return { type: 'tabler', name: 'briefcase' };
+    }
+    if (typeof icon === 'string') {
+        const match = icon.match(/icon:\s*'([^']+)'/);
+        const name = match?.[1] || icon.replace(/^fas\s+fa-/, '').trim() || 'briefcase';
+        return { type: 'tabler', name };
+    }
+    if (icon.type === 'tabler' && icon.name) {
+        return { type: 'tabler', name: String(icon.name).trim() };
+    }
+    if (icon.type === 'custom' && icon.svg) {
+        return { type: 'custom', svg: String(icon.svg) };
+    }
+    return { type: 'tabler', name: 'briefcase' };
+}
 let Filter = class Filter {
 };
 exports.Filter = Filter;

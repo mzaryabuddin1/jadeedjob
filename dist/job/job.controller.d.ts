@@ -5,11 +5,19 @@ export declare class JobController {
     private readonly filesService;
     constructor(jobService: JobService, filesService: FilesService);
     createJob(files: Express.Multer.File[] | undefined, body: any, req: any): Promise<{
-        filterIds: number[];
+        filter: {
+            id: number;
+            name: string;
+            icon: import("../filter/entities/filter.entity").FilterIcon;
+        };
+        filters: {
+            id: number;
+            name: string;
+            icon: import("../filter/entities/filter.entity").FilterIcon;
+        }[];
+        filterIds?: number[];
         id: number;
-        filter: import("../filter/entities/filter.entity").Filter;
         filterId: number;
-        filters: import("../filter/entities/filter.entity").Filter[];
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -47,11 +55,19 @@ export declare class JobController {
         currentPage: number;
     }>;
     findJob(id: number): Promise<{
+        filter: {
+            id: number;
+            name: string;
+            icon: import("../filter/entities/filter.entity").FilterIcon;
+        };
+        filters: {
+            id: number;
+            name: string;
+            icon: import("../filter/entities/filter.entity").FilterIcon;
+        }[];
         filterIds: number[];
         id: number;
-        filter: import("../filter/entities/filter.entity").Filter;
         filterId: number;
-        filters: import("../filter/entities/filter.entity").Filter[];
         title: string;
         description: string | null;
         pictures: string[] | null;
@@ -83,11 +99,19 @@ export declare class JobController {
         page?: import("../pages/entities/company-page.entity").CompanyPage;
     }>;
     patchJob(id: number, files: Express.Multer.File[], body: any, req: any): Promise<{
+        filter: {
+            id: number;
+            name: string;
+            icon: import("../filter/entities/filter.entity").FilterIcon;
+        };
+        filters: {
+            id: number;
+            name: string;
+            icon: import("../filter/entities/filter.entity").FilterIcon;
+        }[];
         filterIds: number[];
         id: number;
-        filter: import("../filter/entities/filter.entity").Filter;
         filterId: number;
-        filters: import("../filter/entities/filter.entity").Filter[];
         title: string;
         description: string | null;
         pictures: string[] | null;
