@@ -154,6 +154,14 @@ Relationships to remember:
   sent. The old per-filter FCM topic send on job create was removed (it would
   duplicate and notify the creator); topic subscription code still exists.
 - Not done: stale FCM tokens aren't pruned; no notification history table.
+- `/docs` has a floating **Get FCM token** button (`src/swagger/fcm-token-button.ts`)
+  that returns the browser's FCM token (+ copy, send test push). Needs the
+  Firebase WEB app config in env: `FIREBASE_WEB_API_KEY`, `FIREBASE_WEB_APP_ID`,
+  `FIREBASE_WEB_MESSAGING_SENDER_ID`, `FIREBASE_WEB_VAPID_KEY`
+  (`FIREBASE_WEB_PROJECT_ID` optional). Service worker is served at
+  `/firebase-messaging-sw.js` (from `setupSwagger`). https or localhost only.
+- `GET /users/me/notification-settings` does not write; the DB column stays
+  NULL (= defaults) until the first `PATCH`.
 
 ## Conventions
 

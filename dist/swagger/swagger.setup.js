@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupSwagger = setupSwagger;
 const swagger_1 = require("@nestjs/swagger");
+const fcm_token_button_1 = require("./fcm-token-button");
 function setupSwagger(app) {
     const config = new swagger_1.DocumentBuilder()
         .setTitle('JobsLoot API')
@@ -46,6 +47,7 @@ function setupSwagger(app) {
         '(never one per filter): text `Job created in <matched filters> filter(s)`, sent via Firebase push and/or email per their settings.',
         'Push `data` payload (all strings): `type=job_created, jobId, title, text, createdAt, filterIds, filterIcon, filters (JSON), isRemote, salaryType, salaryAmount, currency, companyName, pageId, path`.',
         '`path` = deep link the app opens on tap (configured by env `NOTIFICATION_JOB_PATH`, `{id}` = job id; default `/job/{id}`).',
+        'Test push from this page: click **Get FCM token** (bottom-right) → copy token → send it as `fcmToken` in `POST /auth/login`. Needs `FIREBASE_WEB_*` env.',
     ].join('\n'))
         .setVersion('1.0')
         .addBearerAuth({
@@ -70,8 +72,17 @@ function setupSwagger(app) {
         .addTag('Files', 'File upload')
         .addTag('Firebase', 'Push notification helpers')
         .build();
+    const fcmWebConfig = (0, fcm_token_button_1.readFcmWebConfig)();
+    app
+        .getHttpAdapter()
+        .get('/firebase-messaging-sw.js', (_req, res) => {
+        res
+            .type('application/javascript')
+            .send((0, fcm_token_button_1.buildServiceWorker)(fcmWebConfig));
+    });
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup('docs', app, document, {
+        customJsStr: (0, fcm_token_button_1.buildFcmButtonScript)(fcmWebConfig),
         swaggerOptions: {
             persistAuthorization: true,
             docExpansion: 'list',
