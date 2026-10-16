@@ -7,6 +7,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
+import {
+  NotificationSettings,
+  resolveNotificationSettings,
+} from 'src/notification/notification-settings';
 
 @Injectable()
 export class UsersService {
@@ -52,6 +56,41 @@ export class UsersService {
     });
 
     return { data: user.filter_preferences ?? [] };
+  }
+
+  async getNotificationSettings(userId: number): Promise<NotificationSettings> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'notification_settings'],
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    return resolveNotificationSettings(user.notification_settings);
+  }
+
+  async updateNotificationSettings(
+    userId: number,
+    patch: Partial<NotificationSettings>,
+  ): Promise<NotificationSettings> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'email', 'notification_settings'],
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (patch.email === true && !user.email) {
+      throw new BadRequestException(
+        'Add an email to your account before enabling email notifications',
+      );
+    }
+
+    const next = {
+      ...resolveNotificationSettings(user.notification_settings),
+      ...patch,
+    };
+
+    await this.userRepo.update({ id: userId }, { notification_settings: next });
+    return next;
   }
 
   async updateUserFilterPreferences(userId: number, newFilters: number[]) {

@@ -106,6 +106,12 @@ let UsersController = class UsersController {
     async getMyPreferences(req) {
         return await this.usersService.getUserPreference(req.user.id);
     }
+    async getNotificationSettings(req) {
+        return this.usersService.getNotificationSettings(req.user.id);
+    }
+    async updateNotificationSettings(req, body) {
+        return this.usersService.updateNotificationSettings(req.user.id, body);
+    }
 };
 exports.UsersController = UsersController;
 __decorate([
@@ -231,6 +237,50 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getMyPreferences", null);
+__decorate([
+    (0, common_1.Get)('me/notification-settings'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get my notification settings',
+        description: 'Which channels get new-job notifications (jobs in my `filter_preferences`). Defaults: `push: true`, `email: false`.',
+    }),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getNotificationSettings", null);
+__decorate([
+    (0, common_1.Patch)('me/notification-settings'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update my notification settings',
+        description: [
+            'Send one or more channels; omitted channels keep their value.',
+            '- `push`: Firebase push notification to my devices',
+            '- `email`: email to my account email (an email must be set on the account)',
+            '',
+            'More channels can be added later without changing this shape.',
+        ].join('\n'),
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                push: { type: 'boolean', example: true },
+                email: { type: 'boolean', example: false },
+            },
+        },
+    }),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(Joi.object({
+        push: Joi.boolean().optional(),
+        email: Joi.boolean().optional(),
+    })
+        .min(1)
+        .messages({ 'object.min': 'Send at least one of: push, email' }))),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "updateNotificationSettings", null);
 exports.UsersController = UsersController = __decorate([
     (0, swagger_1.ApiTags)('Users'),
     (0, swagger_1.ApiBearerAuth)('JWT'),

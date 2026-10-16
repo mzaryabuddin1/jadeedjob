@@ -221,7 +221,50 @@ export class UsersController {
     return await this.usersService.getUserPreference(req.user.id);
   }
 
+  @Get('me/notification-settings')
+  @ApiOperation({
+    summary: 'Get my notification settings',
+    description:
+      'Which channels get new-job notifications (jobs in my `filter_preferences`). Defaults: `push: true`, `email: false`.',
+  })
+  async getNotificationSettings(@Req() req: any) {
+    return this.usersService.getNotificationSettings(req.user.id);
+  }
 
-
-  
+  @Patch('me/notification-settings')
+  @ApiOperation({
+    summary: 'Update my notification settings',
+    description: [
+      'Send one or more channels; omitted channels keep their value.',
+      '- `push`: Firebase push notification to my devices',
+      '- `email`: email to my account email (an email must be set on the account)',
+      '',
+      'More channels can be added later without changing this shape.',
+    ].join('\n'),
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        push: { type: 'boolean', example: true },
+        email: { type: 'boolean', example: false },
+      },
+    },
+  })
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        push: Joi.boolean().optional(),
+        email: Joi.boolean().optional(),
+      })
+        .min(1)
+        .messages({ 'object.min': 'Send at least one of: push, email' }),
+    ),
+  )
+  async updateNotificationSettings(
+    @Req() req: any,
+    @Body() body: { push?: boolean; email?: boolean },
+  ) {
+    return this.usersService.updateNotificationSettings(req.user.id, body);
+  }
 }

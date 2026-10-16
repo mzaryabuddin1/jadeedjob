@@ -293,6 +293,10 @@ __decorate([
     __metadata("design:type", Array)
 ], User.prototype, "filter_preferences", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'json', nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "notification_settings", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], User.prototype, "createdAt", void 0);

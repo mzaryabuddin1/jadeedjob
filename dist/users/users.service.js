@@ -18,6 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("./entities/user.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
+const notification_settings_1 = require("../notification/notification-settings");
 let UsersService = class UsersService {
     constructor(userRepo, firebaseService) {
         this.userRepo = userRepo;
@@ -52,6 +53,32 @@ let UsersService = class UsersService {
             where: { id: userId },
         });
         return { data: user.filter_preferences ?? [] };
+    }
+    async getNotificationSettings(userId) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            select: ['id', 'notification_settings'],
+        });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        return (0, notification_settings_1.resolveNotificationSettings)(user.notification_settings);
+    }
+    async updateNotificationSettings(userId, patch) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            select: ['id', 'email', 'notification_settings'],
+        });
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        if (patch.email === true && !user.email) {
+            throw new common_1.BadRequestException('Add an email to your account before enabling email notifications');
+        }
+        const next = {
+            ...(0, notification_settings_1.resolveNotificationSettings)(user.notification_settings),
+            ...patch,
+        };
+        await this.userRepo.update({ id: userId }, { notification_settings: next });
+        return next;
     }
     async updateUserFilterPreferences(userId, newFilters) {
         const unique = [...new Set(newFilters.map(Number))].filter((n) => !Number.isNaN(n) && n > 0);

@@ -20,6 +20,7 @@ import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
 import type { UserAuthIdentity } from './user-auth-identity.entity';
+import type { NotificationSettings } from 'src/notification/notification-settings';
 
 @Entity('users')
 export class User {
@@ -244,6 +245,14 @@ export class User {
 
   @Column('simple-array', { nullable: true })
   filter_preferences: number[];
+
+  /**
+   * Notification channels the user opted in to. `null` = defaults
+   * (see DEFAULT_NOTIFICATION_SETTINGS). New channels can be added later
+   * without a schema change.
+   */
+  @Column({ type: 'json', nullable: true })
+  notification_settings: NotificationSettings | null;
 
   // Auto timestamps
   @CreateDateColumn()

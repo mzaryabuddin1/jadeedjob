@@ -4,7 +4,7 @@ import { JobService } from './job.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Job } from './entities/job.entity';
 import { Filter } from 'src/filter/entities/filter.entity';
-import { FirebaseModule } from 'src/firebase/firebase.module';
+import { NotificationModule } from 'src/notification/notification.module';
 import { User } from 'src/users/entities/user.entity';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { FilesModule } from 'src/files/files.module';
@@ -12,7 +12,7 @@ import { FilesModule } from 'src/files/files.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Job, Filter, User, CompanyPage]),
-    FirebaseModule,
+    NotificationModule,
     FilesModule,
   ],
   controllers: [JobController],

@@ -19,16 +19,16 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const job_entity_1 = require("./entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
-const firebase_service_1 = require("../firebase/firebase.service");
+const notification_service_1 = require("../notification/notification.service");
 const company_page_entity_1 = require("../pages/entities/company-page.entity");
 const filter_entity_1 = require("../filter/entities/filter.entity");
 let JobService = JobService_1 = class JobService {
-    constructor(jobRepo, userRepo, pageRepo, filterRepo, firebaseService) {
+    constructor(jobRepo, userRepo, pageRepo, filterRepo, notificationService) {
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
         this.pageRepo = pageRepo;
         this.filterRepo = filterRepo;
-        this.firebaseService = firebaseService;
+        this.notificationService = notificationService;
     }
     toPointSql(lat, lng) {
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -197,16 +197,8 @@ let JobService = JobService_1 = class JobService {
             where: { id: insertedId },
             relations: ['filters', 'page'],
         });
-        for (const f of filters) {
-            try {
-                await this.firebaseService.sendToFilterTopic(f.id, 'New Job Posted', withFilters?.title ?? 'A new job matches your preferences!', {
-                    jobId: String(insertedId),
-                    filterId: String(f.id),
-                    filterIds: filters.map((x) => x.id).join(','),
-                });
-            }
-            catch {
-            }
+        if (withFilters) {
+            void this.notificationService.notifyJobCreated(withFilters);
         }
         return {
             ...withFilters,
@@ -476,6 +468,6 @@ exports.JobService = JobService = JobService_1 = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        firebase_service_1.FirebaseService])
+        notification_service_1.NotificationService])
 ], JobService);
 //# sourceMappingURL=job.service.js.map

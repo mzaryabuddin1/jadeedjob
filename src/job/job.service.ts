@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
-import { FirebaseService } from '../firebase/firebase.service';
+import { NotificationService } from '../notification/notification.service';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { Filter, normalizeFilterIcon } from 'src/filter/entities/filter.entity';
 
@@ -26,7 +26,7 @@ export class JobService {
     @InjectRepository(Filter)
     private filterRepo: Repository<Filter>,
 
-    private firebaseService: FirebaseService,
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -282,22 +282,11 @@ export class JobService {
       relations: ['filters', 'page'],
     });
 
-    // Notify subscribers of every tagged category
-    for (const f of filters) {
-      try {
-        await this.firebaseService.sendToFilterTopic(
-          f.id,
-          'New Job Posted',
-          withFilters?.title ?? 'A new job matches your preferences!',
-          {
-            jobId: String(insertedId),
-            filterId: String(f.id),
-            filterIds: filters.map((x) => x.id).join(','),
-          },
-        );
-      } catch {
-        // FCM is best-effort
-      }
+    // Notify users who prefer any of this job's filters (one notification per
+    // user, push/email per their settings). Runs in the background — it never
+    // delays or fails the create response.
+    if (withFilters) {
+      void this.notificationService.notifyJobCreated(withFilters);
     }
 
     return {

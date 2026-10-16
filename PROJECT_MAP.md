@@ -4,7 +4,7 @@ Quick orientation for humans and AI assistants. **Read this first instead of
 re-scanning the codebase.** Keep it updated when structure, routes, entities or
 conventions change (see "Maintenance" at the bottom).
 
-_Last verified: 2026-10-16 (after commit `6ded8fb`)._
+_Last verified: 2026-10-16 (after the notifications feature)._
 
 ## What it is
 
@@ -45,7 +45,8 @@ src/
   organization/            older org/members concept (similar to pages)
   country/ city/ language/ reference data + seed commands
   files/                   multer upload -> ./uploads, served at /uploads
-  firebase/                FCM: per-filter topics `filter_<id>`, notifications
+  firebase/                FCM wrapper: sendToTokens (chunked multicast), legacy filter topics
+  notification/            new-job notifications: NotificationService, MailService (SMTP), settings types
   otp/ twilio/             OTP store (in-memory, DEV fixed codes) + SMS
   common/                  AllExceptionsFilter, JoiValidationPipe, utils
   commands/                seed-* CLI entrypoints (npm run seed:*)
@@ -75,7 +76,7 @@ test/                      e2e scaffold only (auth.service.spec.ts is the one re
 | Area | Routes | Guard |
 |---|---|---|
 | auth | `POST /auth/register/send-otp, register/verify-otp, login, google, facebook, kyc/send-otp, kyc/verify-otp, link-identity/confirm, forgot-password/send-otp, forgot-password/verify-otp`; `update-email/send-otp, update-email/verify-otp` (JWT); debug endpoints | mostly public |
-| users | `PATCH /users/me`, `GET /users/me/preferences` | JWT |
+| users | `PATCH /users/me`, `GET /users/me/preferences`, `GET|PATCH /users/me/notification-settings` | JWT |
 | jobs | `POST /job`, `GET /job`, `GET /job/:id`, `PATCH /job/:id` | JWT |
 | applications | `POST /job-application`, `GET /my`, `GET /job/:jobId`, `PATCH /:id/status` | JWT |
 | chat | `GET /chat/application/:id/messages`; WS ns `/chat`: `joinApplication`, `sendMessage` → emits `newMessage` | JWT (WS: token in handshake) |
@@ -127,6 +128,32 @@ Relationships to remember:
     (remote jobs excluded then).
   - Category filtering uses `EXISTS` on `job_filters`.
 - `GET /job/:id` only returns `isActive` jobs.
+
+## Notifications (`src/notification/`)
+
+- User setting `users.notification_settings` (JSON, null = defaults):
+  `{ push: boolean, email: boolean }`, defaults `push:true, email:false`.
+  `GET|PATCH /users/me/notification-settings`; enabling email needs an account
+  email (400 otherwise). New channels: add to `notification-settings.ts`, the Joi
+  schema in `users.controller.ts`, and a sender in `NotificationService`.
+- On job create, `JobService` calls `NotificationService.notifyJobCreated(job)`
+  (fire-and-forget, never throws). Recipients = users whose `filter_preferences`
+  contain ANY of the job's filters (`FIND_IN_SET`), minus the creator and banned
+  users. **One notification per user** (never per filter); text is
+  `Job created in <filters matched for that user> filter(s)`. Users are grouped by
+  matched-filter set, push goes via `FirebaseService.sendToTokens`, email via
+  `MailService` per user.
+- Push `data` payload (all strings): `type=job_created, jobId, title, text,
+  createdAt, filterIds, filterIcon, filters(JSON), isRemote, salaryType,
+  salaryAmount, currency, companyName, pageId, path`. Custom SVG icons send only
+  `{type:'custom'}` (FCM 4KB limit). `path` = deep link from env
+  `NOTIFICATION_JOB_PATH` (`{id}` placeholder, default `/job/{id}`) — to be
+  configured with the app.
+- Email: SMTP via nodemailer. Env `SMTP_HOST SMTP_PORT SMTP_SECURE SMTP_USER
+  SMTP_PASS MAIL_FROM`. **If `SMTP_HOST` is unset emails are only logged**, not
+  sent. The old per-filter FCM topic send on job create was removed (it would
+  duplicate and notify the creator); topic subscription code still exists.
+- Not done: stale FCM tokens aren't pruned; no notification history table.
 
 ## Conventions
 

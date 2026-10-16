@@ -123,6 +123,7 @@ export declare class AuthService implements OnModuleInit {
         messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
         jobsCreated: import("../job/entities/job.entity").Job[];
         filter_preferences: number[];
+        notification_settings: import("../notification/notification-settings").NotificationSettings | null;
         createdAt: Date;
         updatedAt: Date;
     };
@@ -194,6 +195,7 @@ export declare class AuthService implements OnModuleInit {
             messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
             jobsCreated: import("../job/entities/job.entity").Job[];
             filter_preferences: number[];
+            notification_settings: import("../notification/notification-settings").NotificationSettings | null;
             createdAt: Date;
             updatedAt: Date;
         };
@@ -358,6 +360,7 @@ export declare class AuthService implements OnModuleInit {
             messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
             jobsCreated: import("../job/entities/job.entity").Job[];
             filter_preferences: number[];
+            notification_settings: import("../notification/notification-settings").NotificationSettings | null;
             createdAt: Date;
             updatedAt: Date;
         };
@@ -442,6 +445,7 @@ export declare class AuthService implements OnModuleInit {
             messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
             jobsCreated: import("../job/entities/job.entity").Job[];
             filter_preferences: number[];
+            notification_settings: import("../notification/notification-settings").NotificationSettings | null;
             createdAt: Date;
             updatedAt: Date;
         };
@@ -533,6 +537,7 @@ export declare class AuthService implements OnModuleInit {
             messagesSent: import("../chat/entities/chat-message.entity").ChatMessage[];
             jobsCreated: import("../job/entities/job.entity").Job[];
             filter_preferences: number[];
+            notification_settings: import("../notification/notification-settings").NotificationSettings | null;
             createdAt: Date;
             updatedAt: Date;
         };

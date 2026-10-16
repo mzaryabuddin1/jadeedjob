@@ -14,4 +14,9 @@ export declare class UsersController {
     getMyPreferences(req: any): Promise<{
         data: number[];
     }>;
+    getNotificationSettings(req: any): Promise<import("../notification/notification-settings").NotificationSettings>;
+    updateNotificationSettings(req: any, body: {
+        push?: boolean;
+        email?: boolean;
+    }): Promise<import("../notification/notification-settings").NotificationSettings>;
 }

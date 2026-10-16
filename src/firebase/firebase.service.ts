@@ -19,6 +19,33 @@ export class FirebaseService {
   }
 
   // ────────────────────────────────────────────────
+  // Send one notification (+ data payload) to many device tokens.
+  // FCM allows max 500 tokens per multicast, so we chunk.
+  // `data` values must be strings (FCM requirement).
+  // ────────────────────────────────────────────────
+  async sendToTokens(
+    tokens: string[],
+    notification: { title: string; body: string },
+    data: Record<string, string> = {},
+  ): Promise<{ success: number; failure: number }> {
+    const unique = [...new Set(tokens.filter(Boolean))];
+    let success = 0;
+    let failure = 0;
+
+    for (let i = 0; i < unique.length; i += 500) {
+      const res = await this.firebaseApp.messaging().sendEachForMulticast({
+        tokens: unique.slice(i, i + 500),
+        notification,
+        data,
+      });
+      success += res.successCount;
+      failure += res.failureCount;
+    }
+
+    return { success, failure };
+  }
+
+  // ────────────────────────────────────────────────
   // NEW: Subscribe token to filter topics
   // ────────────────────────────────────────────────
   async subscribeTokenToFilters(token: string, filterIds: number[]) {
@@ -84,13 +111,13 @@ export class FirebaseService {
     });
   }
 
- async sendTestToToken(token: string) {
-  return this.firebaseApp.messaging().send({
-    token,
-    notification: {
-      title: "🔥 Test Notification",
-      body: "Your browser is receiving push notifications!",
-    },
-  });
-}
+  async sendTestToToken(token: string) {
+    return this.firebaseApp.messaging().send({
+      token,
+      notification: {
+        title: '🔥 Test Notification',
+        body: 'Your browser is receiving push notifications!',
+      },
+    });
+  }
 }

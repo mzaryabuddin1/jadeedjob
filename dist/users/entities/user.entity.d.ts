@@ -10,6 +10,7 @@ import { ChatMessage } from 'src/chat/entities/chat-message.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { Rating } from 'src/rating/entities/rating.entity';
 import type { UserAuthIdentity } from './user-auth-identity.entity';
+import type { NotificationSettings } from 'src/notification/notification-settings';
 export declare class User {
     id: number;
     email: string;
@@ -73,6 +74,7 @@ export declare class User {
     messagesSent: ChatMessage[];
     jobsCreated: Job[];
     filter_preferences: number[];
+    notification_settings: NotificationSettings | null;
     createdAt: Date;
     updatedAt: Date;
 }

@@ -58,6 +58,21 @@ let FirebaseService = class FirebaseService {
             notification: { title, body },
         });
     }
+    async sendToTokens(tokens, notification, data = {}) {
+        const unique = [...new Set(tokens.filter(Boolean))];
+        let success = 0;
+        let failure = 0;
+        for (let i = 0; i < unique.length; i += 500) {
+            const res = await this.firebaseApp.messaging().sendEachForMulticast({
+                tokens: unique.slice(i, i + 500),
+                notification,
+                data,
+            });
+            success += res.successCount;
+            failure += res.failureCount;
+        }
+        return { success, failure };
+    }
     async subscribeTokenToFilters(token, filterIds) {
         const topics = filterIds.map((id) => `filter_${id}`);
         for (const topic of topics) {
@@ -101,8 +116,8 @@ let FirebaseService = class FirebaseService {
         return this.firebaseApp.messaging().send({
             token,
             notification: {
-                title: "🔥 Test Notification",
-                body: "Your browser is receiving push notifications!",
+                title: '🔥 Test Notification',
+                body: 'Your browser is receiving push notifications!',
             },
         });
     }

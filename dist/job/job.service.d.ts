@@ -1,7 +1,7 @@
 import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
-import { FirebaseService } from '../firebase/firebase.service';
+import { NotificationService } from '../notification/notification.service';
 import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { Filter } from 'src/filter/entities/filter.entity';
 export declare class JobService {
@@ -9,8 +9,8 @@ export declare class JobService {
     private userRepo;
     private pageRepo;
     private filterRepo;
-    private firebaseService;
-    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, filterRepo: Repository<Filter>, firebaseService: FirebaseService);
+    private notificationService;
+    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, filterRepo: Repository<Filter>, notificationService: NotificationService);
     private toPointSql;
     private static readonly SORTABLE_COLUMNS;
     private safeSortColumn;

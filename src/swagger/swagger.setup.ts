@@ -39,6 +39,13 @@ export function setupSwagger(app: INestApplication) {
         'Description optional. Multipart or JSON supported.',
         'Categories are stored only in the `job_filters` join table (the `jobs` table has no category column).',
         'All job responses return `filterIds` and `filters` — each category is `{ id, name, icon }`. My jobs: `GET /job?myjobs=true`.',
+        '',
+        '### Notifications (new job)',
+        'Settings: `GET|PATCH /users/me/notification-settings` → `{ push, email }` (defaults `push: true`, `email: false`).',
+        'When a job is created, every user whose `filter_preferences` contain **any** of the job\'s filters (except the creator) gets **one** notification',
+        '(never one per filter): text `Job created in <matched filters> filter(s)`, sent via Firebase push and/or email per their settings.',
+        'Push `data` payload (all strings): `type=job_created, jobId, title, text, createdAt, filterIds, filterIcon, filters (JSON), isRemote, salaryType, salaryAmount, currency, companyName, pageId, path`.',
+        '`path` = deep link the app opens on tap (configured by env `NOTIFICATION_JOB_PATH`, `{id}` = job id; default `/job/{id}`).',
       ].join('\n'),
     )
     .setVersion('1.0')
@@ -53,7 +60,7 @@ export function setupSwagger(app: INestApplication) {
     )
     .addTag('Health', 'App health check')
     .addTag('Auth', 'Register, login, social (kyc_token until phone OTP), KYC, email update')
-    .addTag('Users', 'Profile & filter_preferences (min 4, max 30)')
+    .addTag('Users', 'Profile, filter_preferences (min 4, max 30) & notification settings')
     .addTag('Countries', 'Country list')
     .addTag('Languages', 'Language CRUD')
     .addTag('Cities', 'Cities (seeded for Pakistan)')
