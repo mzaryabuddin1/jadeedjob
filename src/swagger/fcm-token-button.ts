@@ -11,6 +11,8 @@
  * Browsers only allow push on https:// or http://localhost.
  */
 
+import { loadServiceAccount } from '../firebase/service-account.loader';
+
 const FIREBASE_JS_VERSION = '10.12.2';
 const SDK_BASE = `https://www.gstatic.com/firebasejs/${FIREBASE_JS_VERSION}`;
 
@@ -26,9 +28,7 @@ export function readFcmWebConfig(): FcmWebConfig {
   let projectId = process.env.FIREBASE_WEB_PROJECT_ID;
   if (!projectId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      projectId =
-        require('../firebase/jobslootstaging-8fa70d6ad08a.json').project_id;
+      projectId = loadServiceAccount().project_id;
     } catch {
       /* service account not available */
     }

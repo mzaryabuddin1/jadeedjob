@@ -3,14 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.readFcmWebConfig = readFcmWebConfig;
 exports.buildServiceWorker = buildServiceWorker;
 exports.buildFcmButtonScript = buildFcmButtonScript;
+const service_account_loader_1 = require("../firebase/service-account.loader");
 const FIREBASE_JS_VERSION = '10.12.2';
 const SDK_BASE = `https://www.gstatic.com/firebasejs/${FIREBASE_JS_VERSION}`;
 function readFcmWebConfig() {
     let projectId = process.env.FIREBASE_WEB_PROJECT_ID;
     if (!projectId) {
         try {
-            projectId =
-                require('../firebase/jobslootstaging-8fa70d6ad08a.json').project_id;
+            projectId = (0, service_account_loader_1.loadServiceAccount)().project_id;
         }
         catch {
         }

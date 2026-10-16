@@ -44,6 +44,7 @@ const common_1 = require("@nestjs/common");
 const admin = __importStar(require("firebase-admin"));
 const firebase_service_1 = require("./firebase.service");
 const firebase_controller_1 = require("./firebase.controller");
+const service_account_loader_1 = require("./service-account.loader");
 let FirebaseModule = class FirebaseModule {
 };
 exports.FirebaseModule = FirebaseModule;
@@ -54,7 +55,7 @@ exports.FirebaseModule = FirebaseModule = __decorate([
             {
                 provide: 'FIREBASE_ADMIN',
                 useFactory: () => {
-                    const serviceAccount = require('./jobslootstaging-8fa70d6ad08a.json');
+                    const serviceAccount = (0, service_account_loader_1.loadServiceAccount)();
                     return admin.initializeApp({
                         credential: admin.credential.cert(serviceAccount),
                     });

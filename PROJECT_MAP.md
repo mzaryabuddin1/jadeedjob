@@ -160,6 +160,13 @@ Relationships to remember:
   `FIREBASE_WEB_MESSAGING_SENDER_ID`, `FIREBASE_WEB_VAPID_KEY`
   (`FIREBASE_WEB_PROJECT_ID` optional). Service worker is served at
   `/firebase-messaging-sw.js` (from `setupSwagger`). https or localhost only.
+- **Firebase credentials** (server): loaded by `src/firebase/service-account.loader.ts`,
+  first match wins: env `FIREBASE_SERVICE_ACCOUNT_JSON` (raw or base64) ->
+  env `FIREBASE_SERVICE_ACCOUNT_PATH` -> `src/firebase/service-account.json`
+  (git-ignored; `nest build` copies it to `dist/firebase/`) -> legacy staging
+  file. Current project: `jadeedjob-5210d`. Tokens saved from another Firebase
+  project fail with sender-id-mismatch; the app must use the same project.
+  `FIREBASE_WEB_*` (for the /docs token button) must be that project's web app.
 - **FCM lab** (`public/fcm-lab.html` + `src/debug/fcm-lab.controller.ts`, routes
   `/debug/fcm/*`, hidden from Swagger): user list with FCM tokens, test push per
   user/raw token (per-token FCM error + hint), "who would be notified and why not"

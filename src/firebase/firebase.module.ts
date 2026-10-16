@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { FirebaseService } from './firebase.service';
 import { FirebaseController } from './firebase.controller';
+import { loadServiceAccount } from './service-account.loader';
 
 @Module({
   providers: [
@@ -9,7 +10,7 @@ import { FirebaseController } from './firebase.controller';
     {
       provide: 'FIREBASE_ADMIN',
       useFactory: () => {
-        const serviceAccount = require('./jobslootstaging-8fa70d6ad08a.json');
+        const serviceAccount = loadServiceAccount();
 
         return admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
