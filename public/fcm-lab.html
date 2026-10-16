@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobsLoot — FCM Lab</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e6e8ee; --mut:#8b93a5; --ok:#3ecf8e; --bad:#ff6b6b; --warn:#f5b84b; --pri:#4c8dff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.5 system-ui, Segoe UI, Roboto, sans-serif; }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0 12px 0 0; }
+  main { padding:16px 20px 60px; max-width:1300px; margin:0 auto; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  input, select, button, textarea { font:inherit; color:var(--txt); background:#10131a; border:1px solid var(--line); border-radius:6px; padding:7px 10px; }
+  input[type=checkbox], input[type=radio] { padding:0; }
+  button { cursor:pointer; background:var(--pri); border-color:var(--pri); color:#fff; font-weight:600; }
+  button.sec { background:#232834; border-color:var(--line); color:var(--txt); }
+  button.warn { background:var(--warn); border-color:var(--warn); color:#000; }
+  button:disabled { opacity:.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--mut); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .wrap { overflow-x:auto; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .chip { display:inline-block; padding:1px 8px; border-radius:20px; font-size:12px; border:1px solid var(--line); color:var(--mut); margin:1px 2px 1px 0; }
+  .chip.ok { color:var(--ok); border-color:var(--ok); } .chip.bad { color:var(--bad); border-color:var(--bad); }
+  .tok { font:12px ui-monospace, Consolas, monospace; color:#9fe3c0; word-break:break-all; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .mut { color:var(--mut); }
+  pre { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:10px; margin:8px 0 0; max-height:380px; overflow:auto; white-space:pre-wrap; word-break:break-word; font:12px ui-monospace, Consolas, monospace; }
+  .kv { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; }
+  .kv div { background:#10131a; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .kv b { display:block; color:var(--mut); font-size:11px; text-transform:uppercase; }
+  .filters label { display:inline-flex; align-items:center; gap:5px; margin:3px 12px 3px 0; cursor:pointer; }
+  .banner { padding:10px 12px; border-radius:8px; border:1px solid var(--warn); color:var(--warn); background:#2a2314; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FCM Lab</h1>
+  <input id="key" type="password" placeholder="DEBUG_LAB_KEY" size="26" autocomplete="off">
+  <button id="connect">Connect</button>
+  <span id="conn" class="mut"></span>
+</header>
+
+<main>
+  <div class="banner">Diagnostics tool — it shows real users' FCM tokens. Keep <code>DEBUG_LAB_KEY</code> secret and remove it from the server env when you are done.</div>
+
+  <section>
+    <h2>1. Server status</h2>
+    <div id="status" class="kv"><span class="mut">Not connected</span></div>
+  </section>
+
+  <section>
+    <h2>2. Users &amp; FCM tokens</h2>
+    <div class="row" style="margin-bottom:8px">
+      <input id="search" placeholder="search name / email / phone" size="28">
+      <button id="reload" class="sec">Search / Reload</button>
+      <span class="mut">Tick <b>recipients</b> (who should receive the test job), choose one <b>creator</b>.</span>
+    </div>
+    <div class="wrap"><table id="users"><thead><tr>
+      <th>Recipient</th><th>Creator</th><th>ID</th><th>User</th><th>FCM tokens</th><th>Filter prefs</th><th>Settings</th><th></th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section>
+    <h2>3. Test one raw token</h2>
+    <div class="row">
+      <input id="rawToken" placeholder="paste an FCM token" size="70">
+      <button id="sendRaw">Send test push</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Create test job &amp; notify</h2>
+    <div class="row" style="margin-bottom:8px">
+      <label>Title <input id="jobTitle" placeholder="[FCM TEST] …" size="34"></label>
+    </div>
+    <div class="filters" id="filters"><span class="mut">Connect to load filters…</span></div>
+    <div class="row" style="margin:10px 0">
+      <label><input type="checkbox" id="deactivate" checked> hide test job from the app afterwards</label>
+      <label class="bad"><input type="checkbox" id="notifyAll"> notify ALL matching real users (not only ticked recipients)</label>
+    </div>
+    <div class="row">
+      <button id="explain" class="sec">Preview: who would get it?</button>
+      <button id="createJob" class="warn">Create job &amp; send</button>
+    </div>
+    <div class="wrap"><table id="explainTable" style="display:none;margin-top:10px"><thead><tr>
+      <th>User</th><th>Will notify?</th><th>Why / how</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section>
+    <h2>Result log</h2>
+    <div class="mut">Per-token FCM results appear here. Common errors are explained in plain words.</div>
+    <pre id="log">—</pre>
+  </section>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY_STORE = 'fcmLabKey';
+  var users = [];
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function log(title, data) {
+    $('log').textContent = '[' + new Date().toLocaleTimeString() + '] ' + title + '\n' +
+      (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+  }
+  function api(path, opts) {
+    opts = opts || {};
+    return fetch('/debug/fcm' + path, {
+      method: opts.method || 'GET',
+      headers: { 'Content-Type': 'application/json', 'x-debug-key': $('key').value.trim() },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) {
+          var msg = r.status === 404 ? 'Lab is disabled on the server (DEBUG_LAB_KEY is not set).'
+            : r.status === 401 ? 'Wrong debug key.'
+            : (Array.isArray(j.message) ? j.message.join(', ') : j.message) || ('HTTP ' + r.status);
+          throw new Error(msg);
+        }
+        return j;
+      });
+    });
+  }
+  function short(t) { return t.length > 26 ? t.slice(0, 14) + '…' + t.slice(-8) : t; }
+  function copy(text) {
+    if (navigator.clipboard) return navigator.clipboard.writeText(text);
+    var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+
+  function renderStatus(s) {
+    var rows = [
+      ['Firebase project (server)', s.firebaseProjectId],
+      ['NODE_ENV', s.nodeEnv],
+      ['SMTP configured', s.smtpConfigured ? 'yes' : 'no (emails only logged)'],
+      ['Users / with FCM token', s.usersTotal + ' / ' + s.usersWithTokens],
+      ['Deep link template', s.deepLinkTemplate]
+    ];
+    $('status').innerHTML = rows.map(function (r) { return '<div><b>' + esc(r[0]) + '</b>' + esc(r[1]) + '</div>'; }).join('') +
+      '<div style="grid-column:1/-1" class="mut">The mobile app must be built with the SAME Firebase project as <b>' + esc(s.firebaseProjectId) +
+      '</b>, otherwise FCM answers <code>sender-id-mismatch</code> / <code>mismatched-credential</code>.</div>';
+  }
+
+  function renderUsers() {
+    var tb = $('users').querySelector('tbody');
+    tb.innerHTML = '';
+    users.forEach(function (u) {
+      var tr = document.createElement('tr');
+      var toks = u.fcmTokens.length
+        ? u.fcmTokens.map(function (t, i) {
+            return '<div class="tok">' + esc(short(t)) + ' <a href="#" data-copy="' + u.id + ':' + i + '">copy</a> · <a href="#" data-full="' + u.id + ':' + i + '">full</a></div>';
+          }).join('')
+        : '<span class="bad">none — app never sent fcmToken</span>';
+      var st = u.notificationSettings;
+      tr.innerHTML =
+        '<td><input type="checkbox" class="rcpt" value="' + u.id + '"></td>' +
+        '<td><input type="radio" name="creator" class="crt" value="' + u.id + '"></td>' +
+        '<td>' + u.id + '</td>' +
+        '<td><b>' + esc(u.name || '(no name)') + '</b>' + (u.isBanned ? ' <span class="chip bad">banned</span>' : '') +
+        '<div class="mut">' + esc(u.email || '') + ' ' + esc(u.phone || '') + '</div></td>' +
+        '<td>' + toks + '</td>' +
+        '<td>' + (u.filterPreferences.length ? esc(u.filterPreferences.join(', ')) : '<span class="mut">none</span>') + '</td>' +
+        '<td><span class="chip ' + (st.push ? 'ok' : 'bad') + '">push ' + (st.push ? 'on' : 'off') + '</span>' +
+        '<span class="chip ' + (st.email ? 'ok' : '') + '">email ' + (st.email ? 'on' : 'off') + '</span></td>' +
+        '<td><button class="sec test-user" data-id="' + u.id + '"' + (u.fcmTokens.length ? '' : ' disabled') + '>Test push</button></td>';
+      tb.appendChild(tr);
+    });
+    if (!users.length) tb.innerHTML = '<tr><td colspan="8" class="mut">No users</td></tr>';
+  }
+
+  function loadUsers() {
+    return api('/users?limit=300&search=' + encodeURIComponent($('search').value.trim())).then(function (list) {
+      users = list; renderUsers();
+    });
+  }
+  function loadFilters() {
+    return fetch('/filters?limit=100').then(function (r) { return r.json(); }).then(function (j) {
+      var list = j.data || [];
+      $('filters').innerHTML = list.length
+        ? '<div class="mut" style="margin-bottom:4px">Job filters (pick 1–10):</div>' + list.map(function (f) {
+            return '<label><input type="checkbox" class="flt" value="' + f.id + '"> ' + esc(f.name) + ' <span class="mut">#' + f.id + '</span></label>';
+          }).join('')
+        : '<span class="mut">No filters returned</span>';
+    });
+  }
+
+  function selected(cls) { return Array.prototype.map.call(document.querySelectorAll(cls + ':checked'), function (e) { return Number(e.value); }); }
+  function creatorId() { var r = document.querySelector('.crt:checked'); return r ? Number(r.value) : 0; }
+
+  function connect() {
+    sessionStorage.setItem(KEY_STORE, $('key').value.trim());
+    $('conn').textContent = 'connecting…';
+    api('/status').then(function (s) {
+      $('conn').innerHTML = '<span class="ok">connected</span>';
+      renderStatus(s);
+      return Promise.all([loadUsers(), loadFilters()]);
+    }).catch(function (e) { $('conn').innerHTML = '<span class="bad">' + esc(e.message) + '</span>'; });
+  }
+
+  $('connect').onclick = connect;
+  $('key').onkeydown = function (e) { if (e.key === 'Enter') connect(); };
+  $('reload').onclick = function () { loadUsers().catch(function (e) { log('Error', e.message); }); };
+
+  $('users').addEventListener('click', function (e) {
+    var t = e.target;
+    if (t.dataset.copy || t.dataset.full) {
+      e.preventDefault();
+      var parts = (t.dataset.copy || t.dataset.full).split(':');
+      var u = users.filter(function (x) { return x.id === Number(parts[0]); })[0];
+      var token = u.fcmTokens[Number(parts[1])];
+      if (t.dataset.copy) { copy(token); t.textContent = 'copied'; } else { log('Full token of user #' + u.id, token); }
+    }
+    if (t.classList.contains('test-user')) {
+      t.disabled = true;
+      api('/test-push', { method: 'POST', body: { userId: Number(t.dataset.id) } })
+        .then(function (r) { log('Test push to user #' + t.dataset.id, r); })
+        .catch(function (err) { log('Test push failed', err.message); })
+        .then(function () { t.disabled = false; });
+    }
+  });
+
+  $('sendRaw').onclick = function () {
+    var token = $('rawToken').value.trim();
+    if (!token) return log('Error', 'Paste a token first');
+    api('/test-push', { method: 'POST', body: { token: token } })
+      .then(function (r) { log('Test push to raw token', r); })
+      .catch(function (e) { log('Test push failed', e.message); });
+  };
+
+  $('explain').onclick = function () {
+    var fids = selected('.flt');
+    if (!fids.length) return log('Error', 'Pick at least one filter');
+    api('/explain', { method: 'POST', body: { filterIds: fids, creatorId: creatorId() } }).then(function (rows) {
+      var tb = $('explainTable').querySelector('tbody');
+      $('explainTable').style.display = '';
+      tb.innerHTML = rows.map(function (r) {
+        return '<tr><td>#' + r.userId + ' ' + esc(r.name) + '</td>' +
+          '<td class="' + (r.willNotify ? 'ok' : 'bad') + '">' + (r.willNotify ? 'YES' : 'no') + '</td>' +
+          '<td>' + esc(r.reasons.join('; ')) + '</td></tr>';
+      }).join('');
+    }).catch(function (e) { log('Preview failed', e.message); });
+  };
+
+  $('createJob').onclick = function () {
+    var fids = selected('.flt'), rcpt = selected('.rcpt'), creator = creatorId(), all = $('notifyAll').checked;
+    if (!creator) return log('Error', 'Select a creator (radio)');
+    if (!fids.length) return log('Error', 'Pick at least one filter');
+    if (!all && !rcpt.length) return log('Error', 'Tick at least one recipient (or enable "notify ALL")');
+    if (all && !confirm('This will push-notify REAL users who match these filters. Continue?')) return;
+
+    $('createJob').disabled = true;
+    api('/create-job', { method: 'POST', body: {
+      creatorId: creator, filterIds: fids, title: $('jobTitle').value.trim() || undefined,
+      onlyUserIds: all ? [] : rcpt, notifyAllMatching: all, deactivate: $('deactivate').checked
+    } }).then(function (r) {
+      var n = r.notification, verdict = '';
+      if (n && n.push) {
+        verdict = n.push.devices === 0 ? '\n=> No devices were targeted. Check the preview table for why (no token / push off / filters do not match).'
+          : n.push.failure === 0 ? '\n=> FCM accepted ' + n.push.success + ' push(es). If the phone shows nothing, the problem is on the device/app side (permission, background restrictions, wrong project).'
+          : '\n=> ' + n.push.failure + ' push(es) FAILED — see errors above.';
+      }
+      log('Job created', r); $('log').textContent += verdict;
+    }).catch(function (e) { log('Create job failed', e.message); })
+      .then(function () { $('createJob').disabled = false; });
+  };
+
+  var saved = sessionStorage.getItem(KEY_STORE);
+  if (saved) { $('key').value = saved; connect(); }
+})();
+</script>
+</body>
+</html>

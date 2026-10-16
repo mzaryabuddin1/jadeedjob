@@ -107,7 +107,7 @@ let JobService = JobService_1 = class JobService {
         const byId = new Map(filters.map((f) => [f.id, f]));
         return ids.map((id) => byId.get(id));
     }
-    async createJob(data, userId) {
+    async createJob(data, userId, opts = {}) {
         const requestedPageId = data.pageId != null
             ? Number(data.pageId)
             : data.companyId != null
@@ -197,7 +197,7 @@ let JobService = JobService_1 = class JobService {
             where: { id: insertedId },
             relations: ['filters', 'page'],
         });
-        if (withFilters) {
+        if (withFilters && !opts.skipNotification) {
             void this.notificationService.notifyJobCreated(withFilters);
         }
         return {

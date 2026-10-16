@@ -160,6 +160,19 @@ Relationships to remember:
   `FIREBASE_WEB_MESSAGING_SENDER_ID`, `FIREBASE_WEB_VAPID_KEY`
   (`FIREBASE_WEB_PROJECT_ID` optional). Service worker is served at
   `/firebase-messaging-sw.js` (from `setupSwagger`). https or localhost only.
+- **FCM lab** (`public/fcm-lab.html` + `src/debug/fcm-lab.controller.ts`, routes
+  `/debug/fcm/*`, hidden from Swagger): user list with FCM tokens, test push per
+  user/raw token (per-token FCM error + hint), "who would be notified and why not"
+  preview, and create-test-job (notifies only the ticked recipients unless
+  `notifyAllMatching`; job is deactivated afterwards). Works in production but
+  only when env `DEBUG_LAB_KEY` is set (sent as header `x-debug-key`); unset = 404.
+  `NotificationService.notifyJobCreated` returns a summary (push ok/failed per
+  FCM error code, email counts).
+- Sending is NOT queued: it runs in-process right after job creation (fire and
+  forget, no retry, lost if the process dies). FCM itself (Google) stores/delivers
+  to devices and has very high quotas; our side is the weak point under heavy
+  traffic. Fix when needed: job queue (BullMQ + Redis) with retries/backoff and a
+  separate worker.
 - `GET /users/me/notification-settings` does not write; the DB column stays
   NULL (= defaults) until the first `PATCH`.
 

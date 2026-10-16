@@ -27,22 +27,102 @@ export class FirebaseService {
     tokens: string[],
     notification: { title: string; body: string },
     data: Record<string, string> = {},
-  ): Promise<{ success: number; failure: number }> {
+  ): Promise<{
+    success: number;
+    failure: number;
+    errors: Record<string, { count: number; hint: string }>;
+  }> {
+    const results = await this.sendDetailed(tokens, notification, data);
+
+    const errors: Record<string, { count: number; hint: string }> = {};
+    for (const r of results) {
+      if (r.ok) continue;
+      const code = r.code || 'unknown';
+      errors[code] = errors[code] || { count: 0, hint: r.hint || '' };
+      errors[code].count++;
+    }
+
+    const success = results.filter((r) => r.ok).length;
+    return { success, failure: results.length - success, errors };
+  }
+
+  /**
+   * Like sendToTokens but returns the FCM outcome of EVERY token
+   * (message id, or error code + human hint). Used by the FCM test lab.
+   */
+  async sendDetailed(
+    tokens: string[],
+    notification: { title: string; body: string },
+    data: Record<string, string> = {},
+  ): Promise<
+    {
+      token: string;
+      ok: boolean;
+      messageId?: string;
+      code?: string;
+      message?: string;
+      hint?: string;
+    }[]
+  > {
     const unique = [...new Set(tokens.filter(Boolean))];
-    let success = 0;
-    let failure = 0;
+    const out = [];
 
     for (let i = 0; i < unique.length; i += 500) {
+      const chunk = unique.slice(i, i + 500);
       const res = await this.firebaseApp.messaging().sendEachForMulticast({
-        tokens: unique.slice(i, i + 500),
+        tokens: chunk,
         notification,
         data,
       });
-      success += res.successCount;
-      failure += res.failureCount;
+
+      res.responses.forEach((r, idx) => {
+        out.push(
+          r.success
+            ? { token: chunk[idx], ok: true, messageId: r.messageId }
+            : {
+                token: chunk[idx],
+                ok: false,
+                code: r.error?.code,
+                message: r.error?.message,
+                hint: this.hintForError(r.error?.code),
+              },
+        );
+      });
     }
 
-    return { success, failure };
+    return out;
+  }
+
+  /** Project the server's service account belongs to (tokens must match it) */
+  getProjectId(): string | undefined {
+    const opts: any = this.firebaseApp.options;
+    return opts?.credential?.projectId ?? opts?.projectId;
+  }
+
+  /** Plain-English reason for the most common FCM errors */
+  hintForError(code?: string): string {
+    switch (code) {
+      case 'messaging/registration-token-not-registered':
+        return 'Token is stale: app was uninstalled/reinstalled or token refreshed. Re-login in the app to send a fresh fcmToken.';
+      case 'messaging/invalid-registration-token':
+      case 'messaging/invalid-argument':
+        return 'Token is malformed/truncated, or not an FCM token.';
+      case 'messaging/mismatched-credential':
+      case 'messaging/sender-id-mismatch':
+        return "The app was built with a DIFFERENT Firebase project than this server's service account. Use the same project (google-services.json / service account).";
+      case 'messaging/third-party-auth-error':
+        return 'iOS: APNs key/certificate is missing or invalid in Firebase console → Cloud Messaging.';
+      case 'messaging/quota-exceeded':
+        return 'FCM rate limit hit — retry later with backoff.';
+      case 'messaging/server-unavailable':
+      case 'messaging/internal-error':
+        return 'FCM temporary problem — safe to retry.';
+      case 'messaging/authentication-error':
+      case 'app/invalid-credential':
+        return 'Server service account is invalid or lacks the FCM permission.';
+      default:
+        return '';
+    }
   }
 
   // ────────────────────────────────────────────────

@@ -29,6 +29,7 @@ exports.JobModule = JobModule = __decorate([
         ],
         controllers: [job_controller_1.JobController],
         providers: [job_service_1.JobService],
+        exports: [job_service_1.JobService],
     })
 ], JobModule);
 //# sourceMappingURL=job.module.js.map

@@ -17,5 +17,6 @@ import { FilesModule } from 'src/files/files.module';
   ],
   controllers: [JobController],
   providers: [JobService],
+  exports: [JobService],
 })
 export class JobModule {}

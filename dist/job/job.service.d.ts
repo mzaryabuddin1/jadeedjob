@@ -20,7 +20,9 @@ export declare class JobService {
     private jobCategories;
     private loadFiltersByJobIds;
     private resolveJobFilters;
-    createJob(data: any, userId: number): Promise<{
+    createJob(data: any, userId: number, opts?: {
+        skipNotification?: boolean;
+    }): Promise<{
         filters: {
             id: number;
             name: string;

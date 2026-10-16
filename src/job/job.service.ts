@@ -160,7 +160,11 @@ export class JobService {
   // ────────────────────────────────────────────────
   // CREATE JOB + SEND NOTIFICATION
   // ────────────────────────────────────────────────
-  async createJob(data: any, userId: number) {
+  async createJob(
+    data: any,
+    userId: number,
+    opts: { skipNotification?: boolean } = {},
+  ) {
     // App may send companyId instead of pageId
     const requestedPageId =
       data.pageId != null
@@ -285,7 +289,7 @@ export class JobService {
     // Notify users who prefer any of this job's filters (one notification per
     // user, push/email per their settings). Runs in the background — it never
     // delays or fails the create response.
-    if (withFilters) {
+    if (withFilters && !opts.skipNotification) {
       void this.notificationService.notifyJobCreated(withFilters);
     }
 

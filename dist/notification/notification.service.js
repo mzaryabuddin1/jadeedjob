@@ -30,20 +30,21 @@ let NotificationService = NotificationService_1 = class NotificationService {
         this.firebaseService = firebaseService;
         this.mailService = mailService;
         this.logger = new common_1.Logger(NotificationService_1.name);
+        this.recent = new Map();
     }
-    async notifyJobCreated(job) {
+    getSummary(jobId) {
+        return this.recent.get(jobId);
+    }
+    async notifyJobCreated(job, opts = {}) {
         try {
             const filters = job.filters || [];
             if (!filters.length || job.isActive === false)
                 return;
-            const groups = await this.collectRecipients(job, filters);
-            if (!groups.size) {
-                this.logger.log(`Job #${job.id}: no matching recipients`);
-                return;
-            }
+            const groups = await this.collectRecipients(job, filters, opts.onlyUserIds);
             let pushUsers = 0;
             let pushOk = 0;
             let pushFailed = 0;
+            const pushErrors = {};
             let emailSent = 0;
             let emailSkipped = 0;
             let emailFailed = 0;
@@ -55,16 +56,26 @@ let NotificationService = NotificationService_1 = class NotificationService {
                         const res = await this.firebaseService.sendToTokens(group.pushTokens, { title: message.title, body: message.body }, message.data);
                         pushOk += res.success;
                         pushFailed += res.failure;
+                        for (const [code, e] of Object.entries(res.errors)) {
+                            pushErrors[code] = pushErrors[code] || { count: 0, hint: e.hint };
+                            pushErrors[code].count += e.count;
+                        }
                     }
                     catch (err) {
                         pushFailed += group.pushTokens.length;
+                        const code = err?.code || 'send-exception';
+                        pushErrors[code] = pushErrors[code] || {
+                            count: 0,
+                            hint: this.firebaseService.hintForError(code) ||
+                                err?.message ||
+                                '',
+                        };
+                        pushErrors[code].count += group.pushTokens.length;
                         this.logger.error(`Job #${job.id}: push send failed — ${err?.message}`);
                     }
                 }
                 for (let i = 0; i < group.emails.length; i += EMAIL_CONCURRENCY) {
-                    const results = await Promise.allSettled(group.emails
-                        .slice(i, i + EMAIL_CONCURRENCY)
-                        .map((to) => this.mailService.send({
+                    const results = await Promise.allSettled(group.emails.slice(i, i + EMAIL_CONCURRENCY).map((to) => this.mailService.send({
                         to,
                         ...this.buildJobEmail(job, message),
                     })));
@@ -78,14 +89,91 @@ let NotificationService = NotificationService_1 = class NotificationService {
                     }
                 }
             }
-            this.logger.log(`Job #${job.id} notified — push: ${pushUsers} device(s) (${pushOk} ok, ${pushFailed} failed); ` +
+            const errorText = Object.entries(pushErrors)
+                .map(([code, e]) => `${code}x${e.count}`)
+                .join(', ');
+            this.logger.log(`Job #${job.id} notified - ${groups.size} group(s); push: ${pushUsers} device(s) (${pushOk} ok, ${pushFailed} failed${errorText ? `: ${errorText}` : ''}); ` +
                 `email: ${emailSent} sent, ${emailSkipped} skipped (SMTP off), ${emailFailed} failed`);
+            const summary = {
+                jobId: job.id,
+                at: new Date().toISOString(),
+                recipientsFound: [...groups.values()].reduce((n, g) => n + Math.max(g.pushTokens.length, g.emails.length), 0),
+                groups: [...groups.values()].map((g) => ({
+                    filters: g.matched.map((f) => f.name),
+                    pushDevices: g.pushTokens.length,
+                    emails: g.emails.length,
+                })),
+                push: {
+                    devices: pushUsers,
+                    success: pushOk,
+                    failure: pushFailed,
+                    errors: pushErrors,
+                },
+                email: { sent: emailSent, skipped: emailSkipped, failed: emailFailed },
+            };
+            this.recent.set(job.id, summary);
+            if (this.recent.size > 50) {
+                this.recent.delete(this.recent.keys().next().value);
+            }
+            return summary;
         }
         catch (err) {
-            this.logger.error(`Job #${job.id}: notification failed — ${err?.message}`, err?.stack);
+            this.logger.error(`Job #${job.id}: notification failed - ${err?.message}`, err?.stack);
         }
     }
-    async collectRecipients(job, filters) {
+    async explainRecipients(filterIds, creatorId, limit = 500) {
+        const users = await this.userRepo.find({
+            select: [
+                'id',
+                'firstName',
+                'lastName',
+                'email',
+                'isBanned',
+                'fcmTokens',
+                'filter_preferences',
+                'notification_settings',
+            ],
+            order: { id: 'ASC' },
+            take: limit,
+        });
+        return users.map((u) => {
+            const reasons = [];
+            const prefs = new Set((u.filter_preferences || []).map(Number));
+            const matchedFilterIds = filterIds.filter((id) => prefs.has(id));
+            const settings = (0, notification_settings_1.resolveNotificationSettings)(u.notification_settings);
+            const devices = (u.fcmTokens || []).filter(Boolean).length;
+            const emailOn = settings.email && !!u.email;
+            if (u.id === creatorId)
+                reasons.push('is the job creator (never notified)');
+            if (u.isBanned)
+                reasons.push('user is banned');
+            if (!matchedFilterIds.length)
+                reasons.push('none of the job filters are in filter_preferences');
+            if (!settings.push && !emailOn)
+                reasons.push('push (and email) disabled in notification settings');
+            else if (settings.push && !devices && !emailOn)
+                reasons.push('push enabled but NO fcm token saved (app never sent fcmToken on login)');
+            const willNotify = reasons.length === 0;
+            return {
+                userId: u.id,
+                name: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim(),
+                willNotify,
+                reasons: willNotify
+                    ? [
+                        [
+                            settings.push && devices ? `push to ${devices} device(s)` : '',
+                            emailOn ? 'email' : '',
+                        ]
+                            .filter(Boolean)
+                            .join(' + '),
+                    ]
+                    : reasons,
+                matchedFilterIds,
+                pushDevices: settings.push ? devices : 0,
+            };
+        });
+    }
+    async collectRecipients(job, filters, onlyUserIds) {
         const groups = new Map();
         const filterIds = filters.map((f) => f.id);
         let lastId = 0;
@@ -102,6 +190,9 @@ let NotificationService = NotificationService_1 = class NotificationService {
                 .where('u.id > :lastId', { lastId })
                 .andWhere('u.id != :creatorId', { creatorId: job.createdBy })
                 .andWhere('u.isBanned = false')
+                .andWhere(onlyUserIds?.length ? 'u.id IN (:...onlyIds)' : '1 = 1', {
+                onlyIds: onlyUserIds?.length ? onlyUserIds : [0],
+            })
                 .andWhere(new typeorm_2.Brackets((qb) => {
                 filterIds.forEach((id, i) => qb.orWhere(`FIND_IN_SET(:fid${i}, u.filter_preferences) > 0`, {
                     [`fid${i}`]: id,

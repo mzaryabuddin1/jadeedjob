@@ -32,6 +32,7 @@ const migrate_legacy_filter_column_1 = require("./job/migrate-legacy-filter-colu
 const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
+const debug_module_1 = require("./debug/debug.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -82,6 +83,7 @@ exports.AppModule = AppModule = __decorate([
             firebase_module_1.FirebaseModule,
             chat_module_1.ChatModule,
             rating_module_1.RatingModule,
+            debug_module_1.DebugModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

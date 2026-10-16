@@ -29,6 +29,7 @@ import { migrateLegacyJobFilterColumn } from './job/migrate-legacy-filter-column
 import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
+import { DebugModule } from './debug/debug.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { RatingModule } from './rating/rating.module';
     FirebaseModule,
     ChatModule,
     RatingModule,
+    DebugModule,
   ],
   controllers: [AppController],
   providers: [
