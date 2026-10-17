@@ -266,20 +266,6 @@ let FcmLabController = class FcmLabController {
             })),
         };
     }
-    async jobActive(body) {
-        const jobId = Number(body.jobId);
-        const job = await this.jobRepo.findOne({
-            where: { id: jobId },
-            select: ['id', 'title'],
-        });
-        if (!job)
-            throw new common_1.NotFoundException('Job not found');
-        if (!job.title.startsWith('[FCM TEST]')) {
-            throw new common_1.BadRequestException('Only [FCM TEST] jobs can be toggled here');
-        }
-        await this.jobRepo.update({ id: jobId }, { isActive: !!body.active });
-        return { jobId, isActive: !!body.active };
-    }
     async resetJob(body) {
         const jobId = Number(body.jobId);
         const job = await this.jobRepo.findOne({
@@ -347,7 +333,14 @@ let FcmLabController = class FcmLabController {
             throw new common_1.BadRequestException('Pick recipients (onlyUserIds) or set notifyAllMatching=true (notifies REAL users)');
         }
         const job = await this.jobService.createJob({
-            title: body.title?.trim() || `[FCM TEST] ${new Date().toISOString()}`,
+            title: (() => {
+                const custom = body.title?.trim();
+                if (!custom)
+                    return `[FCM TEST] ${new Date().toISOString()}`;
+                return custom.startsWith('[FCM TEST]')
+                    ? custom
+                    : `[FCM TEST] ${custom}`;
+            })(),
             description: 'Created by the FCM lab to test push notifications',
             filterIds,
             isRemote: true,
@@ -359,7 +352,7 @@ let FcmLabController = class FcmLabController {
             onlyUserIds: body.notifyAllMatching ? undefined : onlyUserIds,
         });
         let deactivated = false;
-        if (body.deactivate !== false) {
+        if (body.deactivate === true) {
             await this.jobService.updateJob(job.id, { isActive: false }, creatorId);
             deactivated = true;
         }
@@ -408,13 +401,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], FcmLabController.prototype, "queue", null);
-__decorate([
-    (0, common_1.Post)('job-active'),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], FcmLabController.prototype, "jobActive", null);
 __decorate([
     (0, common_1.Post)('reset-job'),
     __param(0, (0, common_1.Body)()),

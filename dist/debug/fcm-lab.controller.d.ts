@@ -99,13 +99,6 @@ export declare class FcmLabController {
             note: string;
         }[];
     }>;
-    jobActive(body: {
-        jobId: number;
-        active: boolean;
-    }): Promise<{
-        jobId: number;
-        isActive: boolean;
-    }>;
     resetJob(body: {
         jobId: number;
     }): Promise<{

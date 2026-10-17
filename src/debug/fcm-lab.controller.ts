@@ -332,22 +332,6 @@ export class FcmLabController {
     };
   }
 
-  /** Make a job visible/hidden for applying without touching anything else */
-  @Post('job-active')
-  async jobActive(@Body() body: { jobId: number; active: boolean }) {
-    const jobId = Number(body.jobId);
-    const job = await this.jobRepo.findOne({
-      where: { id: jobId },
-      select: ['id', 'title'],
-    });
-    if (!job) throw new NotFoundException('Job not found');
-    if (!job.title.startsWith('[FCM TEST]')) {
-      throw new BadRequestException('Only [FCM TEST] jobs can be toggled here');
-    }
-    await this.jobRepo.update({ id: jobId }, { isActive: !!body.active });
-    return { jobId, isActive: !!body.active };
-  }
-
   /** Delete the applications + queue rows of a TEST job so you can apply again */
   @Post('reset-job')
   async resetJob(@Body() body: { jobId: number }) {
@@ -451,7 +435,15 @@ export class FcmLabController {
 
     const job: any = await this.jobService.createJob(
       {
-        title: body.title?.trim() || `[FCM TEST] ${new Date().toISOString()}`,
+        // always keep the [FCM TEST] prefix: it marks the job as a lab job
+        // (Activate/Hide/Reset buttons and the real-employer safety check)
+        title: (() => {
+          const custom = body.title?.trim();
+          if (!custom) return `[FCM TEST] ${new Date().toISOString()}`;
+          return custom.startsWith('[FCM TEST]')
+            ? custom
+            : `[FCM TEST] ${custom}`;
+        })(),
         description: 'Created by the FCM lab to test push notifications',
         filterIds,
         isRemote: true,
@@ -468,7 +460,7 @@ export class FcmLabController {
     });
 
     let deactivated = false;
-    if (body.deactivate !== false) {
+    if (body.deactivate === true) {
       await this.jobService.updateJob(job.id, { isActive: false }, creatorId);
       deactivated = true;
     }

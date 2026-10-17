@@ -79,7 +79,6 @@
     </div>
     <div class="filters" id="filters"><span class="mut">Connect to load filters…</span></div>
     <div class="row" style="margin:10px 0">
-      <label><input type="checkbox" id="deactivate" checked> hide test job from the app afterwards <span class="mut">(hidden jobs can't be applied to - use Activate in the Jobs table)</span></label>
       <label class="bad"><input type="checkbox" id="notifyAll"> notify ALL matching real users (not only ticked recipients)</label>
     </div>
     <div class="row">
@@ -276,7 +275,7 @@
     $('createJob').disabled = true;
     api('/create-job', { method: 'POST', body: {
       creatorId: creator, filterIds: fids, title: $('jobTitle').value.trim() || undefined,
-      onlyUserIds: all ? [] : rcpt, notifyAllMatching: all, deactivate: $('deactivate').checked
+      onlyUserIds: all ? [] : rcpt, notifyAllMatching: all
     } }).then(function (r) {
       var n = r.notification, verdict = '';
       if (n && n.push) {
@@ -308,11 +307,10 @@
       var status = (j.isActive ? '<span class="chip ok">active</span>' : '<span class="chip bad">hidden</span>') +
         (j.isTest ? ' <span class="chip">TEST</span>' : '');
       var actions =
-        '<button data-act="apply" data-id="' + j.id + '"' + (j.isActive ? '' : ' disabled title="Job is hidden - Activate it first"') + '>Apply</button> ' +
+        '<button data-act="apply" data-id="' + j.id + '"' + (j.isActive ? '' : ' disabled title="This job is inactive"') + '>Apply</button> ' +
         '<button class="sec" data-act="watch" data-id="' + j.id + '">Queue</button>' +
         (j.isTest
-          ? ' <button class="sec" data-act="toggle" data-id="' + j.id + '">' + (j.isActive ? 'Hide' : 'Activate') + '</button>' +
-            ' <button class="sec" data-act="reset" data-id="' + j.id + '">Reset</button>'
+          ? ' <button class="sec" data-act="reset" data-id="' + j.id + '">Reset</button>'
           : '');
       return '<tr><td>' + j.id + '</td>' +
         '<td><b>' + esc(j.title) + '</b><div class="mut">' + esc(j.filters.join(', ')) + '</div></td>' +
@@ -380,11 +378,6 @@
         .then(function (r) { log('Apply to job #' + id, r); watch(id); return loadJobs(); })
         .catch(function (err) { log('Apply failed', err.message); })
         .then(function () { t.disabled = false; });
-    }
-
-    if (t.dataset.act === 'toggle') {
-      api('/job-active', { method: 'POST', body: { jobId: id, active: !job.isActive } })
-        .then(loadJobs).catch(function (err) { log('Toggle failed', err.message); });
     }
 
     if (t.dataset.act === 'reset') {
