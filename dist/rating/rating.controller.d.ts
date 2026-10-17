@@ -64,8 +64,8 @@ export declare class RatingController {
             createdAt: any;
         }[];
     }>;
-    companySummary(pageId: number, limit?: string): Promise<{
-        company: {
+    pageSummary(pageId: number, limit?: string): Promise<{
+        page: {
             id: number;
             name: string;
             username: string;

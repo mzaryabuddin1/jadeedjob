@@ -2,7 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PAGE_MANAGER_ROLES = void 0;
 exports.isJobEmployer = isJobEmployer;
-exports.PAGE_MANAGER_ROLES = ['owner', 'admin', 'editor'];
+const page_permissions_1 = require("../pages/page-permissions");
+exports.PAGE_MANAGER_ROLES = (0, page_permissions_1.rolesWith)('jobs.manage');
 async function isJobEmployer(pageRepo, job, userId) {
     if (job.createdBy === userId)
         return true;

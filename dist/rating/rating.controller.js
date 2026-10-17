@@ -35,8 +35,8 @@ let RatingController = class RatingController {
     async userSummary(userId, limit = '10') {
         return this.ratingService.getUserSummary(userId, Number(limit) || 10);
     }
-    async companySummary(pageId, limit = '10') {
-        return this.ratingService.getCompanySummary(pageId, Number(limit) || 10);
+    async pageSummary(pageId, limit = '10') {
+        return this.ratingService.getPageSummary(pageId, Number(limit) || 10);
     }
 };
 exports.RatingController = RatingController;
@@ -47,12 +47,12 @@ __decorate([
         description: [
             'Only after the employer **accepted** the application, and **once per side**:',
             '- the **applicant (employee)** rates the employer side',
-            '- the **employer side** (job poster, or company page owner/admin/editor) rates the applicant',
+            '- the **employer side** (job poster, or page owner/admin/editor) rates the applicant',
             '',
             'Where the rating lands:',
             "- rating an **applicant** → the applicant's **profile rating** (`users.ratingAverage`)",
             "- employee rating a **personal job's poster** → the poster's **profile rating**",
-            '- employee rating a job posted **under a company page** → the **company rating** (`pages.company_rating`), not the person',
+            '- employee rating a job posted **under a page** → the **page rating** (`pages.page_rating`), not the person',
             '',
             'A profile rating is the average of ALL ratings the person received, as employee and as employer together.',
         ].join('\n'),
@@ -83,7 +83,7 @@ __decorate([
     (0, common_1.Get)('application/:applicationId'),
     (0, swagger_1.ApiOperation)({
         summary: 'Can I rate on this application? (rating screen state)',
-        description: 'For the applicant or the employer side of the application: `myRole` (employee/employer), who `willRate` (user or company), `canRate`, `iRated`, `otherSideRated`. 403 if you are not part of the application.',
+        description: 'For the applicant or the employer side of the application: `myRole` (employee/employer), who `willRate` (user or page), `canRate`, `iRated`, `otherSideRated`. 403 if you are not part of the application.',
     }),
     __param(0, (0, common_1.Param)('applicationId', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Req)()),
@@ -95,7 +95,7 @@ __decorate([
     (0, common_1.Get)('user/:userId'),
     (0, swagger_1.ApiOperation)({
         summary: 'User rating summary',
-        description: '`average`/`count` = all ratings the person received (employee + employer roles pooled). `asEmployee` = rated by employers, `asEmployer` = rated by employees of jobs they posted personally (jobs under a company page count for the company instead).',
+        description: '`average`/`count` = all ratings the person received (employee + employer roles pooled). `asEmployee` = rated by employers, `asEmployer` = rated by employees of jobs they posted personally (jobs under a page count for the page instead).',
     }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, example: 10 }),
     __param(0, (0, common_1.Param)('userId', common_1.ParseIntPipe)),
@@ -105,10 +105,10 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RatingController.prototype, "userSummary", null);
 __decorate([
-    (0, common_1.Get)('company/:pageId'),
+    (0, common_1.Get)('page/:pageId'),
     (0, swagger_1.ApiOperation)({
-        summary: 'Company rating summary',
-        description: 'Average of the ratings employees gave this company for jobs posted under its page.',
+        summary: 'Page rating summary',
+        description: 'Average of the ratings employees gave this page for jobs posted under it.',
     }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, example: 10 }),
     __param(0, (0, common_1.Param)('pageId', common_1.ParseIntPipe)),
@@ -116,7 +116,7 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Number, Object]),
     __metadata("design:returntype", Promise)
-], RatingController.prototype, "companySummary", null);
+], RatingController.prototype, "pageSummary", null);
 exports.RatingController = RatingController = __decorate([
     (0, swagger_1.ApiTags)('Ratings'),
     (0, swagger_1.ApiBearerAuth)('JWT'),

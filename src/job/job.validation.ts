@@ -101,6 +101,7 @@ export const createJobSchema = Joi.object({
   isRemote: Joi.boolean().default(false),
   pageId: Joi.number().optional().allow(null),
   /** App alias for pageId */
+  /** deprecated alias of pageId (old app builds) */
   companyId: Joi.number().optional().allow(null),
   postingMode: Joi.string().optional().allow(null),
   branchId: Joi.number().optional().allow(null),

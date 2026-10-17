@@ -1,0 +1,5 @@
+import { Page } from './entities/page.entity';
+import { PagePermission, PageRole } from './page-permissions';
+export declare function toPageView(page: Page, role: PageRole | null): Record<string, any>;
+export declare function permissionsOf(role: PageRole): PagePermission[];
+export declare const EDITABLE_PAGE_FIELDS: readonly ["page_name", "business_name", "page_logo", "website_url", "official_email", "official_phone", "industry_type", "page_description", "founded_year", "country", "state", "city", "postal_code", "address_line1", "address_line2", "google_maps_link", "business_registration_number", "tax_identification_number", "registration_authority", "business_license_document", "page_type", "representative_name", "representative_designation", "representative_email", "representative_phone", "id_proof_document", "linkedin_page_url", "facebook_page_url", "instagram_page_url", "twitter_page_url", "youtube_channel_url", "verified_email_domain", "number_of_employees", "annual_revenue_range", "client_list", "certifications"];

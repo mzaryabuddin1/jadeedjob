@@ -41,7 +41,7 @@ src/
   chat/                    Socket.io gateway (namespace /chat) + REST message history
   rating/                  rate user after accepted application
   filter/                  job categories (+ icon, approval status); seed data
-  pages/                   company pages + members/roles (jobs can belong to a page)
+  pages/                   pages (company profiles): roles, invitations, verified tick (jobs can belong to a page)
   organization/            older org/members concept (similar to pages)
   country/ city/ language/ reference data + seed commands
   files/                   multer upload -> ./uploads, served at /uploads
@@ -163,6 +163,46 @@ Relationships to remember:
 - Page-owned jobs notify only the poster (`createdBy`), not page members.
 - For very high volume swap the worker for BullMQ + Redis; the handler stays.
 
+## Pages (company profiles) (`src/pages/`)
+
+- "Page" replaced the old "company" naming everywhere: entity `Page` (table
+  `pages`), columns `page_name page_logo page_description page_type page_rating
+  page_rating_count`, `/ratings/page/:id`, notification key `pageName`. The
+  old `company_*` columns are renamed (data kept) by `migrate-company-to-page.ts`,
+  which runs in the TypeORM factory BEFORE synchronize (synchronize would drop them).
+  Job input still accepts `companyId` as a deprecated alias of `pageId`.
+- Access: `page-permissions.ts` is the single source of truth (roles owner /
+  admin / editor -> permissions). Use `roleHasPermission(role, perm)`; extra rules
+  live in `PagesService` (only owner invites admins / changes roles; admin
+  handles editors only; owner can't be removed or leave). `isJobEmployer` and job
+  posting use the `jobs.manage` permission.
+- Public vs private: `page-view.ts` `toPageView(page, role)` - everybody gets the
+  public profile (+ `is_verified`); owner/admin also get registration/tax/
+  representative fields and `verification_status`; every view includes
+  `myRole` + `permissions`. Job responses carry a slim page
+  (`{id, page_name, username, page_logo, is_verified}`), never the full entity.
+- Routes: `GET /pages/roles`, `GET /pages/invitations/me`,
+  `POST /pages/invitations/:id/accept|decline`, `POST|GET /pages`, `GET|PATCH|DELETE
+  /pages/:id`, `GET /pages/:id/members`, `PATCH .../members/:uid/role`,
+  `DELETE .../members/me|:uid`, `POST|GET /pages/:id/invitations`, `DELETE
+  .../invitations/:iid`, `POST|GET /pages/:id/verification`. (`POST
+  /pages/:id/members` = deprecated alias of invite.) Static routes are declared
+  before `:id` ones on purpose.
+- Invitations (`page_invitations`, `PageInvitationsService`): only the invited
+  user accepts (membership is created inside a transaction with the page row
+  locked); expire after `PAGE_INVITATION_DAYS` (7); invitee/inviter get
+  notifications (`NotificationService.notifyUser`) with `type=page_invitation`
+  / `page_invitation_accepted`, paths from env `NOTIFICATION_PAGE_INVITATION_PATH`
+  (`/page-invitation/{id}`) and `NOTIFICATION_PAGE_PATH` (`/page/{id}`).
+- Verification (`page_verification_requests`, `PageVerificationService`): owner/
+  admin uploads 1-5 PDF/JPG/PNG/WEBP (10 MB) to `./private-uploads` (git-ignored,
+  NOT served statically); staff review through `/admin/page-verifications/*`
+  (header `x-admin-key` = env `ADMIN_API_KEY`, 404 when unset; UI
+  `public/page-verification-admin.html`); approve sets `pages.is_verified`,
+  reject needs a reason; staff can un-verify. Submitter is notified of results.
+- Deleting a page (owner): its jobs are kept but deactivated + detached
+  (`pageId = null`); invitations, verification rows+files and page ratings go too.
+
 ## Accept/reject & ratings (`job-application/`, `rating/`)
 
 - "Employer side" of a job = the poster, or for a page job the page owner /
@@ -175,7 +215,7 @@ Relationships to remember:
   `ApplicationNotifier.notifyAccepted`** sends push/email to the applicant right
   away (per their notification settings); rejected sends nothing. Push data:
   `type=application_accepted, applicationId, jobId, jobTitle, title, text,
-  companyName, pageId, createdAt, path` (`path` from env
+  pageName, pageId, createdAt, path` (`path` from env
   `NOTIFICATION_APPLICATION_ACCEPTED_PATH`, default `/application/{id}`).
 - Ratings (`POST /ratings`) only on accepted applications, ONE per side
   (`ratings.direction` = `employee_to_employer` | `employer_to_employee`, unique
@@ -183,10 +223,10 @@ Relationships to remember:
   - employer side rates the applicant -> applicant's profile rating.
   - applicant rates a PERSONAL job's poster -> poster's profile rating.
   - applicant rates a PAGE job -> the COMPANY (`ratings.pageId`, `givenTo` null,
-    `pages.company_rating` float + `company_rating_count`), not the person.
+    `pages.page_rating` float + `page_rating_count`), not the person.
   - Profile rating (`users.ratingAverage/ratingCount`) = pooled average of every
     rating received as employee AND employer. `GET /ratings/user/:id` also
-    returns `asEmployee` / `asEmployer` splits; `GET /ratings/company/:pageId`;
+    returns `asEmployee` / `asEmployer` splits; `GET /ratings/page/:pageId`;
     `GET /ratings/application/:id` = rating-screen state (`canRate`, `iRated`...).
 
 ## Username (`src/users/username.util.ts`, `users.service.ts`)
@@ -218,7 +258,7 @@ Relationships to remember:
   `MailService` per user.
 - Push `data` payload (all strings): `type=job_created, jobId, title, text,
   createdAt, filterIds, filterIcon, filters(JSON), isRemote, salaryType,
-  salaryAmount, currency, companyName, pageId, path`. Custom SVG icons send only
+  salaryAmount, currency, pageName, pageId, path`. Custom SVG icons send only
   `{type:'custom'}` (FCM 4KB limit). `path` = deep link from env
   `NOTIFICATION_JOB_PATH` (`{id}` placeholder, default `/job/{id}`) — to be
   configured with the app.

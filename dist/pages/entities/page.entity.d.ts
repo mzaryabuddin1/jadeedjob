@@ -1,16 +1,16 @@
 import { User } from 'src/users/entities/user.entity';
 import { PageMember } from './page-member.entity';
-export declare class CompanyPage {
+export declare class Page {
     id: number;
-    company_name: string;
+    page_name: string;
     business_name: string;
     username: string;
-    company_logo: string;
+    page_logo: string;
     website_url: string;
     official_email: string;
     official_phone: string;
     industry_type: string;
-    company_description: string;
+    page_description: string;
     founded_year: number;
     country: string;
     state: string;
@@ -23,7 +23,7 @@ export declare class CompanyPage {
     tax_identification_number: string;
     registration_authority: string;
     business_license_document: string;
-    company_type: string;
+    page_type: string;
     representative_name: string;
     representative_designation: string;
     representative_email: string;
@@ -39,8 +39,11 @@ export declare class CompanyPage {
     annual_revenue_range: string;
     client_list: string[];
     certifications: string[];
-    company_rating: number;
-    company_rating_count: number;
+    page_rating: number;
+    page_rating_count: number;
+    is_verified: boolean;
+    verified_at: Date | null;
+    verification_status: 'none' | 'pending' | 'verified' | 'rejected';
     ownerId: number;
     owner: User;
     members: PageMember[];

@@ -20,7 +20,7 @@ const typeorm_2 = require("typeorm");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const job_application_entity_1 = require("./entities/job-application.entity");
-const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const page_entity_1 = require("../pages/entities/page.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
 const mail_service_1 = require("../notification/mail.service");
 const notification_queue_service_1 = require("../notification/notification-queue.service");
@@ -99,14 +99,14 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
                 this.logger.log(`Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`);
                 return;
             }
-            const company = job.pageId
+            const pageName = job.pageId
                 ? ((await this.pageRepo.findOne({
                     where: { id: job.pageId },
-                    select: ['id', 'company_name'],
-                }))?.company_name ?? '')
+                    select: ['id', 'page_name'],
+                }))?.page_name ?? '')
                 : '';
             const title = 'Application accepted';
-            const body = `Your application for "${job.title}" was accepted${company ? ` by ${company}` : ''}`;
+            const body = `Your application for "${job.title}" was accepted${pageName ? ` by ${pageName}` : ''}`;
             const template = process.env.NOTIFICATION_APPLICATION_ACCEPTED_PATH ||
                 '/application/{id}';
             const data = {
@@ -116,7 +116,7 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
                 jobTitle: job.title,
                 title,
                 text: body,
-                companyName: company,
+                pageName,
                 pageId: job.pageId != null ? String(job.pageId) : '',
                 createdAt: new Date().toISOString(),
                 path: template.replace('{id}', String(application.id)),
@@ -237,7 +237,7 @@ exports.ApplicationNotifier = ApplicationNotifier = ApplicationNotifier_1 = __de
     __param(3, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(4, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(5, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
-    __param(6, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
+    __param(6, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
     __metadata("design:paramtypes", [notification_queue_service_1.NotificationQueueService,
         firebase_service_1.FirebaseService,
         mail_service_1.MailService,

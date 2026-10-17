@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PageMember = void 0;
 const user_entity_1 = require("../../users/entities/user.entity");
 const typeorm_1 = require("typeorm");
-const company_page_entity_1 = require("./company-page.entity");
+const page_entity_1 = require("./page.entity");
 let PageMember = class PageMember {
 };
 exports.PageMember = PageMember;
@@ -25,10 +25,10 @@ __decorate([
     __metadata("design:type", Number)
 ], PageMember.prototype, "pageId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => company_page_entity_1.CompanyPage, (page) => page.members, {
+    (0, typeorm_1.ManyToOne)(() => page_entity_1.Page, (page) => page.members, {
         onDelete: 'CASCADE',
     }),
-    __metadata("design:type", company_page_entity_1.CompanyPage)
+    __metadata("design:type", page_entity_1.Page)
 ], PageMember.prototype, "page", void 0);
 __decorate([
     (0, typeorm_1.Column)(),

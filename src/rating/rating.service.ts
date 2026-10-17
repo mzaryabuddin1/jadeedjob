@@ -11,7 +11,7 @@ import { Rating, RatingDirection } from './entities/rating.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 import { isJobEmployer } from 'src/job/job-employer.util';
 
 const EMPLOYEE_TO_EMPLOYER: RatingDirection = 'employee_to_employer';
@@ -25,9 +25,9 @@ const EMPLOYER_TO_EMPLOYEE: RatingDirection = 'employer_to_employee';
  *    employers) and as an employer (rated by employees of jobs they posted
  *    themselves). One person can be both, so both roles feed one score.
  *
- * 2. COMPANY page (`pages.company_rating` / `company_rating_count`): the
+ * 2. PAGE (`pages.page_rating` / `page_rating_count`): the
  *    average of the ratings employees gave the employer of a job that was
- *    posted UNDER that page. Those ratings go to the company, not to the
+ *    posted UNDER that page. Those ratings go to the page, not to the
  *    individual who posted the job.
  */
 @Injectable()
@@ -42,8 +42,8 @@ export class RatingService implements OnModuleInit {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
 
-    @InjectRepository(CompanyPage)
-    private readonly pageRepo: Repository<CompanyPage>,
+    @InjectRepository(Page)
+    private readonly pageRepo: Repository<Page>,
   ) {}
 
   /** Ratings made before `direction` existed: derive it from who rated */
@@ -70,7 +70,7 @@ export class RatingService implements OnModuleInit {
   /**
    * Allowed only on an ACCEPTED application, once per side:
    * - the applicant (employee) rates the employer side
-   * - the employer side (poster / company owner, admin, editor) rates the applicant
+   * - the employer side (poster / page owner, admin, editor) rates the applicant
    */
   async rateUser(
     raterId: number,
@@ -113,7 +113,7 @@ export class RatingService implements OnModuleInit {
     if (direction === EMPLOYER_TO_EMPLOYEE) {
       givenTo = app.applicantId;
     } else if (app.job.pageId) {
-      givenTo = null; // company page job: the COMPANY is rated
+      givenTo = null; // page job: the PAGE is rated
       pageId = app.job.pageId;
     } else {
       givenTo = app.job.createdBy; // personal job: the poster is rated
@@ -145,7 +145,7 @@ export class RatingService implements OnModuleInit {
       message: 'Rating submitted',
       rating,
       ratedEntity: pageId
-        ? { type: 'company', pageId }
+        ? { type: 'page', pageId }
         : { type: 'user', userId: givenTo },
     };
   }
@@ -181,7 +181,7 @@ export class RatingService implements OnModuleInit {
     });
   }
 
-  /** Company score = average of employees' ratings for jobs posted under the page */
+  /** Page score = average of employees' ratings for jobs posted under the page */
   async updatePageRatingStats(pageId: number) {
     const row = await this.ratingRepo
       .createQueryBuilder('r')
@@ -191,8 +191,8 @@ export class RatingService implements OnModuleInit {
       .getRawOne();
 
     await this.pageRepo.update(pageId, {
-      company_rating: row?.avg != null ? Number(row.avg) : null,
-      company_rating_count: Number(row?.total ?? 0),
+      page_rating: row?.avg != null ? Number(row.avg) : null,
+      page_rating_count: Number(row?.total ?? 0),
     });
   }
 
@@ -249,29 +249,29 @@ export class RatingService implements OnModuleInit {
     };
   }
 
-  async getCompanySummary(pageId: number, limit = 10) {
+  async getPageSummary(pageId: number, limit = 10) {
     const page = await this.pageRepo.findOne({
       where: { id: pageId },
       select: [
         'id',
-        'company_name',
+        'page_name',
         'username',
-        'company_logo',
-        'company_rating',
-        'company_rating_count',
+        'page_logo',
+        'page_rating',
+        'page_rating_count',
       ],
     });
-    if (!page) throw new NotFoundException('Company page not found');
+    if (!page) throw new NotFoundException('Page not found');
 
     return {
-      company: {
+      page: {
         id: page.id,
-        name: page.company_name,
+        name: page.page_name,
         username: page.username,
-        logo: page.company_logo,
+        logo: page.page_logo,
       },
-      average: page.company_rating ?? 0,
-      count: page.company_rating_count ?? 0,
+      average: page.page_rating ?? 0,
+      count: page.page_rating_count ?? 0,
       recent: await this.recent('r.pageId = :id', pageId, limit),
     };
   }
@@ -299,12 +299,12 @@ export class RatingService implements OnModuleInit {
       applicationId,
       status: app.status,
       myRole: direction === EMPLOYEE_TO_EMPLOYER ? 'employee' : 'employer',
-      // you rate the other side: the company for page jobs, otherwise the person
+      // you rate the other side: the page for page jobs, otherwise the person
       willRate:
         direction === EMPLOYER_TO_EMPLOYEE
           ? { type: 'user', userId: app.applicantId }
           : app.job.pageId
-            ? { type: 'company', pageId: app.job.pageId }
+            ? { type: 'page', pageId: app.job.pageId }
             : { type: 'user', userId: app.job.createdBy },
       canRate: app.status === 'accepted' && !iRated,
       iRated,

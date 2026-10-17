@@ -3,7 +3,7 @@ import { Repository } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { JobApplication } from './entities/job-application.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from 'src/notification/mail.service';
 import { NotificationQueueService } from 'src/notification/notification-queue.service';
@@ -16,7 +16,7 @@ export declare class ApplicationNotifier implements OnModuleInit {
     private readonly appRepo;
     private readonly pageRepo;
     private readonly logger;
-    constructor(queue: NotificationQueueService, firebaseService: FirebaseService, mailService: MailService, userRepo: Repository<User>, jobRepo: Repository<Job>, appRepo: Repository<JobApplication>, pageRepo: Repository<CompanyPage>);
+    constructor(queue: NotificationQueueService, firebaseService: FirebaseService, mailService: MailService, userRepo: Repository<User>, jobRepo: Repository<Job>, appRepo: Repository<JobApplication>, pageRepo: Repository<Page>);
     getTiming(): {
         delaySeconds: number;
         minGapSeconds: number;

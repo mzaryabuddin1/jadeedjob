@@ -8,7 +8,8 @@ import { Repository, In } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationService } from '../notification/notification.service';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
+import { roleHasPermission } from 'src/pages/page-permissions';
 import { Filter, normalizeFilterIcon } from 'src/filter/entities/filter.entity';
 
 @Injectable()
@@ -20,8 +21,8 @@ export class JobService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
 
-    @InjectRepository(CompanyPage)
-    private pageRepo: Repository<CompanyPage>,
+    @InjectRepository(Page)
+    private pageRepo: Repository<Page>,
 
     @InjectRepository(Filter)
     private filterRepo: Repository<Filter>,
@@ -83,6 +84,22 @@ export class JobService {
   /** Slim category for job responses — what the app needs to render a chip */
   private toJobFilter(f: Filter) {
     return { id: f.id, name: f.name, icon: normalizeFilterIcon(f.icon) };
+  }
+
+  /**
+   * The page a job belongs to, as the public sees it. The full Page entity
+   * also carries private business details (registration / tax numbers...),
+   * so job responses must never return it as is.
+   */
+  private slimPage(page?: Page | null) {
+    if (!page) return null;
+    return {
+      id: page.id,
+      page_name: page.page_name,
+      username: page.username,
+      page_logo: page.page_logo,
+      is_verified: !!page.is_verified,
+    };
   }
 
   /** Categories of a job (from `job_filters`) as `filters` + `filterIds` */
@@ -165,7 +182,7 @@ export class JobService {
     userId: number,
     opts: { skipNotification?: boolean } = {},
   ) {
-    // App may send companyId instead of pageId
+    // `companyId` is a deprecated alias of `pageId` (old app builds)
     const requestedPageId =
       data.pageId != null
         ? Number(data.pageId)
@@ -190,7 +207,7 @@ export class JobService {
           ? { role: 'owner' }
           : page.members.find((m) => m.userId === userId);
 
-      if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
+      if (!member || !roleHasPermission(member.role, 'jobs.manage')) {
         throw new BadRequestException(
           'You are not allowed to create jobs for this page',
         );
@@ -296,6 +313,7 @@ export class JobService {
     return {
       ...withFilters,
       ...(withFilters ? this.jobCategories(withFilters) : {}),
+      page: this.slimPage(withFilters?.page),
     };
   }
 
@@ -366,9 +384,10 @@ export class JobService {
       ST_Longitude(j.location) AS lng,
       ST_Latitude(j.location) AS lat,
       p.id AS page_id,
-      p.company_name,
+      p.page_name,
       p.username AS page_username,
-      p.company_logo,
+      p.page_logo,
+      p.is_verified AS page_is_verified,
       ${distanceSql} AS distance
     FROM jobs j
     LEFT JOIN pages p ON p.id = j.pageId
@@ -411,9 +430,10 @@ export class JobService {
         page: j.page_id
           ? {
               id: j.page_id,
-              company_name: j.company_name,
+              page_name: j.page_name,
               username: j.page_username,
-              company_logo: j.company_logo,
+              page_logo: j.page_logo,
+              is_verified: !!j.page_is_verified,
             }
           : null,
       })),
@@ -494,9 +514,10 @@ export class JobService {
         page: job.pageId
           ? {
               id: job.page.id,
-              company_name: job.page.company_name,
+              page_name: job.page.page_name,
               username: job.page.username,
-              company_logo: job.page.company_logo,
+              page_logo: job.page.page_logo,
+              is_verified: !!job.page.is_verified,
             }
           : null,
       })),
@@ -522,6 +543,7 @@ export class JobService {
     return {
       ...job,
       ...this.jobCategories(job),
+      page: this.slimPage(job.page),
     };
   }
 
@@ -546,7 +568,7 @@ export class JobService {
           ? { role: 'owner' }
           : page.members.find((m) => m.userId === userId);
 
-      if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
+      if (!member || !roleHasPermission(member.role, 'jobs.manage')) {
         throw new BadRequestException(
           'You are not allowed to update jobs for this page',
         );
@@ -657,6 +679,7 @@ export class JobService {
     return {
       ...updated,
       ...this.jobCategories(updated),
+      page: this.slimPage(updated.page),
     };
   }
 }

@@ -13,7 +13,7 @@ exports.Rating = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../users/entities/user.entity");
 const job_application_entity_1 = require("../../job-application/entities/job-application.entity");
-const company_page_entity_1 = require("../../pages/entities/company-page.entity");
+const page_entity_1 = require("../../pages/entities/page.entity");
 let Rating = class Rating {
 };
 exports.Rating = Rating;
@@ -52,9 +52,9 @@ __decorate([
     __metadata("design:type", Number)
 ], Rating.prototype, "pageId", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => company_page_entity_1.CompanyPage, { nullable: true, onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)(() => page_entity_1.Page, { nullable: true, onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'pageId' }),
-    __metadata("design:type", company_page_entity_1.CompanyPage)
+    __metadata("design:type", page_entity_1.Page)
 ], Rating.prototype, "page", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 24, nullable: true }),

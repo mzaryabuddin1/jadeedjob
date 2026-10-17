@@ -1,17 +1,18 @@
 import { Repository } from 'typeorm';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
+import { rolesWith } from 'src/pages/page-permissions';
 
-/** Page roles that may act for the company (same as creating/editing its jobs) */
-export const PAGE_MANAGER_ROLES = ['owner', 'admin', 'editor'];
+/** Page roles that may act for the page (same as creating/editing its jobs) */
+export const PAGE_MANAGER_ROLES: string[] = rolesWith('jobs.manage');
 
 /**
  * Is `userId` on the employer side of this job?
  * - the user who posted it, or
- * - for a job posted under a company page: the page owner or a member with
+ * - for a job posted under a page: the page owner or a member with
  *   role owner / admin / editor.
  */
 export async function isJobEmployer(
-  pageRepo: Repository<CompanyPage>,
+  pageRepo: Repository<Page>,
   job: { createdBy: number; pageId?: number | null },
   userId: number,
 ): Promise<boolean> {

@@ -20,7 +20,7 @@ const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const application_notifier_1 = require("./application-notifier");
-const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const page_entity_1 = require("../pages/entities/page.entity");
 const job_employer_util_1 = require("../job/job-employer.util");
 const PRIVATE_USER_FIELDS = [
     'passwordHash',
@@ -57,7 +57,7 @@ let JobApplicationService = class JobApplicationService {
             throw new common_1.BadRequestException('Job does not exist or is not active');
         }
         if (await (0, job_employer_util_1.isJobEmployer)(this.pageRepo, job, data.applicantId)) {
-            throw new common_1.BadRequestException("You cannot apply to your own (or your company's) job");
+            throw new common_1.BadRequestException("You cannot apply to your own (or your page's) job");
         }
         const app = await this.jobAppRepo.manager.transaction(async (manager) => {
             await manager
@@ -148,7 +148,7 @@ exports.JobApplicationService = JobApplicationService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
     __param(1, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(3, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
+    __param(3, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

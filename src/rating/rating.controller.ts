@@ -35,12 +35,12 @@ export class RatingController {
     description: [
       'Only after the employer **accepted** the application, and **once per side**:',
       '- the **applicant (employee)** rates the employer side',
-      '- the **employer side** (job poster, or company page owner/admin/editor) rates the applicant',
+      '- the **employer side** (job poster, or page owner/admin/editor) rates the applicant',
       '',
       'Where the rating lands:',
       "- rating an **applicant** → the applicant's **profile rating** (`users.ratingAverage`)",
       "- employee rating a **personal job's poster** → the poster's **profile rating**",
-      '- employee rating a job posted **under a company page** → the **company rating** (`pages.company_rating`), not the person',
+      '- employee rating a job posted **under a page** → the **page rating** (`pages.page_rating`), not the person',
       '',
       'A profile rating is the average of ALL ratings the person received, as employee and as employer together.',
     ].join('\n'),
@@ -78,7 +78,7 @@ export class RatingController {
   @ApiOperation({
     summary: 'Can I rate on this application? (rating screen state)',
     description:
-      'For the applicant or the employer side of the application: `myRole` (employee/employer), who `willRate` (user or company), `canRate`, `iRated`, `otherSideRated`. 403 if you are not part of the application.',
+      'For the applicant or the employer side of the application: `myRole` (employee/employer), who `willRate` (user or page), `canRate`, `iRated`, `otherSideRated`. 403 if you are not part of the application.',
   })
   async applicationState(
     @Param('applicationId', ParseIntPipe) applicationId: number,
@@ -94,7 +94,7 @@ export class RatingController {
   @ApiOperation({
     summary: 'User rating summary',
     description:
-      '`average`/`count` = all ratings the person received (employee + employer roles pooled). `asEmployee` = rated by employers, `asEmployer` = rated by employees of jobs they posted personally (jobs under a company page count for the company instead).',
+      '`average`/`count` = all ratings the person received (employee + employer roles pooled). `asEmployee` = rated by employers, `asEmployer` = rated by employees of jobs they posted personally (jobs under a page count for the page instead).',
   })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
   async userSummary(
@@ -104,17 +104,17 @@ export class RatingController {
     return this.ratingService.getUserSummary(userId, Number(limit) || 10);
   }
 
-  @Get('company/:pageId')
+  @Get('page/:pageId')
   @ApiOperation({
-    summary: 'Company rating summary',
+    summary: 'Page rating summary',
     description:
-      'Average of the ratings employees gave this company for jobs posted under its page.',
+      'Average of the ratings employees gave this page for jobs posted under it.',
   })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
-  async companySummary(
+  async pageSummary(
     @Param('pageId', ParseIntPipe) pageId: number,
     @Query('limit') limit = '10',
   ) {
-    return this.ratingService.getCompanySummary(pageId, Number(limit) || 10);
+    return this.ratingService.getPageSummary(pageId, Number(limit) || 10);
   }
 }

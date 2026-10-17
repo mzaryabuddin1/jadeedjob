@@ -8,22 +8,43 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PagesModule = void 0;
 const common_1 = require("@nestjs/common");
-const pages_controller_1 = require("./pages.controller");
-const pages_service_1 = require("./pages.service");
 const typeorm_1 = require("@nestjs/typeorm");
-const company_page_entity_1 = require("./entities/company-page.entity");
+const pages_controller_1 = require("./pages.controller");
+const admin_page_verification_controller_1 = require("./admin-page-verification.controller");
+const pages_service_1 = require("./pages.service");
+const page_invitations_service_1 = require("./page-invitations.service");
+const page_verification_service_1 = require("./page-verification.service");
+const admin_key_guard_1 = require("./admin-key.guard");
+const page_entity_1 = require("./entities/page.entity");
 const page_member_entity_1 = require("./entities/page-member.entity");
+const page_invitation_entity_1 = require("./entities/page-invitation.entity");
+const page_verification_entity_1 = require("./entities/page-verification.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const job_entity_1 = require("../job/entities/job.entity");
+const notification_module_1 = require("../notification/notification.module");
 let PagesModule = class PagesModule {
 };
 exports.PagesModule = PagesModule;
 exports.PagesModule = PagesModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([company_page_entity_1.CompanyPage, page_member_entity_1.PageMember, user_entity_1.User]),
+            typeorm_1.TypeOrmModule.forFeature([
+                page_entity_1.Page,
+                page_member_entity_1.PageMember,
+                page_invitation_entity_1.PageInvitation,
+                page_verification_entity_1.PageVerificationRequest,
+                user_entity_1.User,
+                job_entity_1.Job,
+            ]),
+            notification_module_1.NotificationModule,
         ],
-        controllers: [pages_controller_1.PagesController],
-        providers: [pages_service_1.PagesService],
+        controllers: [pages_controller_1.PagesController, admin_page_verification_controller_1.AdminPageVerificationController],
+        providers: [
+            pages_service_1.PagesService,
+            page_invitations_service_1.PageInvitationsService,
+            page_verification_service_1.PageVerificationService,
+            admin_key_guard_1.AdminKeyGuard,
+        ],
         exports: [pages_service_1.PagesService],
     })
 ], PagesModule);

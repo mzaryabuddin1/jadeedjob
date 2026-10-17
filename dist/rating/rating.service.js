@@ -20,7 +20,7 @@ const rating_entity_1 = require("./entities/rating.entity");
 const job_application_entity_1 = require("../job-application/entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
-const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const page_entity_1 = require("../pages/entities/page.entity");
 const job_employer_util_1 = require("../job/job-employer.util");
 const EMPLOYEE_TO_EMPLOYER = 'employee_to_employer';
 const EMPLOYER_TO_EMPLOYEE = 'employer_to_employee';
@@ -104,7 +104,7 @@ let RatingService = class RatingService {
             message: 'Rating submitted',
             rating,
             ratedEntity: pageId
-                ? { type: 'company', pageId }
+                ? { type: 'page', pageId }
                 : { type: 'user', userId: givenTo },
         };
     }
@@ -136,8 +136,8 @@ let RatingService = class RatingService {
             .where('r.pageId = :pageId', { pageId })
             .getRawOne();
         await this.pageRepo.update(pageId, {
-            company_rating: row?.avg != null ? Number(row.avg) : null,
-            company_rating_count: Number(row?.total ?? 0),
+            page_rating: row?.avg != null ? Number(row.avg) : null,
+            page_rating_count: Number(row?.total ?? 0),
         });
     }
     async getUserSummary(userId, limit = 10) {
@@ -184,29 +184,29 @@ let RatingService = class RatingService {
             recent: await this.recent('r.givenTo = :id', userId, limit),
         };
     }
-    async getCompanySummary(pageId, limit = 10) {
+    async getPageSummary(pageId, limit = 10) {
         const page = await this.pageRepo.findOne({
             where: { id: pageId },
             select: [
                 'id',
-                'company_name',
+                'page_name',
                 'username',
-                'company_logo',
-                'company_rating',
-                'company_rating_count',
+                'page_logo',
+                'page_rating',
+                'page_rating_count',
             ],
         });
         if (!page)
-            throw new common_1.NotFoundException('Company page not found');
+            throw new common_1.NotFoundException('Page not found');
         return {
-            company: {
+            page: {
                 id: page.id,
-                name: page.company_name,
+                name: page.page_name,
                 username: page.username,
-                logo: page.company_logo,
+                logo: page.page_logo,
             },
-            average: page.company_rating ?? 0,
-            count: page.company_rating_count ?? 0,
+            average: page.page_rating ?? 0,
+            count: page.page_rating_count ?? 0,
             recent: await this.recent('r.pageId = :id', pageId, limit),
         };
     }
@@ -233,7 +233,7 @@ let RatingService = class RatingService {
             willRate: direction === EMPLOYER_TO_EMPLOYEE
                 ? { type: 'user', userId: app.applicantId }
                 : app.job.pageId
-                    ? { type: 'company', pageId: app.job.pageId }
+                    ? { type: 'page', pageId: app.job.pageId }
                     : { type: 'user', userId: app.job.createdBy },
             canRate: app.status === 'accepted' && !iRated,
             iRated,
@@ -286,7 +286,7 @@ exports.RatingService = RatingService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(rating_entity_1.Rating)),
     __param(1, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(3, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
+    __param(3, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

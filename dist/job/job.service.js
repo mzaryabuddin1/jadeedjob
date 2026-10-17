@@ -20,7 +20,8 @@ const typeorm_2 = require("typeorm");
 const job_entity_1 = require("./entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const notification_service_1 = require("../notification/notification.service");
-const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const page_entity_1 = require("../pages/entities/page.entity");
+const page_permissions_1 = require("../pages/page-permissions");
 const filter_entity_1 = require("../filter/entities/filter.entity");
 let JobService = JobService_1 = class JobService {
     constructor(jobRepo, userRepo, pageRepo, filterRepo, notificationService) {
@@ -58,6 +59,17 @@ let JobService = JobService_1 = class JobService {
     }
     toJobFilter(f) {
         return { id: f.id, name: f.name, icon: (0, filter_entity_1.normalizeFilterIcon)(f.icon) };
+    }
+    slimPage(page) {
+        if (!page)
+            return null;
+        return {
+            id: page.id,
+            page_name: page.page_name,
+            username: page.username,
+            page_logo: page.page_logo,
+            is_verified: !!page.is_verified,
+        };
     }
     jobCategories(job) {
         const filters = job.filters || [];
@@ -125,7 +137,7 @@ let JobService = JobService_1 = class JobService {
             const member = page.ownerId === userId
                 ? { role: 'owner' }
                 : page.members.find((m) => m.userId === userId);
-            if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
+            if (!member || !(0, page_permissions_1.roleHasPermission)(member.role, 'jobs.manage')) {
                 throw new common_1.BadRequestException('You are not allowed to create jobs for this page');
             }
             pageId = page.id;
@@ -203,6 +215,7 @@ let JobService = JobService_1 = class JobService {
         return {
             ...withFilters,
             ...(withFilters ? this.jobCategories(withFilters) : {}),
+            page: this.slimPage(withFilters?.page),
         };
     }
     async findNearbyJobs(query) {
@@ -240,9 +253,10 @@ let JobService = JobService_1 = class JobService {
       ST_Longitude(j.location) AS lng,
       ST_Latitude(j.location) AS lat,
       p.id AS page_id,
-      p.company_name,
+      p.page_name,
       p.username AS page_username,
-      p.company_logo,
+      p.page_logo,
+      p.is_verified AS page_is_verified,
       ${distanceSql} AS distance
     FROM jobs j
     LEFT JOIN pages p ON p.id = j.pageId
@@ -269,9 +283,10 @@ let JobService = JobService_1 = class JobService {
                 page: j.page_id
                     ? {
                         id: j.page_id,
-                        company_name: j.company_name,
+                        page_name: j.page_name,
                         username: j.page_username,
-                        company_logo: j.company_logo,
+                        page_logo: j.page_logo,
+                        is_verified: !!j.page_is_verified,
                     }
                     : null,
             })),
@@ -321,9 +336,10 @@ let JobService = JobService_1 = class JobService {
                 page: job.pageId
                     ? {
                         id: job.page.id,
-                        company_name: job.page.company_name,
+                        page_name: job.page.page_name,
                         username: job.page.username,
-                        company_logo: job.page.company_logo,
+                        page_logo: job.page.page_logo,
+                        is_verified: !!job.page.is_verified,
                     }
                     : null,
             })),
@@ -346,6 +362,7 @@ let JobService = JobService_1 = class JobService {
         return {
             ...job,
             ...this.jobCategories(job),
+            page: this.slimPage(job.page),
         };
     }
     async updateJob(id, data, userId) {
@@ -363,7 +380,7 @@ let JobService = JobService_1 = class JobService {
             const member = page.ownerId === userId
                 ? { role: 'owner' }
                 : page.members.find((m) => m.userId === userId);
-            if (!member || !['owner', 'admin', 'editor'].includes(member.role)) {
+            if (!member || !(0, page_permissions_1.roleHasPermission)(member.role, 'jobs.manage')) {
                 throw new common_1.BadRequestException('You are not allowed to update jobs for this page');
             }
         }
@@ -445,6 +462,7 @@ let JobService = JobService_1 = class JobService {
         return {
             ...updated,
             ...this.jobCategories(updated),
+            page: this.slimPage(updated.page),
         };
     }
 };
@@ -462,7 +480,7 @@ exports.JobService = JobService = JobService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(2, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
+    __param(2, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
     __param(3, (0, typeorm_1.InjectRepository)(filter_entity_1.Filter)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,

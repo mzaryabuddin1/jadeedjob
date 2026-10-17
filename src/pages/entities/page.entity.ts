@@ -12,12 +12,12 @@ import { User } from 'src/users/entities/user.entity';
 import { PageMember } from './page-member.entity';
 
 @Entity('pages')
-export class CompanyPage  {
+export class Page {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
-  company_name: string;
+  page_name: string;
 
   @Column({ nullable: true })
   business_name: string;
@@ -26,7 +26,7 @@ export class CompanyPage  {
   username: string;
 
   @Column({ nullable: true })
-  company_logo: string;
+  page_logo: string;
 
   @Column({ nullable: true })
   website_url: string;
@@ -41,7 +41,7 @@ export class CompanyPage  {
   industry_type: string;
 
   @Column({ type: 'text', nullable: true })
-  company_description: string;
+  page_description: string;
 
   @Column({ nullable: true })
   founded_year: number;
@@ -80,7 +80,7 @@ export class CompanyPage  {
   business_license_document: string;
 
   @Column({ nullable: true })
-  company_type: string;
+  page_type: string;
 
   @Column({ nullable: true })
   representative_name: string;
@@ -127,12 +127,23 @@ export class CompanyPage  {
   @Column({ type: 'simple-array', nullable: true })
   certifications: string[];
 
-  /** Average stars employees gave this company (jobs posted under this page) */
+  /** Average stars employees gave this page (jobs posted under it) */
   @Column({ type: 'float', nullable: true })
-  company_rating: number;
+  page_rating: number;
 
   @Column({ type: 'int', default: 0 })
-  company_rating_count: number;
+  page_rating_count: number;
+
+  /** The verified tick - only set by staff after reviewing the documents */
+  @Column({ type: 'boolean', default: false })
+  is_verified: boolean;
+
+  @Column({ type: 'datetime', nullable: true })
+  verified_at: Date | null;
+
+  /** none -> pending (documents sent) -> verified | rejected */
+  @Column({ type: 'varchar', length: 10, default: 'none' })
+  verification_status: 'none' | 'pending' | 'verified' | 'rejected';
 
   @Column()
   ownerId: number;

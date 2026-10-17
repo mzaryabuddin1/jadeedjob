@@ -9,11 +9,11 @@ import { RatingController } from './rating.controller';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Rating, JobApplication, Job, User, CompanyPage]),
+    TypeOrmModule.forFeature([Rating, JobApplication, Job, User, Page]),
   ],
   controllers: [RatingController],
   providers: [RatingService],

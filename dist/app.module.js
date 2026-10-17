@@ -29,6 +29,7 @@ const files_module_1 = require("./files/files.module");
 const pages_module_1 = require("./pages/pages.module");
 const typeorm_1 = require("@nestjs/typeorm");
 const migrate_legacy_filter_column_1 = require("./job/migrate-legacy-filter-column");
+const migrate_company_to_page_1 = require("./pages/migrate-company-to-page");
 const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
@@ -46,6 +47,7 @@ exports.AppModule = AppModule = __decorate([
             typeorm_1.TypeOrmModule.forRootAsync({
                 useFactory: async () => {
                     await (0, migrate_legacy_filter_column_1.migrateLegacyJobFilterColumn)();
+                    await (0, migrate_company_to_page_1.migrateCompanyToPageNaming)();
                     return {
                         type: 'mysql',
                         host: process.env.DB_HOST,

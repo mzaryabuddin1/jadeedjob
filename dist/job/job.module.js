@@ -15,7 +15,7 @@ const job_entity_1 = require("./entities/job.entity");
 const filter_entity_1 = require("../filter/entities/filter.entity");
 const notification_module_1 = require("../notification/notification.module");
 const user_entity_1 = require("../users/entities/user.entity");
-const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const page_entity_1 = require("../pages/entities/page.entity");
 const files_module_1 = require("../files/files.module");
 let JobModule = class JobModule {
 };
@@ -23,7 +23,7 @@ exports.JobModule = JobModule;
 exports.JobModule = JobModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([job_entity_1.Job, filter_entity_1.Filter, user_entity_1.User, company_page_entity_1.CompanyPage]),
+            typeorm_1.TypeOrmModule.forFeature([job_entity_1.Job, filter_entity_1.Filter, user_entity_1.User, page_entity_1.Page]),
             notification_module_1.NotificationModule,
             files_module_1.FilesModule,
         ],

@@ -6,12 +6,12 @@ import { Job } from './entities/job.entity';
 import { Filter } from 'src/filter/entities/filter.entity';
 import { NotificationModule } from 'src/notification/notification.module';
 import { User } from 'src/users/entities/user.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 import { FilesModule } from 'src/files/files.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Job, Filter, User, CompanyPage]),
+    TypeOrmModule.forFeature([Job, Filter, User, Page]),
     NotificationModule,
     FilesModule,
   ],

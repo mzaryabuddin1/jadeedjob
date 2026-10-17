@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { JobApplication } from './entities/job-application.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from 'src/notification/mail.service';
 import { NotificationQueueService } from 'src/notification/notification-queue.service';
@@ -42,8 +42,8 @@ export class ApplicationNotifier implements OnModuleInit {
     @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobApplication)
     private readonly appRepo: Repository<JobApplication>,
-    @InjectRepository(CompanyPage)
-    private readonly pageRepo: Repository<CompanyPage>,
+    @InjectRepository(Page)
+    private readonly pageRepo: Repository<Page>,
   ) {}
 
   /** Current batching settings (env or defaults) */
@@ -129,17 +129,17 @@ export class ApplicationNotifier implements OnModuleInit {
         return;
       }
 
-      const company = job.pageId
+      const pageName = job.pageId
         ? ((
             await this.pageRepo.findOne({
               where: { id: job.pageId },
-              select: ['id', 'company_name'],
+              select: ['id', 'page_name'],
             })
-          )?.company_name ?? '')
+          )?.page_name ?? '')
         : '';
 
       const title = 'Application accepted';
-      const body = `Your application for "${job.title}" was accepted${company ? ` by ${company}` : ''}`;
+      const body = `Your application for "${job.title}" was accepted${pageName ? ` by ${pageName}` : ''}`;
       const template =
         process.env.NOTIFICATION_APPLICATION_ACCEPTED_PATH ||
         '/application/{id}';
@@ -151,7 +151,7 @@ export class ApplicationNotifier implements OnModuleInit {
         jobTitle: job.title,
         title,
         text: body,
-        companyName: company,
+        pageName,
         pageId: job.pageId != null ? String(job.pageId) : '',
         createdAt: new Date().toISOString(),
         path: template.replace('{id}', String(application.id)),

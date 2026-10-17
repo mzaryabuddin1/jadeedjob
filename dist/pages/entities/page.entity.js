@@ -9,197 +9,209 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CompanyPage = void 0;
+exports.Page = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../users/entities/user.entity");
 const page_member_entity_1 = require("./page-member.entity");
-let CompanyPage = class CompanyPage {
+let Page = class Page {
 };
-exports.CompanyPage = CompanyPage;
+exports.Page = Page;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
-], CompanyPage.prototype, "id", void 0);
+], Page.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
-], CompanyPage.prototype, "company_name", void 0);
+], Page.prototype, "page_name", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "business_name", void 0);
+], Page.prototype, "business_name", void 0);
 __decorate([
     (0, typeorm_1.Column)({ unique: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "username", void 0);
+], Page.prototype, "username", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "company_logo", void 0);
+], Page.prototype, "page_logo", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "website_url", void 0);
+], Page.prototype, "website_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "official_email", void 0);
+], Page.prototype, "official_email", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "official_phone", void 0);
+], Page.prototype, "official_phone", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "industry_type", void 0);
+], Page.prototype, "industry_type", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "company_description", void 0);
+], Page.prototype, "page_description", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", Number)
-], CompanyPage.prototype, "founded_year", void 0);
+], Page.prototype, "founded_year", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "country", void 0);
+], Page.prototype, "country", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "state", void 0);
+], Page.prototype, "state", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "city", void 0);
+], Page.prototype, "city", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "postal_code", void 0);
+], Page.prototype, "postal_code", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "address_line1", void 0);
+], Page.prototype, "address_line1", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "address_line2", void 0);
+], Page.prototype, "address_line2", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "google_maps_link", void 0);
+], Page.prototype, "google_maps_link", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "business_registration_number", void 0);
+], Page.prototype, "business_registration_number", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "tax_identification_number", void 0);
+], Page.prototype, "tax_identification_number", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "registration_authority", void 0);
+], Page.prototype, "registration_authority", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "business_license_document", void 0);
+], Page.prototype, "business_license_document", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "company_type", void 0);
+], Page.prototype, "page_type", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "representative_name", void 0);
+], Page.prototype, "representative_name", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "representative_designation", void 0);
+], Page.prototype, "representative_designation", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "representative_email", void 0);
+], Page.prototype, "representative_email", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "representative_phone", void 0);
+], Page.prototype, "representative_phone", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "id_proof_document", void 0);
+], Page.prototype, "id_proof_document", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "linkedin_page_url", void 0);
+], Page.prototype, "linkedin_page_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "facebook_page_url", void 0);
+], Page.prototype, "facebook_page_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "instagram_page_url", void 0);
+], Page.prototype, "instagram_page_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "twitter_page_url", void 0);
+], Page.prototype, "twitter_page_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "youtube_channel_url", void 0);
+], Page.prototype, "youtube_channel_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "verified_email_domain", void 0);
+], Page.prototype, "verified_email_domain", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", Number)
-], CompanyPage.prototype, "number_of_employees", void 0);
+], Page.prototype, "number_of_employees", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
-], CompanyPage.prototype, "annual_revenue_range", void 0);
+], Page.prototype, "annual_revenue_range", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'simple-array', nullable: true }),
     __metadata("design:type", Array)
-], CompanyPage.prototype, "client_list", void 0);
+], Page.prototype, "client_list", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'simple-array', nullable: true }),
     __metadata("design:type", Array)
-], CompanyPage.prototype, "certifications", void 0);
+], Page.prototype, "certifications", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'float', nullable: true }),
     __metadata("design:type", Number)
-], CompanyPage.prototype, "company_rating", void 0);
+], Page.prototype, "page_rating", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'int', default: 0 }),
     __metadata("design:type", Number)
-], CompanyPage.prototype, "company_rating_count", void 0);
+], Page.prototype, "page_rating_count", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'boolean', default: false }),
+    __metadata("design:type", Boolean)
+], Page.prototype, "is_verified", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], Page.prototype, "verified_at", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 10, default: 'none' }),
+    __metadata("design:type", String)
+], Page.prototype, "verification_status", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", Number)
-], CompanyPage.prototype, "ownerId", void 0);
+], Page.prototype, "ownerId", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User),
     (0, typeorm_1.JoinColumn)({ name: 'ownerId' }),
     __metadata("design:type", user_entity_1.User)
-], CompanyPage.prototype, "owner", void 0);
+], Page.prototype, "owner", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => page_member_entity_1.PageMember, (member) => member.page, {
         cascade: true,
     }),
     __metadata("design:type", Array)
-], CompanyPage.prototype, "members", void 0);
+], Page.prototype, "members", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
-], CompanyPage.prototype, "createdAt", void 0);
+], Page.prototype, "createdAt", void 0);
 __decorate([
     (0, typeorm_1.UpdateDateColumn)(),
     __metadata("design:type", Date)
-], CompanyPage.prototype, "updatedAt", void 0);
-exports.CompanyPage = CompanyPage = __decorate([
+], Page.prototype, "updatedAt", void 0);
+exports.Page = Page = __decorate([
     (0, typeorm_1.Entity)('pages')
-], CompanyPage);
-//# sourceMappingURL=company-page.entity.js.map
+], Page);
+//# sourceMappingURL=page.entity.js.map

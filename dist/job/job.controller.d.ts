@@ -5,6 +5,13 @@ export declare class JobController {
     private readonly filesService;
     constructor(jobService: JobService, filesService: FilesService);
     createJob(files: Express.Multer.File[] | undefined, body: any, req: any): Promise<{
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
         filters: {
             id: number;
             name: string;
@@ -40,7 +47,6 @@ export declare class JobController {
         creator: import("../users/entities/user.entity").User;
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
-        page?: import("../pages/entities/company-page.entity").CompanyPage;
     }>;
     findJobs(query: any, req: any): Promise<{
         data: any;
@@ -49,6 +55,13 @@ export declare class JobController {
         currentPage: number;
     }>;
     findJob(id: number): Promise<{
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
         filters: {
             id: number;
             name: string;
@@ -84,9 +97,15 @@ export declare class JobController {
         creator: import("../users/entities/user.entity").User;
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
-        page?: import("../pages/entities/company-page.entity").CompanyPage;
     }>;
     patchJob(id: number, files: Express.Multer.File[], body: any, req: any): Promise<{
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
         filters: {
             id: number;
             name: string;
@@ -122,6 +141,5 @@ export declare class JobController {
         creator: import("../users/entities/user.entity").User;
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
-        page?: import("../pages/entities/company-page.entity").CompanyPage;
     }>;
 }

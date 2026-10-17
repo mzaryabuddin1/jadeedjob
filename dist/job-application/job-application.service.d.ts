@@ -3,14 +3,14 @@ import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { ApplicationNotifier } from './application-notifier';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 export declare class JobApplicationService {
     private jobAppRepo;
     private jobRepo;
     private userRepo;
     private pageRepo;
     private applicationNotifier;
-    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, applicationNotifier: ApplicationNotifier);
+    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<Page>, applicationNotifier: ApplicationNotifier);
     apply(data: {
         jobId: number;
         applicantId: number;

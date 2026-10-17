@@ -41,6 +41,14 @@ export declare class NotificationService {
     private readonly mailService;
     private readonly logger;
     constructor(userRepo: Repository<User>, firebaseService: FirebaseService, mailService: MailService);
+    notifyUser(userId: number, message: {
+        title: string;
+        body: string;
+        data?: Record<string, string | number | null | undefined>;
+    }): Promise<{
+        push: number;
+        email: boolean;
+    }>;
     private readonly recent;
     getSummary(jobId: number): NotificationSummary | undefined;
     notifyJobCreated(job: Job, opts?: {

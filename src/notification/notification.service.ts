@@ -54,6 +54,85 @@ export class NotificationService {
   ) {}
 
   // ────────────────────────────────────────────────
+  // ONE USER, ONE EVENT (page invitation, verification result, ...)
+  // ────────────────────────────────────────────────
+  /**
+   * Notify a single user right away, following their notification settings
+   * (push to their devices, email to their account email). `data` values are
+   * turned into strings (FCM requirement). Never throws.
+   * @returns what was done, handy for logs/diagnostics
+   */
+  async notifyUser(
+    userId: number,
+    message: {
+      title: string;
+      body: string;
+      data?: Record<string, string | number | null | undefined>;
+    },
+  ): Promise<{ push: number; email: boolean }> {
+    try {
+      const user = await this.userRepo.findOne({
+        where: { id: userId },
+        select: [
+          'id',
+          'email',
+          'fcmTokens',
+          'notification_settings',
+          'isBanned',
+        ],
+      });
+      if (!user || user.isBanned) return { push: 0, email: false };
+
+      const settings = resolveNotificationSettings(user.notification_settings);
+      const tokens = settings.push
+        ? (user.fcmTokens || []).filter(Boolean)
+        : [];
+      const email =
+        settings.email && user.email ? String(user.email).trim() : '';
+
+      const data: Record<string, string> = {};
+      for (const [k, v] of Object.entries(message.data ?? {})) {
+        data[k] = v == null ? '' : String(v);
+      }
+      data.title = message.title;
+      data.text = message.body;
+      data.createdAt = new Date().toISOString();
+
+      let pushed = 0;
+      if (tokens.length) {
+        const res = await this.firebaseService.sendToTokens(
+          tokens,
+          { title: message.title, body: message.body },
+          data,
+        );
+        pushed = res.success;
+        const errors = Object.entries(res.errors)
+          .map(([code, e]) => `${code}x${e.count}`)
+          .join(', ');
+        this.logger.log(
+          `User #${userId} "${message.title}": push ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`,
+        );
+      }
+
+      let mailed = false;
+      if (email) {
+        mailed = await this.mailService.send({
+          to: email,
+          subject: message.title,
+          text: `${message.body}\n\nOpen the JobsLoot app for details.\n\nYou can turn off email notifications anytime in the app settings.`,
+        });
+      }
+
+      return { push: pushed, email: mailed };
+    } catch (err) {
+      this.logger.error(
+        `notifyUser(#${userId}) failed: ${(err as Error)?.message}`,
+      );
+      return { push: 0, email: false };
+    }
+  }
+
+  // ────────────────────────────────────────────────
   // JOB CREATED → notify users who prefer any of the job's filters
   // ────────────────────────────────────────────────
   /**
@@ -383,7 +462,7 @@ export class NotificationService {
       salaryType: job.salaryType ?? '',
       salaryAmount: job.salaryAmount != null ? String(job.salaryAmount) : '',
       currency: job.currency ?? '',
-      companyName: job.page?.company_name ?? '',
+      pageName: job.page?.page_name ?? '',
       pageId: job.pageId != null ? String(job.pageId) : '',
       path: this.buildJobPath(job.id),
     };
@@ -399,10 +478,10 @@ export class NotificationService {
       job.salaryAmount != null
         ? `${job.salaryAmount} ${job.currency ?? ''} (${job.salaryType})`.trim()
         : '';
-    const company = job.page?.company_name ?? '';
+    const pageName = job.page?.page_name ?? '';
 
     const lines = [message.body, '', `Job: ${job.title}`];
-    if (company) lines.push(`Company: ${company}`);
+    if (pageName) lines.push(`Page: ${pageName}`);
     if (salary) lines.push(`Salary: ${salary}`);
     if (job.isRemote) lines.push('Remote job');
     lines.push(
@@ -424,7 +503,7 @@ export class NotificationService {
 <p style="margin:0 0 12px;color:#444">${esc(message.body)}</p>
 <ul style="padding-left:18px;color:#222">
 <li><b>Job:</b> ${esc(job.title)}</li>
-${company ? `<li><b>Company:</b> ${esc(company)}</li>` : ''}
+${pageName ? `<li><b>Page:</b> ${esc(pageName)}</li>` : ''}
 ${salary ? `<li><b>Salary:</b> ${esc(salary)}</li>` : ''}
 ${job.isRemote ? '<li>Remote job</li>' : ''}
 </ul>

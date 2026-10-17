@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobsLoot - Page verification (staff)</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e6e8ee; --mut:#8b93a5; --ok:#3ecf8e; --bad:#ff6b6b; --warn:#f5b84b; --pri:#4c8dff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.5 system-ui, Segoe UI, Roboto, sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0 10px 0 0; }
+  main { max-width:980px; margin:0 auto; padding:16px 20px 60px; display:grid; gap:14px; }
+  input, select, button { font:inherit; color:var(--txt); background:#10131a; border:1px solid var(--line); border-radius:6px; padding:7px 10px; }
+  button { cursor:pointer; background:var(--pri); border-color:var(--pri); color:#fff; font-weight:600; }
+  button.sec { background:#232834; border-color:var(--line); color:var(--txt); }
+  button.ok { background:var(--ok); border-color:var(--ok); color:#000; }
+  button.bad { background:var(--bad); border-color:var(--bad); color:#000; }
+  button:disabled { opacity:.5; cursor:default; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:6px 18px; margin:8px 0; }
+  .grid div b { display:block; color:var(--mut); font-size:11px; text-transform:uppercase; font-weight:600; }
+  .chip { display:inline-block; padding:1px 9px; border-radius:20px; font-size:12px; border:1px solid var(--line); }
+  .chip.pending { color:var(--warn); border-color:var(--warn); } .chip.approved { color:var(--ok); border-color:var(--ok); } .chip.rejected { color:var(--bad); border-color:var(--bad); }
+  .mut { color:var(--mut); } .bad { color:var(--bad); } .ok { color:var(--ok); }
+  .docs button { margin:3px 6px 3px 0; }
+  .msg { padding:8px 12px; border-radius:8px; border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Page verification</h1>
+  <input id="key" type="password" placeholder="ADMIN_API_KEY" size="24" autocomplete="off">
+  <input id="who" placeholder="your name (reviewer)" size="18">
+  <select id="status">
+    <option value="pending">Pending</option>
+    <option value="approved">Approved</option>
+    <option value="rejected">Rejected</option>
+    <option value="">All</option>
+  </select>
+  <button id="load">Load</button>
+  <span id="info" class="mut"></span>
+</header>
+<main id="list"><div class="mut">Enter the admin key and press Load.</div></main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'pvAdminKey', WHO = 'pvAdminWho';
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function headers() {
+    return { 'Content-Type': 'application/json', 'x-admin-key': $('key').value.trim(), 'x-admin-name': $('who').value.trim() || 'admin' };
+  }
+  function api(path, opts) {
+    opts = opts || {};
+    return fetch('/admin/page-verifications' + path, { method: opts.method || 'GET', headers: headers(), body: opts.body ? JSON.stringify(opts.body) : undefined })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) {
+            throw new Error(r.status === 404 ? 'Admin tool is disabled on the server (ADMIN_API_KEY not set)'
+              : r.status === 401 ? 'Wrong admin key'
+              : (Array.isArray(j.message) ? j.message.join(', ') : j.message) || 'HTTP ' + r.status);
+          }
+          return j;
+        });
+      });
+  }
+  function size(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.ceil(n / 1024) + ' KB'; }
+  function when(d) { return d ? new Date(d).toLocaleString() : '-'; }
+
+  function row(label, value) {
+    return '<div><b>' + esc(label) + '</b>' + (value ? esc(value) : '<span class="mut">-</span>') + '</div>';
+  }
+
+  function render(items) {
+    if (!items.length) { $('list').innerHTML = '<div class="mut">Nothing here.</div>'; return; }
+    $('list').innerHTML = items.map(function (r) {
+      var p = r.page || {}, u = r.submittedBy || {};
+      var docs = r.documents.map(function (d) {
+        return '<button class="sec" data-doc="' + r.id + ':' + d.index + '" data-name="' + esc(d.name) + '">' + esc(d.type) + ' - ' + esc(d.name) + ' (' + size(d.size) + ')</button>';
+      }).join('');
+      var actions = r.status === 'pending'
+        ? '<button class="ok" data-approve="' + r.id + '">Approve - give verified tick</button> <button class="bad" data-reject="' + r.id + '">Reject</button>'
+        : (r.status === 'approved' && p.is_verified
+            ? '<button class="bad" data-unverify="' + p.id + '">Remove tick</button>'
+            : '');
+      return '<div class="card">' +
+        '<div class="row"><b style="font-size:16px">' + esc(p.page_name) + '</b> <span class="mut">@' + esc(p.username) + ' · page #' + esc(p.id) + '</span>' +
+        '<span class="chip ' + esc(r.status) + '">' + esc(r.status) + '</span>' +
+        (p.is_verified ? '<span class="chip approved">verified tick on</span>' : '') + '</div>' +
+        '<div class="grid">' +
+          row('Submitted by', (u.name || '') + (u.username ? ' (@' + u.username + ')' : '')) + row('Email', u.email) + row('Phone', u.phone) +
+          row('Requested', when(r.createdAt)) +
+          row('Registration no.', p.business_registration_number) + row('Tax ID', p.tax_identification_number) +
+          row('Registration authority', p.registration_authority) + row('Business name', p.business_name) +
+          row('Website', p.website_url) + row('Official email', p.official_email) + row('Official phone', p.official_phone) +
+          row('Location', [p.city, p.country].filter(Boolean).join(', ')) +
+        '</div>' +
+        (r.notes ? '<div class="mut">Notes from the page: ' + esc(r.notes) + '</div>' : '') +
+        '<div class="docs" style="margin:8px 0"><b class="mut" style="font-size:11px">DOCUMENTS (click to open)</b><br>' + docs + '</div>' +
+        (r.status === 'rejected' ? '<div class="bad">Rejected: ' + esc(r.rejectionReason) + ' <span class="mut">(' + esc(r.reviewedBy) + ', ' + when(r.reviewedAt) + ')</span></div>' : '') +
+        (r.status === 'approved' ? '<div class="ok">Approved by ' + esc(r.reviewedBy) + ' on ' + when(r.reviewedAt) + '</div>' : '') +
+        '<div class="row" style="margin-top:8px">' + actions + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function load() {
+    sessionStorage.setItem(KEY, $('key').value.trim());
+    localStorage.setItem(WHO, $('who').value.trim());
+    $('info').textContent = 'loading...';
+    api('?status=' + encodeURIComponent($('status').value))
+      .then(function (items) { $('info').textContent = items.length + ' request(s)'; render(items); })
+      .catch(function (e) { $('info').innerHTML = '<span class="bad">' + esc(e.message) + '</span>'; });
+  }
+
+  function openDoc(id, index, name) {
+    fetch('/admin/page-verifications/' + id + '/documents/' + index, { headers: headers() })
+      .then(function (r) { if (!r.ok) throw new Error('Could not load the document (HTTP ' + r.status + ')'); return r.blob(); })
+      .then(function (b) { window.open(URL.createObjectURL(b), '_blank'); })
+      .catch(function (e) { alert(e.message); });
+  }
+
+  $('load').onclick = load;
+  $('status').onchange = load;
+  $('key').onkeydown = function (e) { if (e.key === 'Enter') load(); };
+
+  $('list').addEventListener('click', function (e) {
+    var t = e.target, v;
+    if ((v = t.dataset.doc)) { var p = v.split(':'); return openDoc(p[0], p[1], t.dataset.name); }
+    if ((v = t.dataset.approve)) {
+      if (!confirm('Give this page the verified tick?')) return;
+      t.disabled = true;
+      api('/' + v + '/approve', { method: 'POST' }).then(load).catch(function (err) { alert(err.message); t.disabled = false; });
+    }
+    if ((v = t.dataset.reject)) {
+      var reason = prompt('Why is it rejected? (the page owner will see this)');
+      if (!reason) return;
+      api('/' + v + '/reject', { method: 'POST', body: { reason: reason } }).then(load).catch(function (err) { alert(err.message); });
+    }
+    if ((v = t.dataset.unverify)) {
+      var why = prompt('Reason for removing the verified tick? (the page owner will see this)');
+      if (!why) return;
+      api('/pages/' + v + '/unverify', { method: 'POST', body: { reason: why } }).then(load).catch(function (err) { alert(err.message); });
+    }
+  });
+
+  $('who').value = localStorage.getItem(WHO) || '';
+  var saved = sessionStorage.getItem(KEY);
+  if (saved) { $('key').value = saved; load(); }
+})();
+</script>
+</body>
+</html>

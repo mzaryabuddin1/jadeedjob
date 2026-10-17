@@ -3,6 +3,7 @@
 /node_modules
 /build
 /uploads
+/private-uploads
 /src/firebase/*.json
 /dist/firebase/*.json
 

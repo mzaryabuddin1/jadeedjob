@@ -1,73 +1,108 @@
 import { PagesService } from './pages.service';
+import { PageInvitationsService } from './page-invitations.service';
+import { PageVerificationService } from './page-verification.service';
 export declare class PagesController {
     private readonly pagesService;
-    constructor(pagesService: PagesService);
+    private readonly invitations;
+    private readonly verification;
+    constructor(pagesService: PagesService, invitations: PageInvitationsService, verification: PageVerificationService);
+    roles(): {
+        assignable: ("owner" | "admin" | "editor")[];
+        roles: {
+            [k: string]: readonly ("page.edit" | "page.delete" | "members.view" | "members.invite" | "members.remove" | "members.change_role" | "jobs.manage" | "applications.manage" | "ratings.give" | "verification.submit" | "verification.view")[];
+        };
+        allPermissions: readonly ["page.edit", "page.delete", "members.view", "members.invite", "members.remove", "members.change_role", "jobs.manage", "applications.manage", "ratings.give", "verification.submit", "verification.view"];
+        rules: string[];
+    };
+    myInvitations(req: any): Promise<{
+        id: number;
+        status: import("./entities/page-invitation.entity").InvitationStatus;
+        role: "admin" | "editor";
+        expiresAt: Date;
+        createdAt: Date;
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
+        invitedUser: {
+            id: number;
+            name: string;
+            username: string;
+        };
+        invitedBy: {
+            id: number;
+            name: string;
+            username: string;
+        };
+    }[]>;
+    acceptInvitation(invitationId: number, req: any): Promise<{
+        message: string;
+        data: {
+            pageId: number;
+            role: "admin" | "editor";
+        };
+    }>;
+    declineInvitation(invitationId: number, req: any): Promise<{
+        message: string;
+    }>;
     createPage(body: any, req: any): Promise<{
         message: string;
-        data: import("./entities/company-page.entity").CompanyPage[];
+        data: Record<string, any>;
     }>;
     getPages(query: any, req: any): Promise<{
-        data: {
-            association: string;
-            id: number;
-            company_name: string;
-            business_name: string;
-            username: string;
-            company_logo: string;
-            website_url: string;
-            official_email: string;
-            official_phone: string;
-            industry_type: string;
-            company_description: string;
-            founded_year: number;
-            country: string;
-            state: string;
-            city: string;
-            postal_code: string;
-            address_line1: string;
-            address_line2: string;
-            google_maps_link: string;
-            business_registration_number: string;
-            tax_identification_number: string;
-            registration_authority: string;
-            business_license_document: string;
-            company_type: string;
-            representative_name: string;
-            representative_designation: string;
-            representative_email: string;
-            representative_phone: string;
-            id_proof_document: string;
-            linkedin_page_url: string;
-            facebook_page_url: string;
-            instagram_page_url: string;
-            twitter_page_url: string;
-            youtube_channel_url: string;
-            verified_email_domain: string;
-            number_of_employees: number;
-            annual_revenue_range: string;
-            client_list: string[];
-            certifications: string[];
-            company_rating: number;
-            company_rating_count: number;
-            ownerId: number;
-            owner: import("../users/entities/user.entity").User;
-            members: import("./entities/page-member.entity").PageMember[];
-            createdAt: Date;
-            updatedAt: Date;
-        }[];
+        data: Record<string, any>[];
         total: number;
         totalPages: number;
         currentPage: number;
     }>;
-    getPageById(id: string): Promise<import("./entities/company-page.entity").CompanyPage>;
-    updatePage(id: string, body: any, req: any): Promise<{
+    getPageById(id: number, req: any): Promise<Record<string, any>>;
+    updatePage(id: number, body: any, req: any): Promise<{
         message: string;
-        data: import("./entities/company-page.entity").CompanyPage;
+        data: Record<string, any>;
     }>;
-    deletePage(id: string, req: any): Promise<{
+    deletePage(id: number, req: any): Promise<{
         message: string;
     }>;
-    addMember(pageId: string, body: any, req: any): Promise<{
+    members(pageId: number, req: any): Promise<{
+        isOwner: boolean;
+        name: string;
+        username: string;
+        profile_photo: string;
+        userId: number;
+        role: "owner" | "admin" | "editor";
+        joinedAt: Date;
+    }[]>;
+    addMember(pageId: number, body: any, req: any): Promise<{
+        message: string;
+        data: {
+            id: number;
+            status: import("./entities/page-invitation.entity").InvitationStatus;
+            role: "admin" | "editor";
+            expiresAt: Date;
+            createdAt: Date;
+            page: {
+                id: number;
+                page_name: string;
+                username: string;
+                page_logo: string;
+                is_verified: boolean;
+            };
+            invitedUser: {
+                id: number;
+                name: string;
+                username: string;
+            };
+            invitedBy: {
+                id: number;
+                name: string;
+                username: string;
+            };
+        };
+    }>;
+    changeMemberRole(pageId: number, userId: number, body: any, req: any): Promise<{
         message: string;
         data: {
             pageId: number;
@@ -75,15 +110,109 @@ export declare class PagesController {
             role: "admin" | "editor";
         };
     }>;
-    removeMember(pageId: string, memberId: string, req: any): Promise<{
+    leave(pageId: number, req: any): Promise<{
         message: string;
     }>;
-    changeMemberRole(pageId: string, userId: string, body: any, req: any): Promise<{
+    removeMember(pageId: number, userId: number, req: any): Promise<{
+        message: string;
+    }>;
+    invite(pageId: number, body: any, req: any): Promise<{
         message: string;
         data: {
-            pageId: number;
-            userId: number;
+            id: number;
+            status: import("./entities/page-invitation.entity").InvitationStatus;
             role: "admin" | "editor";
+            expiresAt: Date;
+            createdAt: Date;
+            page: {
+                id: number;
+                page_name: string;
+                username: string;
+                page_logo: string;
+                is_verified: boolean;
+            };
+            invitedUser: {
+                id: number;
+                name: string;
+                username: string;
+            };
+            invitedBy: {
+                id: number;
+                name: string;
+                username: string;
+            };
         };
+    }>;
+    pageInvitations(pageId: number, req: any): Promise<{
+        id: number;
+        status: import("./entities/page-invitation.entity").InvitationStatus;
+        role: "admin" | "editor";
+        expiresAt: Date;
+        createdAt: Date;
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
+        invitedUser: {
+            id: number;
+            name: string;
+            username: string;
+        };
+        invitedBy: {
+            id: number;
+            name: string;
+            username: string;
+        };
+    }[]>;
+    cancelInvitation(pageId: number, invitationId: number, req: any): Promise<{
+        message: string;
+    }>;
+    submitVerification(pageId: number, files: Express.Multer.File[] | undefined, body: {
+        documentTypes?: string;
+        notes?: string;
+    }, req: any): Promise<{
+        message: string;
+        data: {
+            id: number;
+            status: import("./entities/page-verification.entity").VerificationRequestStatus;
+            notes: string;
+            rejectionReason: string;
+            createdAt: Date;
+            reviewedAt: Date;
+            documents: {
+                type: "business_license" | "registration_certificate" | "tax_document" | "id_proof" | "utility_bill" | "other";
+                name: string;
+                size: number;
+            }[];
+        };
+    }>;
+    verificationStatus(pageId: number, req: any): Promise<{
+        is_verified: boolean;
+        verified_at: Date;
+        status: "pending" | "rejected" | "none" | "verified";
+        latest: {
+            id: number;
+            status: import("./entities/page-verification.entity").VerificationRequestStatus;
+            notes: string;
+            rejectionReason: string;
+            createdAt: Date;
+            reviewedAt: Date;
+            documents: {
+                type: "business_license" | "registration_certificate" | "tax_document" | "id_proof" | "utility_bill" | "other";
+                name: string;
+                size: number;
+            }[];
+        };
+        history: {
+            id: number;
+            status: import("./entities/page-verification.entity").VerificationRequestStatus;
+            createdAt: Date;
+            reviewedAt: Date;
+            rejectionReason: string;
+        }[];
+        documentTypes: readonly ["business_license", "registration_certificate", "tax_document", "id_proof", "utility_bill", "other"];
     }>;
 }

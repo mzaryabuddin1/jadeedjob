@@ -1,6 +1,12 @@
-import { User } from "src/users/entities/user.entity";
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
-import { CompanyPage } from "./company-page.entity";
+import { User } from 'src/users/entities/user.entity';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { Page } from './page.entity';
 
 // src/pages/entities/page-member.entity.ts
 @Entity('page_members')
@@ -11,10 +17,10 @@ export class PageMember {
   @Column()
   pageId: number;
 
-  @ManyToOne(() => CompanyPage, (page) => page.members, {
+  @ManyToOne(() => Page, (page) => page.members, {
     onDelete: 'CASCADE',
   })
-  page: CompanyPage;
+  page: Page;
 
   @Column()
   userId: number;

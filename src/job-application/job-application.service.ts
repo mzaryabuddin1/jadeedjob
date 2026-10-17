@@ -10,7 +10,7 @@ import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { ApplicationNotifier } from './application-notifier';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 import { isJobEmployer } from 'src/job/job-employer.util';
 
 /** Never send these applicant fields to an employer */
@@ -46,8 +46,8 @@ export class JobApplicationService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
 
-    @InjectRepository(CompanyPage)
-    private pageRepo: Repository<CompanyPage>,
+    @InjectRepository(Page)
+    private pageRepo: Repository<Page>,
 
     private applicationNotifier: ApplicationNotifier,
   ) {}
@@ -63,7 +63,7 @@ export class JobApplicationService {
 
     if (await isJobEmployer(this.pageRepo, job, data.applicantId)) {
       throw new BadRequestException(
-        "You cannot apply to your own (or your company's) job",
+        "You cannot apply to your own (or your page's) job",
       );
     }
 
@@ -118,7 +118,7 @@ export class JobApplicationService {
     };
   }
 
-  /** Only the employer side (poster, or company page owner/admin/editor) may list applicants */
+  /** Only the employer side (poster, or page owner/admin/editor) may list applicants */
   async getApplicationsByJob(jobId: number, userId: number) {
     const job = await this.jobRepo.findOne({
       where: { id: jobId },

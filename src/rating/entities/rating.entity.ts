@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 
 /**
  * Who rated whom on an accepted application.
@@ -41,7 +41,7 @@ export class Rating {
   rater: User;
 
   /**
-   * userId being rated. `null` when the rating goes to a company page
+   * userId being rated. `null` when the rating goes to a page
    * (employee rating the employer of a job posted under a page).
    */
   @Column({ type: 'int', nullable: true })
@@ -50,13 +50,13 @@ export class Rating {
   @ManyToOne(() => User, (user) => user.ratingsReceived)
   ratedUser: User;
 
-  /** Company page being rated (page jobs, employee -> employer only) */
+  /** Page being rated (page jobs, employee -> employer only) */
   @Column({ type: 'int', nullable: true })
   pageId: number | null;
 
-  @ManyToOne(() => CompanyPage, { nullable: true, onDelete: 'CASCADE' })
+  @ManyToOne(() => Page, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'pageId' })
-  page: CompanyPage;
+  page: Page;
 
   /** null only for ratings created before directions existed (backfilled at startup) */
   @Column({ type: 'varchar', length: 24, nullable: true })

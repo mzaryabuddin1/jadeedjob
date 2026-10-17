@@ -3,13 +3,13 @@ import { Repository } from 'typeorm';
 import { Rating } from './entities/rating.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
 import { User } from 'src/users/entities/user.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 export declare class RatingService implements OnModuleInit {
     private readonly ratingRepo;
     private readonly appRepo;
     private readonly userRepo;
     private readonly pageRepo;
-    constructor(ratingRepo: Repository<Rating>, appRepo: Repository<JobApplication>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>);
+    constructor(ratingRepo: Repository<Rating>, appRepo: Repository<JobApplication>, userRepo: Repository<User>, pageRepo: Repository<Page>);
     onModuleInit(): Promise<void>;
     rateUser(raterId: number, jobApplicationId: number, stars: number, comment: string): Promise<{
         message: string;
@@ -58,8 +58,8 @@ export declare class RatingService implements OnModuleInit {
             createdAt: any;
         }[];
     }>;
-    getCompanySummary(pageId: number, limit?: number): Promise<{
-        company: {
+    getPageSummary(pageId: number, limit?: number): Promise<{
+        page: {
             id: number;
             name: string;
             username: string;

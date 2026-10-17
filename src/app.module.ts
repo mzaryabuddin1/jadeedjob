@@ -26,6 +26,7 @@ import { FilesModule } from './files/files.module';
 import { PagesModule } from './pages/pages.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { migrateLegacyJobFilterColumn } from './job/migrate-legacy-filter-column';
+import { migrateCompanyToPageNaming } from './pages/migrate-company-to-page';
 import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
@@ -42,6 +43,7 @@ import { DebugModule } from './debug/debug.module';
       useFactory: async () => {
         // Must run before synchronize drops jobs.filterId (app + seed commands)
         await migrateLegacyJobFilterColumn();
+        await migrateCompanyToPageNaming();
 
         return {
           type: 'mysql',

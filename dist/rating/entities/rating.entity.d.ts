@@ -1,6 +1,6 @@
 import { User } from 'src/users/entities/user.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 export type RatingDirection = 'employee_to_employer' | 'employer_to_employee';
 export declare class Rating {
     id: number;
@@ -11,7 +11,7 @@ export declare class Rating {
     givenTo: number | null;
     ratedUser: User;
     pageId: number | null;
-    page: CompanyPage;
+    page: Page;
     direction: RatingDirection | null;
     stars: number;
     comment: string;

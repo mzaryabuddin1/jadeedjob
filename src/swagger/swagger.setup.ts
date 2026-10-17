@@ -49,10 +49,17 @@ export function setupSwagger(app: INestApplication) {
         '`POST /job-application` - once per job per user (not your own job). The job owner is notified **in a batch, not instantly**:',
         'applications are queued, ~30s later ONE push/email is sent (`3 people applied to your job "X" (12 total)`), busy jobs get at most one every ~2 min.',
         '',
+        '### Pages (company profiles)',
+        'A **page** is the company profile on JobsLoot. Anyone can create one (`POST /pages`) and becomes its **owner**; jobs can be posted under the page (`pageId`) or individually.',
+        '**Roles** (`GET /pages/roles`): `owner` (everything), `admin` (edit page, invite/remove editors, jobs, applications, verification), `editor` (jobs + applications). Only the owner invites admins or changes roles.',
+        '**Giving access = invitation**: `POST /pages/:pageId/invitations` (userId or username + role). The invited user gets a notification and must **accept** (`POST /pages/invitations/:id/accept`) - nobody is added without consent. `GET /pages/invitations/me` lists mine.',
+        '**Verified tick**: owner/admin uploads company documents (`POST /pages/:pageId/verification`, multipart). Documents are stored privately; staff review them at `/page-verification-admin.html` (needs `ADMIN_API_KEY`) and approved pages get `is_verified: true` (also shown in job responses).',
+        'Public page view hides private business details (registration/tax numbers, representative, documents); owner/admin see them.',
+        '',
         '### Accept / reject & ratings',
-        '`PATCH /job-application/:id/status` - the employer side (job poster, or company page owner/admin/editor) accepts or rejects a **pending** application (final). **Accepted -> the applicant gets a push/email.**',
+        '`PATCH /job-application/:id/status` - the employer side (job poster, or page owner/admin/editor) accepts or rejects a **pending** application (final). **Accepted -> the applicant gets a push/email.**',
         'After acceptance both sides rate each other once: `POST /ratings` (`GET /ratings/application/:id` tells the app who can rate).',
-        'Two scores: **user profile** = average of all ratings received as employee + employer (`GET /ratings/user/:id`); **company** = average of what employees gave jobs posted under that page (`GET /ratings/company/:pageId`).',
+        'Two scores: **user profile** = average of all ratings received as employee + employer (`GET /ratings/user/:id`); **page** = average of what employees gave jobs posted under that page (`GET /ratings/page/:pageId`).',
         '',
         '### Username',
         'Auto-generated at registration (first + last name + random string, e.g. `alikhan_k3f9a`), unique per user (also for Google/Facebook signups).',
@@ -63,7 +70,7 @@ export function setupSwagger(app: INestApplication) {
         'Settings: `GET|PATCH /users/me/notification-settings` → `{ push, email }` (defaults `push: true`, `email: false`).',
         'When a job is created, every user whose `filter_preferences` contain **any** of the job\'s filters (except the creator) gets **one** notification',
         '(never one per filter): text `Job created in <matched filters> filter(s)`, sent via Firebase push and/or email per their settings.',
-        'Push `data` payload (all strings): `type=job_created, jobId, title, text, createdAt, filterIds, filterIcon, filters (JSON), isRemote, salaryType, salaryAmount, currency, companyName, pageId, path`.',
+        'Push `data` payload (all strings): `type=job_created, jobId, title, text, createdAt, filterIds, filterIcon, filters (JSON), isRemote, salaryType, salaryAmount, currency, pageName, pageId, path`.',
         '`path` = deep link the app opens on tap (configured by env `NOTIFICATION_JOB_PATH`, `{id}` = job id; default `/job/{id}`).',
         'Test push from this page: click **Get FCM token** (bottom-right) → copy token → send it as `fcmToken` in `POST /auth/login`. Needs `FIREBASE_WEB_*` env.',
       ].join('\n'),
@@ -91,7 +98,7 @@ export function setupSwagger(app: INestApplication) {
     .addTag('Jobs', 'Job posts — multi filterIds (1–10)')
     .addTag('Job Applications', 'Apply & manage applications')
     .addTag('Organization', 'Organizations & members')
-    .addTag('Pages', 'Company pages')
+    .addTag('Pages', 'Pages (company profiles): roles, invitations, verification')
     .addTag('Chat', 'Application chat messages')
     .addTag('Ratings', 'Rate after job application')
     .addTag('Files', 'File upload')

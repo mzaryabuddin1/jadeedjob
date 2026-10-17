@@ -84,7 +84,7 @@ __decorate([
     (0, common_1.Get)('job/:jobId'),
     (0, swagger_1.ApiOperation)({
         summary: 'Applications for a job (employer only)',
-        description: 'Only the employer side may call this: the user who posted the job, or - for a job posted under a company page - the page owner / admin / editor (403 otherwise). Applicant objects never include private fields (password hash, FCM tokens, bank details...).',
+        description: 'Only the employer side may call this: the user who posted the job, or - for a job posted under a page - the page owner / admin / editor (403 otherwise). Applicant objects never include private fields (password hash, FCM tokens, bank details...).',
     }),
     __param(0, (0, common_1.Param)('jobId', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Req)()),
@@ -97,10 +97,10 @@ __decorate([
     (0, swagger_1.ApiOperation)({
         summary: 'Accept or reject an application (employer only)',
         description: [
-            'Only the employer side (job poster, or company page owner/admin/editor) can decide; 403 otherwise.',
+            'Only the employer side (job poster, or page owner/admin/editor) can decide; 403 otherwise.',
             'Only a **pending** application can be decided and the decision is **final**.',
             '**accepted** → the applicant gets a push/email notification (per their notification settings) and **both sides can now rate each other** (`POST /ratings`). **rejected** → no notification.',
-            'Push `data` for accepted: `type=application_accepted, applicationId, jobId, jobTitle, title, text, companyName, pageId, createdAt, path` (`path` from env `NOTIFICATION_APPLICATION_ACCEPTED_PATH`, `{id}` = application id, default `/application/{id}`).',
+            'Push `data` for accepted: `type=application_accepted, applicationId, jobId, jobTitle, title, text, pageName, pageId, createdAt, path` (`path` from env `NOTIFICATION_APPLICATION_ACCEPTED_PATH`, `{id}` = application id, default `/application/{id}`).',
         ].join('\n'),
     }),
     (0, swagger_1.ApiBody)({

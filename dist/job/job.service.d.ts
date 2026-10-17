@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationService } from '../notification/notification.service';
-import { CompanyPage } from 'src/pages/entities/company-page.entity';
+import { Page } from 'src/pages/entities/page.entity';
 import { Filter } from 'src/filter/entities/filter.entity';
 export declare class JobService {
     private jobRepo;
@@ -10,19 +10,27 @@ export declare class JobService {
     private pageRepo;
     private filterRepo;
     private notificationService;
-    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, filterRepo: Repository<Filter>, notificationService: NotificationService);
+    constructor(jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<Page>, filterRepo: Repository<Filter>, notificationService: NotificationService);
     private toPointSql;
     private static readonly SORTABLE_COLUMNS;
     private safeSortColumn;
     private safeSortOrder;
     private parseFilterQuery;
     private toJobFilter;
+    private slimPage;
     private jobCategories;
     private loadFiltersByJobIds;
     private resolveJobFilters;
     createJob(data: any, userId: number, opts?: {
         skipNotification?: boolean;
     }): Promise<{
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
         filters: {
             id: number;
             name: string;
@@ -58,7 +66,6 @@ export declare class JobService {
         creator: User;
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
-        page?: CompanyPage;
     }>;
     findNearbyJobs(query: any): Promise<{
         data: any;
@@ -73,6 +80,13 @@ export declare class JobService {
         currentPage: number;
     }>;
     findJobById(id: number): Promise<{
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
         filters: {
             id: number;
             name: string;
@@ -108,9 +122,15 @@ export declare class JobService {
         creator: User;
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
-        page?: CompanyPage;
     }>;
     updateJob(id: number, data: any, userId: number): Promise<{
+        page: {
+            id: number;
+            page_name: string;
+            username: string;
+            page_logo: string;
+            is_verified: boolean;
+        };
         filters: {
             id: number;
             name: string;
@@ -146,6 +166,5 @@ export declare class JobService {
         creator: User;
         applications: import("../job-application/entities/job-application.entity").JobApplication[];
         pageId?: number;
-        page?: CompanyPage;
     }>;
 }
