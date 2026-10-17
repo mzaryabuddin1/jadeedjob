@@ -8,11 +8,13 @@ import {
   UsePipes,
   Get,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -22,6 +24,7 @@ import * as Joi from 'joi';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
 import { AuthService } from 'src/auth/auth.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
+import { USERNAME_RULES_TEXT } from './username.util';
 
 @ApiTags('Users')
 @ApiBearerAuth('JWT')
@@ -185,6 +188,8 @@ export class UsersController {
       'googleId',
       'facebookId',
       'authProvider',
+      'username', // use PATCH /users/me/username (7-day rule)
+      'usernameChangedAt',
     ];
     forbidden.forEach((field) => delete body[field]);
 
@@ -219,6 +224,60 @@ export class UsersController {
   @ApiOperation({ summary: 'Get my filter preferences' })
   async getMyPreferences(@Req() req: any) {
     return await this.usersService.getUserPreference(req.user.id);
+  }
+
+  @Get('me/username')
+  @ApiOperation({
+    summary: 'Get my username & when I can change it',
+    description:
+      'Username is auto-generated at registration (first + last name + random string, e.g. `alikhan_k3f9a`). The **first change is instant**; after that **once every 7 days**.',
+  })
+  async getMyUsername(@Req() req: any) {
+    return this.usersService.getUsernameInfo(req.user.id);
+  }
+
+  @Patch('me/username')
+  @ApiOperation({
+    summary: 'Change my username',
+    description: [
+      'First change is instant; after that **one change every 7 days** (400 with the next allowed time otherwise).',
+      USERNAME_RULES_TEXT + '.',
+      'Unique across all users (409 if taken). Input is lowercased; a leading `@` is ignored.',
+    ].join('\n'),
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['username'],
+      properties: { username: { type: 'string', example: 'ali.khan' } },
+    },
+  })
+  @UsePipes(
+    new JoiValidationPipe(
+      Joi.object({
+        // format rules are checked in UsersService after normalizing
+        // (trim, lowercase, leading "@" removed)
+        username: Joi.string().required().messages({
+          'string.empty': 'username is required',
+        }),
+      }),
+    ),
+  )
+  async changeMyUsername(@Req() req: any, @Body() body: { username: string }) {
+    return this.usersService.changeUsername(req.user.id, body.username);
+  }
+
+  @Get('username-available')
+  @ApiOperation({
+    summary: 'Check if a username is valid and free',
+    description: 'Use while typing in the "change username" screen.',
+  })
+  @ApiQuery({ name: 'username', required: true, example: 'ali.khan' })
+  async usernameAvailable(
+    @Req() req: any,
+    @Query('username') username: string,
+  ) {
+    return this.usersService.checkUsernameAvailable(req.user.id, username);
   }
 
   @Get('me/notification-settings')

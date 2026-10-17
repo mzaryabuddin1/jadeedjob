@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
+import {
+  USERNAME_COOLDOWN_DAYS,
+  USERNAME_COOLDOWN_MS,
+  USERNAME_PATTERN,
+  USERNAME_RULES_TEXT,
+  normalizeUsername,
+} from './username.util';
 import {
   NotificationSettings,
   resolveNotificationSettings,
@@ -91,6 +99,123 @@ export class UsersService {
 
     await this.userRepo.update({ id: userId }, { notification_settings: next });
     return next;
+  }
+
+  // ────────────────────────────────────────────────
+  // USERNAME
+  // ────────────────────────────────────────────────
+
+  /** When the user may change the username next (null = right now) */
+  private nextUsernameChangeAt(changedAt: Date | null): Date | null {
+    if (!changedAt) return null;
+    const next = new Date(new Date(changedAt).getTime() + USERNAME_COOLDOWN_MS);
+    return next.getTime() > Date.now() ? next : null;
+  }
+
+  async getUsernameInfo(userId: number) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'username', 'usernameChangedAt'],
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const next = this.nextUsernameChangeAt(user.usernameChangedAt);
+    return {
+      username: user.username,
+      canChangeNow: !next,
+      nextChangeAt: next,
+      cooldownDays: USERNAME_COOLDOWN_DAYS,
+    };
+  }
+
+  async checkUsernameAvailable(userId: number, raw: string) {
+    const username = normalizeUsername(raw);
+    if (!USERNAME_PATTERN.test(username)) {
+      return {
+        username,
+        valid: false,
+        available: false,
+        reason: USERNAME_RULES_TEXT,
+      };
+    }
+
+    const owner = await this.userRepo.findOne({
+      where: { username },
+      select: ['id'],
+    });
+    if (owner?.id === userId) {
+      return {
+        username,
+        valid: true,
+        available: false,
+        reason: 'This is already your username',
+      };
+    }
+    if (owner) {
+      return {
+        username,
+        valid: true,
+        available: false,
+        reason: 'Username already taken',
+      };
+    }
+    return { username, valid: true, available: true };
+  }
+
+  /**
+   * First change is instant; after that one change every 7 days
+   * (counted from the last change the user made themselves).
+   */
+  async changeUsername(userId: number, raw: string) {
+    const username = normalizeUsername(raw);
+    if (!USERNAME_PATTERN.test(username)) {
+      throw new BadRequestException(USERNAME_RULES_TEXT);
+    }
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'username', 'usernameChangedAt'],
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.username === username) {
+      throw new BadRequestException('This is already your username');
+    }
+
+    const next = this.nextUsernameChangeAt(user.usernameChangedAt);
+    if (next) {
+      throw new BadRequestException(
+        `You can change your username once every ${USERNAME_COOLDOWN_DAYS} days. Next change available at ${next.toISOString()}`,
+      );
+    }
+
+    const taken = await this.userRepo.findOne({
+      where: { username },
+      select: ['id'],
+    });
+    if (taken) throw new ConflictException('Username already taken');
+
+    const changedAt = new Date();
+    try {
+      await this.userRepo.update(
+        { id: userId },
+        { username, usernameChangedAt: changedAt },
+      );
+    } catch (err: any) {
+      // two people grabbing the same name at once: the unique index wins
+      if (err?.code === 'ER_DUP_ENTRY') {
+        throw new ConflictException('Username already taken');
+      }
+      throw err;
+    }
+
+    return {
+      message: 'Username updated',
+      username,
+      canChangeNow: false,
+      nextChangeAt: new Date(changedAt.getTime() + USERNAME_COOLDOWN_MS),
+      cooldownDays: USERNAME_COOLDOWN_DAYS,
+    };
   }
 
   async updateUserFilterPreferences(userId: number, newFilters: number[]) {

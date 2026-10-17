@@ -40,6 +40,17 @@ export class User {
   @Column({ unique: true, nullable: true })
   phone: string;
 
+  /** Public handle, unique. Auto-generated at registration (first+last name + random). */
+  @Column({ type: 'varchar', length: 30, unique: true, nullable: true })
+  username: string | null;
+
+  /**
+   * When the user last changed their username themselves. `null` = never
+   * (the first change is allowed immediately; after that, once per 7 days).
+   */
+  @Column({ type: 'datetime', nullable: true })
+  usernameChangedAt: Date | null;
+
   @Column({ unique: true, nullable: true })
   googleId: string;
 

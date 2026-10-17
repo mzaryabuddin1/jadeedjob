@@ -54,6 +54,7 @@ const Joi = __importStar(require("joi"));
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
 const auth_service_1 = require("../auth/auth.service");
 const firebase_service_1 = require("../firebase/firebase.service");
+const username_util_1 = require("./username.util");
 let UsersController = class UsersController {
     constructor(usersService, authService, firebaseService) {
         this.usersService = usersService;
@@ -84,6 +85,8 @@ let UsersController = class UsersController {
             'googleId',
             'facebookId',
             'authProvider',
+            'username',
+            'usernameChangedAt',
         ];
         forbidden.forEach((field) => delete body[field]);
         if (body?.password) {
@@ -105,6 +108,15 @@ let UsersController = class UsersController {
     }
     async getMyPreferences(req) {
         return await this.usersService.getUserPreference(req.user.id);
+    }
+    async getMyUsername(req) {
+        return this.usersService.getUsernameInfo(req.user.id);
+    }
+    async changeMyUsername(req, body) {
+        return this.usersService.changeUsername(req.user.id, body.username);
+    }
+    async usernameAvailable(req, username) {
+        return this.usersService.checkUsernameAvailable(req.user.id, username);
     }
     async getNotificationSettings(req) {
         return this.usersService.getNotificationSettings(req.user.id);
@@ -237,6 +249,58 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getMyPreferences", null);
+__decorate([
+    (0, common_1.Get)('me/username'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get my username & when I can change it',
+        description: 'Username is auto-generated at registration (first + last name + random string, e.g. `alikhan_k3f9a`). The **first change is instant**; after that **once every 7 days**.',
+    }),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getMyUsername", null);
+__decorate([
+    (0, common_1.Patch)('me/username'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Change my username',
+        description: [
+            'First change is instant; after that **one change every 7 days** (400 with the next allowed time otherwise).',
+            username_util_1.USERNAME_RULES_TEXT + '.',
+            'Unique across all users (409 if taken). Input is lowercased; a leading `@` is ignored.',
+        ].join('\n'),
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['username'],
+            properties: { username: { type: 'string', example: 'ali.khan' } },
+        },
+    }),
+    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(Joi.object({
+        username: Joi.string().required().messages({
+            'string.empty': 'username is required',
+        }),
+    }))),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "changeMyUsername", null);
+__decorate([
+    (0, common_1.Get)('username-available'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Check if a username is valid and free',
+        description: 'Use while typing in the "change username" screen.',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'username', required: true, example: 'ali.khan' }),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('username')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "usernameAvailable", null);
 __decorate([
     (0, common_1.Get)('me/notification-settings'),
     (0, swagger_1.ApiOperation)({

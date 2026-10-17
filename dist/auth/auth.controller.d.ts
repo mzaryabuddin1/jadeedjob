@@ -25,6 +25,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -102,6 +104,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -180,6 +184,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -273,6 +279,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -369,6 +377,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -458,6 +468,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -532,6 +544,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];
@@ -607,6 +621,8 @@ export declare class AuthController {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: import("../users/entities/user-auth-identity.entity").UserAuthIdentity[];

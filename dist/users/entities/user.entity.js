@@ -46,6 +46,14 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "phone", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 30, unique: true, nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "username", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], User.prototype, "usernameChangedAt", void 0);
+__decorate([
     (0, typeorm_1.Column)({ unique: true, nullable: true }),
     __metadata("design:type", String)
 ], User.prototype, "googleId", void 0);

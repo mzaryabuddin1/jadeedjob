@@ -14,6 +14,32 @@ export declare class UsersController {
     getMyPreferences(req: any): Promise<{
         data: number[];
     }>;
+    getMyUsername(req: any): Promise<{
+        username: string;
+        canChangeNow: boolean;
+        nextChangeAt: Date;
+        cooldownDays: number;
+    }>;
+    changeMyUsername(req: any, body: {
+        username: string;
+    }): Promise<{
+        message: string;
+        username: string;
+        canChangeNow: boolean;
+        nextChangeAt: Date;
+        cooldownDays: number;
+    }>;
+    usernameAvailable(req: any, username: string): Promise<{
+        username: string;
+        valid: boolean;
+        available: boolean;
+        reason: string;
+    } | {
+        username: string;
+        valid: boolean;
+        available: boolean;
+        reason?: undefined;
+    }>;
     getNotificationSettings(req: any): Promise<import("../notification/notification-settings").NotificationSettings>;
     updateNotificationSettings(req: any, body: {
         push?: boolean;

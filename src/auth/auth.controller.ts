@@ -179,7 +179,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Register — verify OTP & create account',
     description:
-      'If email was provided at send-otp, also send `emailCode` (different from phone OTP). Dev email OTP = **654321**.',
+      'If email was provided at send-otp, also send `emailCode` (different from phone OTP). Dev email OTP = **654321**. A unique `username` (first + last name + random string, e.g. `alikhan_k3f9a`) is generated automatically; change it with `PATCH /users/me/username`.',
   })
   @ApiBody({
     schema: {

@@ -14,5 +14,30 @@ export declare class UsersService {
     }>;
     getNotificationSettings(userId: number): Promise<NotificationSettings>;
     updateNotificationSettings(userId: number, patch: Partial<NotificationSettings>): Promise<NotificationSettings>;
+    private nextUsernameChangeAt;
+    getUsernameInfo(userId: number): Promise<{
+        username: string;
+        canChangeNow: boolean;
+        nextChangeAt: Date;
+        cooldownDays: number;
+    }>;
+    checkUsernameAvailable(userId: number, raw: string): Promise<{
+        username: string;
+        valid: boolean;
+        available: boolean;
+        reason: string;
+    } | {
+        username: string;
+        valid: boolean;
+        available: boolean;
+        reason?: undefined;
+    }>;
+    changeUsername(userId: number, raw: string): Promise<{
+        message: string;
+        username: string;
+        canChangeNow: boolean;
+        nextChangeAt: Date;
+        cooldownDays: number;
+    }>;
     updateUserFilterPreferences(userId: number, newFilters: number[]): Promise<User>;
 }

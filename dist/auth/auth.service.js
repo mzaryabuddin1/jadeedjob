@@ -27,6 +27,7 @@ const filter_service_1 = require("../filter/filter.service");
 const firebase_service_1 = require("../firebase/firebase.service");
 const google_auth_service_1 = require("./google-auth.service");
 const facebook_auth_service_1 = require("./facebook-auth.service");
+const username_util_1 = require("../users/username.util");
 let AuthService = class AuthService {
     constructor(jwtService, userRepo, identityRepo, countryRepo, languageRepo, cityRepo, filterService, firebaseService, googleAuthService, facebookAuthService) {
         this.jwtService = jwtService;
@@ -47,6 +48,32 @@ let AuthService = class AuthService {
         catch (err) {
             console.warn('[AuthService] identity migration skipped:', err instanceof Error ? err.message : err);
         }
+        try {
+            await this.backfillUsernames();
+        }
+        catch (err) {
+            console.warn('[AuthService] username backfill skipped:', err instanceof Error ? err.message : err);
+        }
+    }
+    async backfillUsernames() {
+        let done = 0;
+        for (;;) {
+            const users = await this.userRepo.find({
+                select: ['id', 'firstName', 'lastName'],
+                where: { username: (0, typeorm_2.IsNull)() },
+                order: { id: 'ASC' },
+                take: 200,
+            });
+            if (!users.length)
+                break;
+            for (const u of users) {
+                const username = await (0, username_util_1.generateUniqueUsername)(this.userRepo, u.firstName, u.lastName);
+                await this.userRepo.update({ id: u.id }, { username });
+                done++;
+            }
+        }
+        if (done)
+            console.log(`[AuthService] usernames generated for ${done} user(s)`);
     }
     async migrateLegacyIdentities() {
         const users = await this.userRepo.find({
@@ -374,6 +401,7 @@ let AuthService = class AuthService {
         const defaultFilterPreferences = await this.filterService.getTopFiltersByJobs(9);
         const user = this.userRepo.create({
             ...rest,
+            username: await (0, username_util_1.generateUniqueUsername)(this.userRepo, rest.firstName, rest.lastName),
             country,
             language,
             cityEntity,
@@ -614,6 +642,7 @@ let AuthService = class AuthService {
             email: pending.email,
             firstName: pending.firstName,
             lastName: pending.lastName,
+            username: await (0, username_util_1.generateUniqueUsername)(this.userRepo, pending.firstName, pending.lastName),
             profile_photo: pending.picture,
             phone: data.phone,
             passwordHash: null,

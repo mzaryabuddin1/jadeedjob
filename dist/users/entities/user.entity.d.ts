@@ -17,6 +17,8 @@ export declare class User {
     firstName: string;
     lastName: string;
     phone: string;
+    username: string | null;
+    usernameChangedAt: Date | null;
     googleId: string;
     facebookId: string;
     authIdentities: UserAuthIdentity[];

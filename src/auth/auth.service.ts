@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { pbkdf2Sync, randomBytes } from 'crypto';
 import { User } from 'src/users/entities/user.entity';
 import {
@@ -21,6 +21,7 @@ import { FilterService } from 'src/filter/filter.service';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { GoogleAuthService } from './google-auth.service';
 import { FacebookAuthService } from './facebook-auth.service';
+import { generateUniqueUsername } from 'src/users/username.util';
 
 /** Short-lived pending Google/Facebook signup (no DB user yet) */
 export type PendingSocialSignup = {
@@ -96,6 +97,40 @@ export class AuthService implements OnModuleInit {
         err instanceof Error ? err.message : err,
       );
     }
+
+    try {
+      await this.backfillUsernames();
+    } catch (err) {
+      console.warn(
+        '[AuthService] username backfill skipped:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  /** Give every existing user without a username one (runs at startup, idempotent) */
+  private async backfillUsernames() {
+    let done = 0;
+    for (;;) {
+      const users = await this.userRepo.find({
+        select: ['id', 'firstName', 'lastName'],
+        where: { username: IsNull() },
+        order: { id: 'ASC' },
+        take: 200,
+      });
+      if (!users.length) break;
+
+      for (const u of users) {
+        const username = await generateUniqueUsername(
+          this.userRepo,
+          u.firstName,
+          u.lastName,
+        );
+        await this.userRepo.update({ id: u.id }, { username });
+        done++;
+      }
+    }
+    if (done) console.log(`[AuthService] usernames generated for ${done} user(s)`);
   }
 
   private async migrateLegacyIdentities() {
@@ -528,6 +563,11 @@ export class AuthService implements OnModuleInit {
 
     const user = this.userRepo.create({
       ...rest,
+      username: await generateUniqueUsername(
+        this.userRepo,
+        rest.firstName,
+        rest.lastName,
+      ),
       country,
       language,
       cityEntity,
@@ -913,6 +953,11 @@ export class AuthService implements OnModuleInit {
         email: pending.email,
         firstName: pending.firstName,
         lastName: pending.lastName,
+        username: await generateUniqueUsername(
+          this.userRepo,
+          pending.firstName,
+          pending.lastName,
+        ),
         profile_photo: pending.picture,
         phone: data.phone,
         passwordHash: null,

@@ -76,7 +76,7 @@ test/                      e2e scaffold only (auth.service.spec.ts is the one re
 | Area | Routes | Guard |
 |---|---|---|
 | auth | `POST /auth/register/send-otp, register/verify-otp, login, google, facebook, kyc/send-otp, kyc/verify-otp, link-identity/confirm, forgot-password/send-otp, forgot-password/verify-otp`; `update-email/send-otp, update-email/verify-otp` (JWT); debug endpoints | mostly public |
-| users | `PATCH /users/me`, `GET /users/me/preferences`, `GET|PATCH /users/me/notification-settings` | JWT |
+| users | `PATCH /users/me`, `GET /users/me/preferences`, `GET|PATCH /users/me/notification-settings`, `GET|PATCH /users/me/username`, `GET /users/username-available` | JWT |
 | jobs | `POST /job`, `GET /job`, `GET /job/:id`, `PATCH /job/:id` | JWT |
 | applications | `POST /job-application`, `GET /my`, `GET /job/:jobId`, `PATCH /:id/status` | JWT |
 | chat | `GET /chat/application/:id/messages`; WS ns `/chat`: `joinApplication`, `sendMessage` → emits `newMessage` | JWT (WS: token in handshake) |
@@ -128,6 +128,19 @@ Relationships to remember:
     (remote jobs excluded then).
   - Category filtering uses `EXISTS` on `job_filters`.
 - `GET /job/:id` only returns `isActive` jobs.
+
+## Username (`src/users/username.util.ts`, `users.service.ts`)
+
+- `users.username` (varchar 30, unique, nullable only for the instant before
+  backfill) and `usernameChangedAt`. Generated at registration by
+  `generateUniqueUsername` = first+last name (latin letters/digits, max 20, else
+  `user`) + `_` + 5 random chars, in both phone register (`createOrGetUser`) and
+  social KYC signup. `AuthService.onModuleInit` backfills users without one.
+- User can change it via `PATCH /users/me/username`: the FIRST change is instant
+  (`usernameChangedAt` null; the generated name doesn't count), then once every
+  7 days (`USERNAME_COOLDOWN_DAYS`). Rules `USERNAME_PATTERN`: 3-30 chars
+  `a-z 0-9 . _`, starts/ends alphanumeric, no repeated `.`/`_`. Taken -> 409.
+  `PATCH /users/me` cannot change it.
 
 ## Notifications (`src/notification/`)
 

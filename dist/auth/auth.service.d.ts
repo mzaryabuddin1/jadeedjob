@@ -58,6 +58,7 @@ export declare class AuthService implements OnModuleInit {
     private facebookAuthService;
     constructor(jwtService: JwtService, userRepo: Repository<User>, identityRepo: Repository<UserAuthIdentity>, countryRepo: Repository<Country>, languageRepo: Repository<Language>, cityRepo: Repository<City>, filterService: FilterService, firebaseService: FirebaseService, googleAuthService: GoogleAuthService, facebookAuthService: FacebookAuthService);
     onModuleInit(): Promise<void>;
+    private backfillUsernames;
     private migrateLegacyIdentities;
     private ensureIdentityRow;
     isKycComplete(user: User | null | undefined): boolean;
@@ -68,6 +69,8 @@ export declare class AuthService implements OnModuleInit {
         firstName: string;
         lastName: string;
         phone: string;
+        username: string | null;
+        usernameChangedAt: Date | null;
         googleId: string;
         facebookId: string;
         authIdentities: UserAuthIdentity[];
@@ -140,6 +143,8 @@ export declare class AuthService implements OnModuleInit {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: UserAuthIdentity[];
@@ -305,6 +310,8 @@ export declare class AuthService implements OnModuleInit {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: UserAuthIdentity[];
@@ -390,6 +397,8 @@ export declare class AuthService implements OnModuleInit {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: UserAuthIdentity[];
@@ -482,6 +491,8 @@ export declare class AuthService implements OnModuleInit {
             firstName: string;
             lastName: string;
             phone: string;
+            username: string | null;
+            usernameChangedAt: Date | null;
             googleId: string;
             facebookId: string;
             authIdentities: UserAuthIdentity[];
