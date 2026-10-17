@@ -35,11 +35,11 @@ let JobApplicationController = class JobApplicationController {
     async getMyApplications(req, page = 1, limit = 10) {
         return this.jobAppService.getApplicationsByUser(req.user.id, +page, +limit);
     }
-    async getByJob(jobId) {
-        return this.jobAppService.getApplicationsByJob(Number(jobId));
+    async getByJob(jobId, req) {
+        return this.jobAppService.getApplicationsByJob(jobId, req.user.id);
     }
-    async updateStatus(id, status) {
-        return this.jobAppService.updateStatus(Number(id), status);
+    async updateStatus(id, body, req) {
+        return this.jobAppService.updateStatus(id, body.status, req.user.id);
     }
 };
 exports.JobApplicationController = JobApplicationController;
@@ -51,7 +51,7 @@ __decorate([
             'A user can apply **once** per job (400 `You already applied to this job`), and not to their own job.',
             'The job owner is **not** pinged instantly: applications are queued and merged into ONE notification after ~30 seconds,',
             'e.g. `3 people applied to your job "X" (12 total)`. Busy jobs are spaced out (at least 2 min between notifications).',
-            'Push/email follow the owner\'s `notification-settings`. Push `data`: `type=job_application, jobId, jobTitle, title, text, count, totalApplications, applicantIds, applicantNames, applicationId, createdAt, path`.',
+            "Push/email follow the owner's `notification-settings`. Push `data`: `type=job_application, jobId, jobTitle, title, text, count, totalApplications, applicantIds, applicantNames, applicationId, createdAt, path`.",
         ].join('\n'),
     }),
     (0, swagger_1.ApiBody)({
@@ -82,18 +82,27 @@ __decorate([
 ], JobApplicationController.prototype, "getMyApplications", null);
 __decorate([
     (0, common_1.Get)('job/:jobId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Applications for a job' }),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        jobId: joi_1.default.number().required(),
-    }))),
-    __param(0, (0, common_1.Param)('jobId')),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Applications for a job (employer only)',
+        description: 'Only the employer side may call this: the user who posted the job, or - for a job posted under a company page - the page owner / admin / editor (403 otherwise). Applicant objects never include private fields (password hash, FCM tokens, bank details...).',
+    }),
+    __param(0, (0, common_1.Param)('jobId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
+    __metadata("design:paramtypes", [Number, Object]),
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "getByJob", null);
 __decorate([
     (0, common_1.Patch)(':id/status'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update application status' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Accept or reject an application (employer only)',
+        description: [
+            'Only the employer side (job poster, or company page owner/admin/editor) can decide; 403 otherwise.',
+            'Only a **pending** application can be decided and the decision is **final**.',
+            '**accepted** → the applicant gets a push/email notification (per their notification settings) and **both sides can now rate each other** (`POST /ratings`). **rejected** → no notification.',
+            'Push `data` for accepted: `type=application_accepted, applicationId, jobId, jobTitle, title, text, companyName, pageId, createdAt, path` (`path` from env `NOTIFICATION_APPLICATION_ACCEPTED_PATH`, `{id}` = application id, default `/application/{id}`).',
+        ].join('\n'),
+    }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
@@ -101,22 +110,19 @@ __decorate([
             properties: {
                 status: {
                     type: 'string',
-                    enum: ['pending', 'accepted', 'rejected'],
+                    enum: ['accepted', 'rejected'],
                     example: 'accepted',
                 },
             },
         },
     }),
-    (0, common_1.UsePipes)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
-        id: joi_1.default.number().required(),
-        status: joi_1.default.string()
-            .valid('pending', 'accepted', 'rejected')
-            .required(),
-    }))),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Body)('status')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(joi_1.default.object({
+        status: joi_1.default.string().valid('accepted', 'rejected').required(),
+    })))),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:paramtypes", [Number, Object, Object]),
     __metadata("design:returntype", Promise)
 ], JobApplicationController.prototype, "updateStatus", null);
 exports.JobApplicationController = JobApplicationController = __decorate([

@@ -38,6 +38,14 @@ export class JobApplication {
   })
   status: string;
 
+  /** When the employer accepted/rejected (null while pending) */
+  @Column({ type: 'datetime', nullable: true })
+  decidedAt: Date | null;
+
+  /** Employer-side user who accepted/rejected */
+  @Column({ type: 'int', nullable: true })
+  decidedBy: number | null;
+
   @OneToMany(() => ChatMessage, (msg) => msg.jobApplication)
   messages: ChatMessage[];
 

@@ -48,6 +48,7 @@ export declare class PagesController {
             client_list: string[];
             certifications: string[];
             company_rating: number;
+            company_rating_count: number;
             ownerId: number;
             owner: import("../users/entities/user.entity").User;
             members: import("./entities/page-member.entity").PageMember[];

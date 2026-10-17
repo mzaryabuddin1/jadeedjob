@@ -20,11 +20,33 @@ const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const application_notifier_1 = require("./application-notifier");
+const company_page_entity_1 = require("../pages/entities/company-page.entity");
+const job_employer_util_1 = require("../job/job-employer.util");
+const PRIVATE_USER_FIELDS = [
+    'passwordHash',
+    'passwordSalt',
+    'fcmTokens',
+    'notification_settings',
+    'googleId',
+    'facebookId',
+    'bank_name',
+    'account_number',
+    'iban',
+    'branch_name',
+    'swift_code',
+    'notes',
+    'kyc_status',
+    'verified_by_admin_id',
+    'verification_date',
+    'rejection_reason',
+    'isBanned',
+];
 let JobApplicationService = class JobApplicationService {
-    constructor(jobAppRepo, jobRepo, userRepo, applicationNotifier) {
+    constructor(jobAppRepo, jobRepo, userRepo, pageRepo, applicationNotifier) {
         this.jobAppRepo = jobAppRepo;
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
+        this.pageRepo = pageRepo;
         this.applicationNotifier = applicationNotifier;
     }
     async apply(data) {
@@ -34,8 +56,8 @@ let JobApplicationService = class JobApplicationService {
         if (!job) {
             throw new common_1.BadRequestException('Job does not exist or is not active');
         }
-        if (job.createdBy === data.applicantId) {
-            throw new common_1.BadRequestException('You cannot apply to your own job');
+        if (await (0, job_employer_util_1.isJobEmployer)(this.pageRepo, job, data.applicantId)) {
+            throw new common_1.BadRequestException("You cannot apply to your own (or your company's) job");
         }
         const app = await this.jobAppRepo.manager.transaction(async (manager) => {
             await manager
@@ -74,19 +96,50 @@ let JobApplicationService = class JobApplicationService {
             currentPage: page,
         };
     }
-    async getApplicationsByJob(jobId) {
-        return this.jobAppRepo.find({
+    async getApplicationsByJob(jobId, userId) {
+        const job = await this.jobRepo.findOne({
+            where: { id: jobId },
+            select: ['id', 'createdBy', 'pageId'],
+        });
+        if (!job)
+            throw new common_1.NotFoundException('Job not found');
+        if (!(await (0, job_employer_util_1.isJobEmployer)(this.pageRepo, job, userId))) {
+            throw new common_1.ForbiddenException('Only the employer can see the applications of this job');
+        }
+        const apps = await this.jobAppRepo.find({
             where: { jobId },
             relations: ['applicant'],
+            order: { createdAt: 'DESC' },
         });
-    }
-    async updateStatus(id, status) {
-        const app = await this.jobAppRepo.findOne({ where: { id } });
-        if (!app) {
-            throw new common_1.BadRequestException('Application not found');
+        for (const a of apps) {
+            for (const field of PRIVATE_USER_FIELDS) {
+                delete a.applicant?.[field];
+            }
         }
-        app.status = status;
-        return this.jobAppRepo.save(app);
+        return apps;
+    }
+    async updateStatus(id, status, userId) {
+        const app = await this.jobAppRepo.findOne({
+            where: { id },
+            relations: ['job'],
+        });
+        if (!app)
+            throw new common_1.NotFoundException('Application not found');
+        if (!(await (0, job_employer_util_1.isJobEmployer)(this.pageRepo, app.job, userId))) {
+            throw new common_1.ForbiddenException('Only the employer can accept or reject applications');
+        }
+        if (app.status !== 'pending') {
+            throw new common_1.BadRequestException(`This application is already ${app.status}`);
+        }
+        const res = await this.jobAppRepo.update({ id, status: 'pending' }, { status, decidedAt: new Date(), decidedBy: userId });
+        if (!res.affected) {
+            throw new common_1.BadRequestException('This application was already decided');
+        }
+        const updated = await this.jobAppRepo.findOneOrFail({ where: { id } });
+        if (status === 'accepted') {
+            void this.applicationNotifier.notifyAccepted(updated, app.job);
+        }
+        return updated;
     }
 };
 exports.JobApplicationService = JobApplicationService;
@@ -95,7 +148,9 @@ exports.JobApplicationService = JobApplicationService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
     __param(1, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(3, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         application_notifier_1.ApplicationNotifier])

@@ -20,19 +20,21 @@ const typeorm_2 = require("typeorm");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const job_application_entity_1 = require("./entities/job-application.entity");
+const company_page_entity_1 = require("../pages/entities/company-page.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
 const mail_service_1 = require("../notification/mail.service");
 const notification_queue_service_1 = require("../notification/notification-queue.service");
 const notification_settings_1 = require("../notification/notification-settings");
 const TYPE = 'job_application';
 let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
-    constructor(queue, firebaseService, mailService, userRepo, jobRepo, appRepo) {
+    constructor(queue, firebaseService, mailService, userRepo, jobRepo, appRepo, pageRepo) {
         this.queue = queue;
         this.firebaseService = firebaseService;
         this.mailService = mailService;
         this.userRepo = userRepo;
         this.jobRepo = jobRepo;
         this.appRepo = appRepo;
+        this.pageRepo = pageRepo;
         this.logger = new common_1.Logger(ApplicationNotifier_1.name);
     }
     getTiming() {
@@ -72,6 +74,71 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
         }
         catch (err) {
             this.logger.error(`Could not queue notification for application #${application?.id}: ${err?.message}`);
+        }
+    }
+    async notifyAccepted(application, job) {
+        try {
+            const applicant = await this.userRepo.findOne({
+                where: { id: application.applicantId },
+                select: [
+                    'id',
+                    'email',
+                    'fcmTokens',
+                    'notification_settings',
+                    'isBanned',
+                ],
+            });
+            if (!applicant || applicant.isBanned)
+                return;
+            const settings = (0, notification_settings_1.resolveNotificationSettings)(applicant.notification_settings);
+            const tokens = settings.push
+                ? (applicant.fcmTokens || []).filter(Boolean)
+                : [];
+            const email = settings.email && applicant.email ? String(applicant.email).trim() : '';
+            if (!tokens.length && !email) {
+                this.logger.log(`Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`);
+                return;
+            }
+            const company = job.pageId
+                ? ((await this.pageRepo.findOne({
+                    where: { id: job.pageId },
+                    select: ['id', 'company_name'],
+                }))?.company_name ?? '')
+                : '';
+            const title = 'Application accepted';
+            const body = `Your application for "${job.title}" was accepted${company ? ` by ${company}` : ''}`;
+            const template = process.env.NOTIFICATION_APPLICATION_ACCEPTED_PATH ||
+                '/application/{id}';
+            const data = {
+                type: 'application_accepted',
+                applicationId: String(application.id),
+                jobId: String(job.id),
+                jobTitle: job.title,
+                title,
+                text: body,
+                companyName: company,
+                pageId: job.pageId != null ? String(job.pageId) : '',
+                createdAt: new Date().toISOString(),
+                path: template.replace('{id}', String(application.id)),
+            };
+            this.logger.log(`Application #${application.id} accepted -> applicant #${applicant.id}: "${body}"`);
+            if (tokens.length) {
+                const res = await this.firebaseService.sendToTokens(tokens, { title, body }, data);
+                const errors = Object.entries(res.errors)
+                    .map(([code, e]) => `${code}x${e.count}`)
+                    .join(', ');
+                this.logger.log(`Application #${application.id} accepted push: ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`);
+            }
+            if (email) {
+                await this.mailService.send({
+                    to: email,
+                    subject: body,
+                    text: `${body}\n\nOpen the JobsLoot app to see the details.\n\nYou can turn off email notifications anytime in the app settings.`,
+                });
+            }
+        }
+        catch (err) {
+            this.logger.error(`Could not notify applicant for application #${application?.id}: ${err?.message}`);
         }
     }
     buildPath(jobId) {
@@ -170,9 +237,11 @@ exports.ApplicationNotifier = ApplicationNotifier = ApplicationNotifier_1 = __de
     __param(3, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(4, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
     __param(5, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
+    __param(6, (0, typeorm_1.InjectRepository)(company_page_entity_1.CompanyPage)),
     __metadata("design:paramtypes", [notification_queue_service_1.NotificationQueueService,
         firebase_service_1.FirebaseService,
         mail_service_1.MailService,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository])

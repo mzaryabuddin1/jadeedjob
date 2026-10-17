@@ -49,6 +49,14 @@ __decorate([
     __metadata("design:type", String)
 ], JobApplication.prototype, "status", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], JobApplication.prototype, "decidedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Number)
+], JobApplication.prototype, "decidedBy", void 0);
+__decorate([
     (0, typeorm_1.OneToMany)(() => chat_message_entity_1.ChatMessage, (msg) => msg.jobApplication),
     __metadata("design:type", Array)
 ], JobApplication.prototype, "messages", void 0);

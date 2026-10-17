@@ -169,9 +169,13 @@ __decorate([
     __metadata("design:type", Array)
 ], CompanyPage.prototype, "certifications", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ type: 'float', nullable: true }),
     __metadata("design:type", Number)
 ], CompanyPage.prototype, "company_rating", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], CompanyPage.prototype, "company_rating_count", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", Number)

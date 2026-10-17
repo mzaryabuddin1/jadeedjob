@@ -6,16 +6,12 @@ import {
   UseGuards,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   UsePipes,
   Query,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JobApplicationService } from './job-application.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
@@ -35,7 +31,7 @@ export class JobApplicationController {
       'A user can apply **once** per job (400 `You already applied to this job`), and not to their own job.',
       'The job owner is **not** pinged instantly: applications are queued and merged into ONE notification after ~30 seconds,',
       'e.g. `3 people applied to your job "X" (12 total)`. Busy jobs are spaced out (at least 2 min between notifications).',
-      'Push/email follow the owner\'s `notification-settings`. Push `data`: `type=job_application, jobId, jobTitle, title, text, count, totalApplications, applicantIds, applicantNames, applicationId, createdAt, path`.',
+      "Push/email follow the owner's `notification-settings`. Push `data`: `type=job_application, jobId, jobTitle, title, text, count, totalApplications, applicantIds, applicantNames, applicationId, createdAt, path`.",
     ].join('\n'),
   })
   @ApiBody({
@@ -70,20 +66,25 @@ export class JobApplicationController {
   }
 
   @Get('job/:jobId')
-  @ApiOperation({ summary: 'Applications for a job' })
-  @UsePipes(
-    new JoiValidationPipe(
-      Joi.object({
-        jobId: Joi.number().required(),
-      }),
-    ),
-  )
-  async getByJob(@Param('jobId') jobId: number) {
-    return this.jobAppService.getApplicationsByJob(Number(jobId));
+  @ApiOperation({
+    summary: 'Applications for a job (employer only)',
+    description:
+      'Only the employer side may call this: the user who posted the job, or - for a job posted under a company page - the page owner / admin / editor (403 otherwise). Applicant objects never include private fields (password hash, FCM tokens, bank details...).',
+  })
+  async getByJob(@Param('jobId', ParseIntPipe) jobId: number, @Req() req: any) {
+    return this.jobAppService.getApplicationsByJob(jobId, req.user.id);
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update application status' })
+  @ApiOperation({
+    summary: 'Accept or reject an application (employer only)',
+    description: [
+      'Only the employer side (job poster, or company page owner/admin/editor) can decide; 403 otherwise.',
+      'Only a **pending** application can be decided and the decision is **final**.',
+      '**accepted** → the applicant gets a push/email notification (per their notification settings) and **both sides can now rate each other** (`POST /ratings`). **rejected** → no notification.',
+      'Push `data` for accepted: `type=application_accepted, applicationId, jobId, jobTitle, title, text, companyName, pageId, createdAt, path` (`path` from env `NOTIFICATION_APPLICATION_ACCEPTED_PATH`, `{id}` = application id, default `/application/{id}`).',
+    ].join('\n'),
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -91,23 +92,24 @@ export class JobApplicationController {
       properties: {
         status: {
           type: 'string',
-          enum: ['pending', 'accepted', 'rejected'],
+          enum: ['accepted', 'rejected'],
           example: 'accepted',
         },
       },
     },
   })
-  @UsePipes(
-    new JoiValidationPipe(
-      Joi.object({
-        id: Joi.number().required(),
-        status: Joi.string()
-          .valid('pending', 'accepted', 'rejected')
-          .required(),
-      }),
-    ),
-  )
-  async updateStatus(@Param('id') id: number, @Body('status') status: string) {
-    return this.jobAppService.updateStatus(Number(id), status);
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(
+      new JoiValidationPipe(
+        Joi.object({
+          status: Joi.string().valid('accepted', 'rejected').required(),
+        }),
+      ),
+    )
+    body: { status: 'accepted' | 'rejected' },
+    @Req() req: any,
+  ) {
+    return this.jobAppService.updateStatus(id, body.status, req.user.id);
   }
 }

@@ -13,14 +13,16 @@ const rating_entity_1 = require("./entities/rating.entity");
 const rating_service_1 = require("./rating.service");
 const rating_controller_1 = require("./rating.controller");
 const job_application_entity_1 = require("../job-application/entities/job-application.entity");
+const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const company_page_entity_1 = require("../pages/entities/company-page.entity");
 let RatingModule = class RatingModule {
 };
 exports.RatingModule = RatingModule;
 exports.RatingModule = RatingModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([rating_entity_1.Rating, job_application_entity_1.JobApplication, user_entity_1.User]),
+            typeorm_1.TypeOrmModule.forFeature([rating_entity_1.Rating, job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User, company_page_entity_1.CompanyPage]),
         ],
         controllers: [rating_controller_1.RatingController],
         providers: [rating_service_1.RatingService],

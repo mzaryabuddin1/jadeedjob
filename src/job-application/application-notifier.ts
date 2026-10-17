@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { JobApplication } from './entities/job-application.entity';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from 'src/notification/mail.service';
 import { NotificationQueueService } from 'src/notification/notification-queue.service';
@@ -41,6 +42,8 @@ export class ApplicationNotifier implements OnModuleInit {
     @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobApplication)
     private readonly appRepo: Repository<JobApplication>,
+    @InjectRepository(CompanyPage)
+    private readonly pageRepo: Repository<CompanyPage>,
   ) {}
 
   /** Current batching settings (env or defaults) */
@@ -88,6 +91,100 @@ export class ApplicationNotifier implements OnModuleInit {
     } catch (err) {
       this.logger.error(
         `Could not queue notification for application #${application?.id}: ${(err as Error)?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Tell the applicant their application was accepted. Sent right away (one
+   * person, one event - nothing to batch). Follows the applicant's
+   * notification settings. Never throws.
+   */
+  async notifyAccepted(application: JobApplication, job: Job) {
+    try {
+      const applicant = await this.userRepo.findOne({
+        where: { id: application.applicantId },
+        select: [
+          'id',
+          'email',
+          'fcmTokens',
+          'notification_settings',
+          'isBanned',
+        ],
+      });
+      if (!applicant || applicant.isBanned) return;
+
+      const settings = resolveNotificationSettings(
+        applicant.notification_settings,
+      );
+      const tokens = settings.push
+        ? (applicant.fcmTokens || []).filter(Boolean)
+        : [];
+      const email =
+        settings.email && applicant.email ? String(applicant.email).trim() : '';
+      if (!tokens.length && !email) {
+        this.logger.log(
+          `Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`,
+        );
+        return;
+      }
+
+      const company = job.pageId
+        ? ((
+            await this.pageRepo.findOne({
+              where: { id: job.pageId },
+              select: ['id', 'company_name'],
+            })
+          )?.company_name ?? '')
+        : '';
+
+      const title = 'Application accepted';
+      const body = `Your application for "${job.title}" was accepted${company ? ` by ${company}` : ''}`;
+      const template =
+        process.env.NOTIFICATION_APPLICATION_ACCEPTED_PATH ||
+        '/application/{id}';
+
+      const data: Record<string, string> = {
+        type: 'application_accepted',
+        applicationId: String(application.id),
+        jobId: String(job.id),
+        jobTitle: job.title,
+        title,
+        text: body,
+        companyName: company,
+        pageId: job.pageId != null ? String(job.pageId) : '',
+        createdAt: new Date().toISOString(),
+        path: template.replace('{id}', String(application.id)),
+      };
+
+      this.logger.log(
+        `Application #${application.id} accepted -> applicant #${applicant.id}: "${body}"`,
+      );
+
+      if (tokens.length) {
+        const res = await this.firebaseService.sendToTokens(
+          tokens,
+          { title, body },
+          data,
+        );
+        const errors = Object.entries(res.errors)
+          .map(([code, e]) => `${code}x${e.count}`)
+          .join(', ');
+        this.logger.log(
+          `Application #${application.id} accepted push: ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`,
+        );
+      }
+
+      if (email) {
+        await this.mailService.send({
+          to: email,
+          subject: body,
+          text: `${body}\n\nOpen the JobsLoot app to see the details.\n\nYou can turn off email notifications anytime in the app settings.`,
+        });
+      }
+    } catch (err) {
+      this.logger.error(
+        `Could not notify applicant for application #${application?.id}: ${(err as Error)?.message}`,
       );
     }
   }

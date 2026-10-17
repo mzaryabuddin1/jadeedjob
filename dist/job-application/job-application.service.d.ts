@@ -3,12 +3,14 @@ import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
 import { ApplicationNotifier } from './application-notifier';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
 export declare class JobApplicationService {
     private jobAppRepo;
     private jobRepo;
     private userRepo;
+    private pageRepo;
     private applicationNotifier;
-    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, applicationNotifier: ApplicationNotifier);
+    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, pageRepo: Repository<CompanyPage>, applicationNotifier: ApplicationNotifier);
     apply(data: {
         jobId: number;
         applicantId: number;
@@ -19,6 +21,6 @@ export declare class JobApplicationService {
         totalPages: number;
         currentPage: number;
     }>;
-    getApplicationsByJob(jobId: number): Promise<JobApplication[]>;
-    updateStatus(id: number, status: string): Promise<JobApplication>;
+    getApplicationsByJob(jobId: number, userId: number): Promise<JobApplication[]>;
+    updateStatus(id: number, status: 'accepted' | 'rejected', userId: number): Promise<JobApplication>;
 }

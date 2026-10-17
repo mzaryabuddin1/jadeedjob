@@ -163,6 +163,32 @@ Relationships to remember:
 - Page-owned jobs notify only the poster (`createdBy`), not page members.
 - For very high volume swap the worker for BullMQ + Redis; the handler stays.
 
+## Accept/reject & ratings (`job-application/`, `rating/`)
+
+- "Employer side" of a job = the poster, or for a page job the page owner /
+  member with role owner|admin|editor (`src/job/job-employer.util.ts` ->
+  `isJobEmployer`). Only they may list applicants (`GET /job-application/job/:id`,
+  applicant objects stripped of private fields) and decide applications; they
+  also cannot apply to that job.
+- `PATCH /job-application/:id/status {status: accepted|rejected}`: only from
+  `pending`, final, atomic (`decidedAt`/`decidedBy` stored). **Accepted ->
+  `ApplicationNotifier.notifyAccepted`** sends push/email to the applicant right
+  away (per their notification settings); rejected sends nothing. Push data:
+  `type=application_accepted, applicationId, jobId, jobTitle, title, text,
+  companyName, pageId, createdAt, path` (`path` from env
+  `NOTIFICATION_APPLICATION_ACCEPTED_PATH`, default `/application/{id}`).
+- Ratings (`POST /ratings`) only on accepted applications, ONE per side
+  (`ratings.direction` = `employee_to_employer` | `employer_to_employee`, unique
+  per application+direction; old rows backfilled at startup).
+  - employer side rates the applicant -> applicant's profile rating.
+  - applicant rates a PERSONAL job's poster -> poster's profile rating.
+  - applicant rates a PAGE job -> the COMPANY (`ratings.pageId`, `givenTo` null,
+    `pages.company_rating` float + `company_rating_count`), not the person.
+  - Profile rating (`users.ratingAverage/ratingCount`) = pooled average of every
+    rating received as employee AND employer. `GET /ratings/user/:id` also
+    returns `asEmployee` / `asEmployer` splits; `GET /ratings/company/:pageId`;
+    `GET /ratings/application/:id` = rating-screen state (`canRate`, `iRated`...).
+
 ## Username (`src/users/username.util.ts`, `users.service.ts`)
 
 - `users.username` (varchar 30, unique, nullable only for the instant before

@@ -127,8 +127,12 @@ export class CompanyPage  {
   @Column({ type: 'simple-array', nullable: true })
   certifications: string[];
 
-  @Column({ nullable: true })
+  /** Average stars employees gave this company (jobs posted under this page) */
+  @Column({ type: 'float', nullable: true })
   company_rating: number;
+
+  @Column({ type: 'int', default: 0 })
+  company_rating_count: number;
 
   @Column()
   ownerId: number;

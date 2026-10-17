@@ -9,6 +9,8 @@ export declare class JobApplicationController {
         totalPages: number;
         currentPage: number;
     }>;
-    getByJob(jobId: number): Promise<import("./entities/job-application.entity").JobApplication[]>;
-    updateStatus(id: number, status: string): Promise<import("./entities/job-application.entity").JobApplication>;
+    getByJob(jobId: number, req: any): Promise<import("./entities/job-application.entity").JobApplication[]>;
+    updateStatus(id: number, body: {
+        status: 'accepted' | 'rejected';
+    }, req: any): Promise<import("./entities/job-application.entity").JobApplication>;
 }

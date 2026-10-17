@@ -14,6 +14,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const company_page_entity_1 = require("../pages/entities/company-page.entity");
 const notification_module_1 = require("../notification/notification.module");
 const firebase_module_1 = require("../firebase/firebase.module");
 const application_notifier_1 = require("./application-notifier");
@@ -23,7 +24,7 @@ exports.JobApplicationModule = JobApplicationModule;
 exports.JobApplicationModule = JobApplicationModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User]),
+            typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User, company_page_entity_1.CompanyPage]),
             notification_module_1.NotificationModule,
             firebase_module_1.FirebaseModule,
         ],

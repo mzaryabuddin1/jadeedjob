@@ -3,15 +3,25 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
 } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { JobApplication } from 'src/job-application/entities/job-application.entity';
+import { CompanyPage } from 'src/pages/entities/company-page.entity';
+
+/**
+ * Who rated whom on an accepted application.
+ * - `employee_to_employer`: the applicant rates the employer side
+ * - `employer_to_employee`: the employer side rates the applicant
+ */
+export type RatingDirection = 'employee_to_employer' | 'employer_to_employee';
 
 @Entity('ratings')
 @Unique(['jobApplicationId', 'givenBy']) // Only one rating per application per rater
+@Unique('UQ_rating_application_direction', ['jobApplicationId', 'direction']) // One rating per side
 export class Rating {
   @PrimaryGeneratedColumn()
   id: number;
@@ -19,7 +29,9 @@ export class Rating {
   @Column()
   jobApplicationId: number;
 
-  @ManyToOne(() => JobApplication, (app) => app.ratings, { onDelete: 'CASCADE' })
+  @ManyToOne(() => JobApplication, (app) => app.ratings, {
+    onDelete: 'CASCADE',
+  })
   jobApplication: JobApplication;
 
   @Column()
@@ -28,11 +40,27 @@ export class Rating {
   @ManyToOne(() => User, (user) => user.ratingsGiven)
   rater: User;
 
-  @Column()
-  givenTo: number; // userId being rated
+  /**
+   * userId being rated. `null` when the rating goes to a company page
+   * (employee rating the employer of a job posted under a page).
+   */
+  @Column({ type: 'int', nullable: true })
+  givenTo: number | null;
 
   @ManyToOne(() => User, (user) => user.ratingsReceived)
   ratedUser: User;
+
+  /** Company page being rated (page jobs, employee -> employer only) */
+  @Column({ type: 'int', nullable: true })
+  pageId: number | null;
+
+  @ManyToOne(() => CompanyPage, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'pageId' })
+  page: CompanyPage;
+
+  /** null only for ratings created before directions existed (backfilled at startup) */
+  @Column({ type: 'varchar', length: 24, nullable: true })
+  direction: RatingDirection | null;
 
   @Column({ type: 'int' })
   stars: number; // 1-5

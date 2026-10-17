@@ -29,11 +29,34 @@ let RatingController = class RatingController {
     async rate(body, req) {
         return this.ratingService.rateUser(req.user.id, body.jobApplicationId, body.stars, body.comment ?? '');
     }
+    async applicationState(applicationId, req) {
+        return this.ratingService.getApplicationRatingState(applicationId, req.user.id);
+    }
+    async userSummary(userId, limit = '10') {
+        return this.ratingService.getUserSummary(userId, Number(limit) || 10);
+    }
+    async companySummary(pageId, limit = '10') {
+        return this.ratingService.getCompanySummary(pageId, Number(limit) || 10);
+    }
 };
 exports.RatingController = RatingController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Rate a user via job application' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Rate the other side of an accepted application',
+        description: [
+            'Only after the employer **accepted** the application, and **once per side**:',
+            '- the **applicant (employee)** rates the employer side',
+            '- the **employer side** (job poster, or company page owner/admin/editor) rates the applicant',
+            '',
+            'Where the rating lands:',
+            "- rating an **applicant** → the applicant's **profile rating** (`users.ratingAverage`)",
+            "- employee rating a **personal job's poster** → the poster's **profile rating**",
+            '- employee rating a job posted **under a company page** → the **company rating** (`pages.company_rating`), not the person',
+            '',
+            'A profile rating is the average of ALL ratings the person received, as employee and as employer together.',
+        ].join('\n'),
+    }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
@@ -56,6 +79,44 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], RatingController.prototype, "rate", null);
+__decorate([
+    (0, common_1.Get)('application/:applicationId'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Can I rate on this application? (rating screen state)',
+        description: 'For the applicant or the employer side of the application: `myRole` (employee/employer), who `willRate` (user or company), `canRate`, `iRated`, `otherSideRated`. 403 if you are not part of the application.',
+    }),
+    __param(0, (0, common_1.Param)('applicationId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", Promise)
+], RatingController.prototype, "applicationState", null);
+__decorate([
+    (0, common_1.Get)('user/:userId'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'User rating summary',
+        description: '`average`/`count` = all ratings the person received (employee + employer roles pooled). `asEmployee` = rated by employers, `asEmployer` = rated by employees of jobs they posted personally (jobs under a company page count for the company instead).',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, example: 10 }),
+    __param(0, (0, common_1.Param)('userId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", Promise)
+], RatingController.prototype, "userSummary", null);
+__decorate([
+    (0, common_1.Get)('company/:pageId'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Company rating summary',
+        description: 'Average of the ratings employees gave this company for jobs posted under its page.',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, example: 10 }),
+    __param(0, (0, common_1.Param)('pageId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", Promise)
+], RatingController.prototype, "companySummary", null);
 exports.RatingController = RatingController = __decorate([
     (0, swagger_1.ApiTags)('Ratings'),
     (0, swagger_1.ApiBearerAuth)('JWT'),

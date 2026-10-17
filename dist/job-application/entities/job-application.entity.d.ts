@@ -9,6 +9,8 @@ export declare class JobApplication {
     applicant: User;
     applicantId: number;
     status: string;
+    decidedAt: Date | null;
+    decidedBy: number | null;
     messages: ChatMessage[];
     ratings: Rating[];
     createdAt: Date;

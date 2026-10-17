@@ -53,6 +53,7 @@ export declare class PagesService {
             client_list: string[];
             certifications: string[];
             company_rating: number;
+            company_rating_count: number;
             ownerId: number;
             owner: User;
             members: PageMember[];
