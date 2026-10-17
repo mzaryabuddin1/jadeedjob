@@ -10,7 +10,10 @@ import { LessThan, Repository } from 'typeorm';
 import { NotificationQueueItem } from './notification-queue.entity';
 
 /** 'sent' = a notification went out, 'skipped' = nothing to send (job gone, user opted out...) */
-export type QueueHandlerResult = 'sent' | 'skipped';
+export type QueueHandlerResult =
+  | 'sent'
+  | 'skipped'
+  | { status: 'sent' | 'skipped'; note?: string };
 
 export type QueueRegistration = {
   /** Wait this long after the FIRST queued item of a group before sending */
@@ -176,13 +179,18 @@ export class NotificationQueueService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
-      const result = await reg.handler(items);
+      const raw = await reg.handler(items);
+      const result = typeof raw === 'string' ? { status: raw } : raw;
       await this.repo.update(
         { claimToken: token },
-        { status: result, processedAt: new Date() },
+        {
+          status: result.status,
+          note: (result.note ?? '').slice(0, 250) || null,
+          processedAt: new Date(),
+        },
       );
       this.logger.log(
-        `${groupKey}: ${items.length} item(s) -> ${result.toUpperCase()}`,
+        `${groupKey}: ${items.length} item(s) -> ${result.status.toUpperCase()}${result.note ? ` (${result.note})` : ''}`,
       );
     } catch (err) {
       const message = String((err as Error)?.message ?? err).slice(0, 250);

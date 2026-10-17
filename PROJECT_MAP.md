@@ -154,6 +154,12 @@ Relationships to remember:
   deleted after 7 days. `NOTIFICATION_WORKER=off` disables the worker on an
   instance; `NOTIFICATION_QUEUE_POLL_SECONDS` sets polling. New batched types:
   `queue.register(type, {delaySeconds, minGapSeconds, handler})` + `queue.enqueue(...)`.
+- FCM lab (`/fcm-lab.html`, section 5) lists jobs (with whether the employer can
+  receive a push), applies to a job as the ticked applicants through the real
+  `JobApplicationService.apply`, and shows the queue live (countdown + per-row
+  push result stored in `notification_queue.note`). Non-`[FCM TEST]` jobs need
+  confirmation (real employer would be notified); test jobs can be Activated/
+  Hidden and Reset (deletes their applications + queue rows).
 - Page-owned jobs notify only the poster (`createdBy`), not page members.
 - For very high volume swap the worker for BullMQ + Redis; the handler stays.
 

@@ -13,4 +13,5 @@ export declare class NotificationQueueItem {
     processedAt: Date | null;
     attempts: number;
     lastError: string | null;
+    note: string | null;
 }

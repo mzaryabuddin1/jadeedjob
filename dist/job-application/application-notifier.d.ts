@@ -15,6 +15,10 @@ export declare class ApplicationNotifier implements OnModuleInit {
     private readonly appRepo;
     private readonly logger;
     constructor(queue: NotificationQueueService, firebaseService: FirebaseService, mailService: MailService, userRepo: Repository<User>, jobRepo: Repository<Job>, appRepo: Repository<JobApplication>);
+    getTiming(): {
+        delaySeconds: number;
+        minGapSeconds: number;
+    };
     onModuleInit(): void;
     onApplied(job: Job, application: JobApplication): Promise<void>;
     buildPath(jobId: number): string;

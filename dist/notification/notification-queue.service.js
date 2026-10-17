@@ -134,9 +134,14 @@ let NotificationQueueService = NotificationQueueService_1 = class NotificationQu
             order: { id: 'ASC' },
         });
         try {
-            const result = await reg.handler(items);
-            await this.repo.update({ claimToken: token }, { status: result, processedAt: new Date() });
-            this.logger.log(`${groupKey}: ${items.length} item(s) -> ${result.toUpperCase()}`);
+            const raw = await reg.handler(items);
+            const result = typeof raw === 'string' ? { status: raw } : raw;
+            await this.repo.update({ claimToken: token }, {
+                status: result.status,
+                note: (result.note ?? '').slice(0, 250) || null,
+                processedAt: new Date(),
+            });
+            this.logger.log(`${groupKey}: ${items.length} item(s) -> ${result.status.toUpperCase()}${result.note ? ` (${result.note})` : ''}`);
         }
         catch (err) {
             const message = String(err?.message ?? err).slice(0, 250);

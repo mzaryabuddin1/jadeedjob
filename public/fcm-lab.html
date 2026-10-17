@@ -57,10 +57,10 @@
     <div class="row" style="margin-bottom:8px">
       <input id="search" placeholder="search name / email / phone" size="28">
       <button id="reload" class="sec">Search / Reload</button>
-      <span class="mut">Tick <b>recipients</b> (who should receive the test job), choose one <b>creator</b>.</span>
+      <span class="mut">Tick <b>recipients</b> (receive a new test job), choose one <b>creator</b> (the employer), tick <b>applicants</b> (who apply to a job).</span>
     </div>
     <div class="wrap"><table id="users"><thead><tr>
-      <th>Recipient</th><th>Creator</th><th>ID</th><th>User</th><th>FCM tokens</th><th>Filter prefs</th><th>Settings</th><th></th>
+      <th>Recipient</th><th>Creator</th><th>Applicant</th><th>ID</th><th>User</th><th>FCM tokens</th><th>Filter prefs</th><th>Settings</th><th></th>
     </tr></thead><tbody></tbody></table></div>
   </section>
 
@@ -79,7 +79,7 @@
     </div>
     <div class="filters" id="filters"><span class="mut">Connect to load filters…</span></div>
     <div class="row" style="margin:10px 0">
-      <label><input type="checkbox" id="deactivate" checked> hide test job from the app afterwards</label>
+      <label><input type="checkbox" id="deactivate" checked> hide test job from the app afterwards <span class="mut">(hidden jobs can't be applied to - use Activate in the Jobs table)</span></label>
       <label class="bad"><input type="checkbox" id="notifyAll"> notify ALL matching real users (not only ticked recipients)</label>
     </div>
     <div class="row">
@@ -88,6 +88,22 @@
     </div>
     <div class="wrap"><table id="explainTable" style="display:none;margin-top:10px"><thead><tr>
       <th>User</th><th>Will notify?</th><th>Why / how</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section>
+    <h2>5. Jobs &amp; apply (test the "someone applied" notification)</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button id="reloadJobs" class="sec">Reload jobs</button>
+      <span class="mut">Tick <b>applicants</b> in the Users table, then press <b>Apply</b> on a job. The employer (job creator) gets ONE batched notification after the delay.</span>
+    </div>
+    <div class="wrap"><table id="jobs"><thead><tr>
+      <th>ID</th><th>Job</th><th>Employer (gets the push)</th><th>Applications</th><th>Status</th><th>Actions</th>
+    </tr></thead><tbody><tr><td colspan="6" class="mut">Connect to load jobs…</td></tr></tbody></table></div>
+
+    <h3 style="font-size:14px;margin:14px 0 6px">Queue <span id="queueTitle" class="mut"></span></h3>
+    <div id="queueInfo" class="mut">Press Apply or Queue on a job to watch it here.</div>
+    <div class="wrap"><table id="queueTable" style="display:none;margin-top:6px"><thead><tr>
+      <th>#</th><th>Applicant</th><th>Status</th><th>Queued</th><th>Processed</th><th>Result</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section>
@@ -163,6 +179,7 @@
       tr.innerHTML =
         '<td><input type="checkbox" class="rcpt" value="' + u.id + '"></td>' +
         '<td><input type="radio" name="creator" class="crt" value="' + u.id + '"></td>' +
+        '<td><input type="checkbox" class="app" value="' + u.id + '"></td>' +
         '<td>' + u.id + '</td>' +
         '<td><b>' + esc(u.name || '(no name)') + '</b>' + (u.isBanned ? ' <span class="chip bad">banned</span>' : '') +
         '<div class="mut">' + esc(u.email || '') + ' ' + esc(u.phone || '') + '</div></td>' +
@@ -173,7 +190,7 @@
         '<td><button class="sec test-user" data-id="' + u.id + '"' + (u.fcmTokens.length ? '' : ' disabled') + '>Test push</button></td>';
       tb.appendChild(tr);
     });
-    if (!users.length) tb.innerHTML = '<tr><td colspan="8" class="mut">No users</td></tr>';
+    if (!users.length) tb.innerHTML = '<tr><td colspan="9" class="mut">No users</td></tr>';
   }
 
   function loadUsers() {
@@ -201,7 +218,7 @@
     api('/status').then(function (s) {
       $('conn').innerHTML = '<span class="ok">connected</span>';
       renderStatus(s);
-      return Promise.all([loadUsers(), loadFilters()]);
+      return Promise.all([loadUsers(), loadFilters(), loadJobs()]);
     }).catch(function (e) { $('conn').innerHTML = '<span class="bad">' + esc(e.message) + '</span>'; });
   }
 
@@ -267,10 +284,116 @@
           : n.push.failure === 0 ? '\n=> FCM accepted ' + n.push.success + ' push(es). If the phone shows nothing, the problem is on the device/app side (permission, background restrictions, wrong project).'
           : '\n=> ' + n.push.failure + ' push(es) FAILED — see errors above.';
       }
-      log('Job created', r); $('log').textContent += verdict;
+      log('Job created', r); $('log').textContent += verdict; loadJobs();
     }).catch(function (e) { log('Create job failed', e.message); })
       .then(function () { $('createJob').disabled = false; });
   };
+
+  // ───────── Jobs & apply ─────────
+  var jobsData = [];
+  var watchJob = 0, watchTimer = null, idlePolls = 0;
+
+  function fmtTime(d) { return d ? new Date(d).toLocaleTimeString() : '-'; }
+
+  function renderJobs(r) {
+    jobsData = r.jobs;
+    var tb = $('jobs').querySelector('tbody');
+    if (!jobsData.length) { tb.innerHTML = '<tr><td colspan="6" class="mut">No jobs</td></tr>'; return; }
+    tb.innerHTML = jobsData.map(function (j) {
+      var e = j.employer;
+      var emp = '<b>' + esc(e.name || '#' + e.id) + '</b> <span class="mut">#' + e.id + '</span><br>' +
+        (e.willBeNotified
+          ? '<span class="chip ok">' + (e.pushDevices ? 'push to ' + e.pushDevices + ' device(s)' : 'email only') + '</span>'
+          : '<span class="chip bad">' + esc(e.whyNot) + '</span>');
+      var status = (j.isActive ? '<span class="chip ok">active</span>' : '<span class="chip bad">hidden</span>') +
+        (j.isTest ? ' <span class="chip">TEST</span>' : '');
+      var actions =
+        '<button data-act="apply" data-id="' + j.id + '"' + (j.isActive ? '' : ' disabled title="Job is hidden - Activate it first"') + '>Apply</button> ' +
+        '<button class="sec" data-act="watch" data-id="' + j.id + '">Queue</button>' +
+        (j.isTest
+          ? ' <button class="sec" data-act="toggle" data-id="' + j.id + '">' + (j.isActive ? 'Hide' : 'Activate') + '</button>' +
+            ' <button class="sec" data-act="reset" data-id="' + j.id + '">Reset</button>'
+          : '');
+      return '<tr><td>' + j.id + '</td>' +
+        '<td><b>' + esc(j.title) + '</b><div class="mut">' + esc(j.filters.join(', ')) + '</div></td>' +
+        '<td>' + emp + '</td><td>' + j.applications + '</td><td>' + status + '</td><td>' + actions + '</td></tr>';
+    }).join('');
+  }
+
+  function loadJobs() {
+    return api('/jobs').then(renderJobs).catch(function (e) { log('Loading jobs failed', e.message); });
+  }
+
+  function renderQueue(q) {
+    var remaining = q.estimatedSendAt ? Math.max(0, Math.round((new Date(q.estimatedSendAt) - new Date(q.now)) / 1000)) : null;
+    $('queueTitle').textContent = '- job #' + watchJob;
+    $('queueInfo').innerHTML =
+      'Delay <b>' + q.timing.delaySeconds + 's</b> after the first application · at least <b>' + q.timing.minGapSeconds + 's</b> between notifications for the same job.<br>' +
+      (q.pendingCount
+        ? '<b class="ok">' + q.pendingCount + ' application(s) waiting</b> - employer will be notified ' +
+          (remaining === 0 ? 'any moment now' : 'in about <b>' + remaining + 's</b> (' + fmtTime(q.estimatedSendAt) + ')')
+        : 'Nothing waiting.');
+    var tb = $('queueTable').querySelector('tbody');
+    $('queueTable').style.display = q.rows.length ? '' : 'none';
+    tb.innerHTML = q.rows.map(function (r) {
+      var cls = r.status === 'sent' ? 'ok' : (r.status === 'pending' || r.status === 'claimed') ? '' : 'bad';
+      return '<tr><td>' + r.id + '</td><td>' + esc(r.applicant) + '</td>' +
+        '<td class="' + cls + '">' + esc(r.status) + (r.attempts ? ' (try ' + r.attempts + ')' : '') + '</td>' +
+        '<td>' + fmtTime(r.queuedAt) + '</td><td>' + fmtTime(r.processedAt) + '</td><td>' + esc(r.note) + '</td></tr>';
+    }).join('');
+    return q.pendingCount;
+  }
+
+  function refreshQueue() {
+    if (!watchJob) return;
+    api('/queue?jobId=' + watchJob).then(function (q) {
+      var pending = renderQueue(q);
+      idlePolls = pending ? 0 : idlePolls + 1;
+      if (idlePolls >= 4 && watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+    }).catch(function (e) { $('queueInfo').textContent = e.message; });
+  }
+
+  function watch(jobId) {
+    watchJob = jobId; idlePolls = 0;
+    if (watchTimer) clearInterval(watchTimer);
+    refreshQueue();
+    watchTimer = setInterval(refreshQueue, 2000);
+  }
+
+  $('reloadJobs').onclick = loadJobs;
+
+  $('jobs').addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t.dataset || !t.dataset.act) return;
+    var id = Number(t.dataset.id);
+    var job = jobsData.filter(function (j) { return j.id === id; })[0];
+
+    if (t.dataset.act === 'watch') return watch(id);
+
+    if (t.dataset.act === 'apply') {
+      var applicants = selected('.app');
+      if (!applicants.length) return log('Error', 'Tick at least one Applicant in the Users table');
+      var real = !job.isTest;
+      if (real && !confirm('"' + job.title + '" is NOT a test job. The real employer (' + (job.employer.name || '#' + job.employer.id) + ') will get a real notification. Continue?')) return;
+      t.disabled = true;
+      api('/apply', { method: 'POST', body: { jobId: id, applicantIds: applicants, confirmReal: real } })
+        .then(function (r) { log('Apply to job #' + id, r); watch(id); return loadJobs(); })
+        .catch(function (err) { log('Apply failed', err.message); })
+        .then(function () { t.disabled = false; });
+    }
+
+    if (t.dataset.act === 'toggle') {
+      api('/job-active', { method: 'POST', body: { jobId: id, active: !job.isActive } })
+        .then(loadJobs).catch(function (err) { log('Toggle failed', err.message); });
+    }
+
+    if (t.dataset.act === 'reset') {
+      if (!confirm('Delete all applications and queue rows of test job #' + id + '?')) return;
+      api('/reset-job', { method: 'POST', body: { jobId: id } })
+        .then(function (r) { log('Reset job #' + id, r); watch(id); return loadJobs(); })
+        .catch(function (err) { log('Reset failed', err.message); });
+    }
+  });
 
   var saved = sessionStorage.getItem(KEY_STORE);
   if (saved) { $('key').value = saved; connect(); }

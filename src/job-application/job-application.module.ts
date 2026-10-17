@@ -17,5 +17,6 @@ import { ApplicationNotifier } from './application-notifier';
   ],
   controllers: [JobApplicationController],
   providers: [JobApplicationService, ApplicationNotifier],
+  exports: [JobApplicationService, ApplicationNotifier],
 })
 export class JobApplicationModule {}

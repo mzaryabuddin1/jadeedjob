@@ -13,6 +13,10 @@ const user_entity_1 = require("../users/entities/user.entity");
 const firebase_module_1 = require("../firebase/firebase.module");
 const notification_module_1 = require("../notification/notification.module");
 const job_module_1 = require("../job/job.module");
+const job_application_module_1 = require("../job-application/job-application.module");
+const job_entity_1 = require("../job/entities/job.entity");
+const job_application_entity_1 = require("../job-application/entities/job-application.entity");
+const notification_queue_entity_1 = require("../notification/notification-queue.entity");
 const fcm_lab_controller_1 = require("./fcm-lab.controller");
 let DebugModule = class DebugModule {
 };
@@ -20,10 +24,16 @@ exports.DebugModule = DebugModule;
 exports.DebugModule = DebugModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User]),
+            typeorm_1.TypeOrmModule.forFeature([
+                user_entity_1.User,
+                job_entity_1.Job,
+                job_application_entity_1.JobApplication,
+                notification_queue_entity_1.NotificationQueueItem,
+            ]),
             firebase_module_1.FirebaseModule,
             notification_module_1.NotificationModule,
             job_module_1.JobModule,
+            job_application_module_1.JobApplicationModule,
         ],
         controllers: [fcm_lab_controller_1.FcmLabController],
         providers: [fcm_lab_controller_1.DebugLabGuard],

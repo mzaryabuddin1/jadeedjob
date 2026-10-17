@@ -1,7 +1,10 @@
 import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { NotificationQueueItem } from './notification-queue.entity';
-export type QueueHandlerResult = 'sent' | 'skipped';
+export type QueueHandlerResult = 'sent' | 'skipped' | {
+    status: 'sent' | 'skipped';
+    note?: string;
+};
 export type QueueRegistration = {
     delaySeconds: number;
     minGapSeconds: number;

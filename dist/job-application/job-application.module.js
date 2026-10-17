@@ -29,6 +29,7 @@ exports.JobApplicationModule = JobApplicationModule = __decorate([
         ],
         controllers: [job_application_controller_1.JobApplicationController],
         providers: [job_application_service_1.JobApplicationService, application_notifier_1.ApplicationNotifier],
+        exports: [job_application_service_1.JobApplicationService, application_notifier_1.ApplicationNotifier],
     })
 ], JobApplicationModule);
 //# sourceMappingURL=job-application.module.js.map

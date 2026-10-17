@@ -60,4 +60,8 @@ export class NotificationQueueItem {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   lastError: string | null;
+
+  /** Outcome of the send, e.g. "push: 1 ok, 0 failed" or why it was skipped */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  note: string | null;
 }

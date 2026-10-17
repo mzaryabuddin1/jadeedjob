@@ -43,15 +43,22 @@ export class ApplicationNotifier implements OnModuleInit {
     private readonly appRepo: Repository<JobApplication>,
   ) {}
 
-  onModuleInit() {
+  /** Current batching settings (env or defaults) */
+  getTiming() {
     const num = (v: string | undefined, fallback: number) =>
       v !== undefined && v !== '' && !Number.isNaN(Number(v))
         ? Number(v)
         : fallback;
 
-    this.queue.register(TYPE, {
+    return {
       delaySeconds: num(process.env.APPLICATION_NOTIFY_DELAY_SECONDS, 30),
       minGapSeconds: num(process.env.APPLICATION_NOTIFY_MIN_GAP_SECONDS, 120),
+    };
+  }
+
+  onModuleInit() {
+    this.queue.register(TYPE, {
+      ...this.getTiming(),
       handler: (items) => this.flush(items),
     });
   }
@@ -94,7 +101,7 @@ export class ApplicationNotifier implements OnModuleInit {
   /** Merge all queued applications of ONE job into one notification */
   private async flush(
     items: NotificationQueueItem[],
-  ): Promise<'sent' | 'skipped'> {
+  ): Promise<{ status: 'sent' | 'skipped'; note?: string }> {
     const payloads = items.map((i) => i.payload as ApplicationPayload);
     const jobId = payloads[0].jobId;
     const employerId = items[0].recipientId;
@@ -103,13 +110,17 @@ export class ApplicationNotifier implements OnModuleInit {
       where: { id: jobId },
       select: ['id', 'title', 'isActive', 'createdBy'],
     });
-    if (!job || job.isActive === false) return 'skipped';
+    if (!job || job.isActive === false) {
+      return { status: 'skipped', note: 'job is missing or inactive' };
+    }
 
     const employer = await this.userRepo.findOne({
       where: { id: employerId },
       select: ['id', 'email', 'fcmTokens', 'notification_settings', 'isBanned'],
     });
-    if (!employer || employer.isBanned) return 'skipped';
+    if (!employer || employer.isBanned) {
+      return { status: 'skipped', note: 'employer missing or banned' };
+    }
 
     const settings = resolveNotificationSettings(
       employer.notification_settings,
@@ -119,7 +130,15 @@ export class ApplicationNotifier implements OnModuleInit {
       : [];
     const email =
       settings.email && employer.email ? String(employer.email).trim() : '';
-    if (!tokens.length && !email) return 'skipped';
+    if (!tokens.length && !email) {
+      return {
+        status: 'skipped',
+        note:
+          !settings.push && !settings.email
+            ? 'employer turned off push and email'
+            : 'employer has no FCM token saved (and email is off)',
+      };
+    }
 
     const count = payloads.length;
     const total = await this.appRepo.count({ where: { jobId } });
@@ -152,6 +171,8 @@ export class ApplicationNotifier implements OnModuleInit {
 
     this.logger.log(`Job #${jobId} -> employer #${employerId}: "${body}"`);
 
+    const notes: string[] = [`"${body}"`];
+
     if (tokens.length) {
       const res = await this.firebaseService.sendToTokens(
         tokens,
@@ -161,9 +182,9 @@ export class ApplicationNotifier implements OnModuleInit {
       const errors = Object.entries(res.errors)
         .map(([code, e]) => `${code}x${e.count}`)
         .join(', ');
-      this.logger.log(
-        `Job #${jobId} push: ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`,
-      );
+      const pushText = `push: ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`;
+      this.logger.log(`Job #${jobId} ${pushText}`);
+      notes.push(pushText);
     }
 
     if (email) {
@@ -181,6 +202,8 @@ export class ApplicationNotifier implements OnModuleInit {
       });
     }
 
-    return 'sent';
+    if (email) notes.push('email sent');
+
+    return { status: 'sent', note: notes.join(' | ') };
   }
 }

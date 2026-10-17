@@ -35,13 +35,18 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
         this.appRepo = appRepo;
         this.logger = new common_1.Logger(ApplicationNotifier_1.name);
     }
-    onModuleInit() {
+    getTiming() {
         const num = (v, fallback) => v !== undefined && v !== '' && !Number.isNaN(Number(v))
             ? Number(v)
             : fallback;
-        this.queue.register(TYPE, {
+        return {
             delaySeconds: num(process.env.APPLICATION_NOTIFY_DELAY_SECONDS, 30),
             minGapSeconds: num(process.env.APPLICATION_NOTIFY_MIN_GAP_SECONDS, 120),
+        };
+    }
+    onModuleInit() {
+        this.queue.register(TYPE, {
+            ...this.getTiming(),
             handler: (items) => this.flush(items),
         });
     }
@@ -81,21 +86,29 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
             where: { id: jobId },
             select: ['id', 'title', 'isActive', 'createdBy'],
         });
-        if (!job || job.isActive === false)
-            return 'skipped';
+        if (!job || job.isActive === false) {
+            return { status: 'skipped', note: 'job is missing or inactive' };
+        }
         const employer = await this.userRepo.findOne({
             where: { id: employerId },
             select: ['id', 'email', 'fcmTokens', 'notification_settings', 'isBanned'],
         });
-        if (!employer || employer.isBanned)
-            return 'skipped';
+        if (!employer || employer.isBanned) {
+            return { status: 'skipped', note: 'employer missing or banned' };
+        }
         const settings = (0, notification_settings_1.resolveNotificationSettings)(employer.notification_settings);
         const tokens = settings.push
             ? (employer.fcmTokens || []).filter(Boolean)
             : [];
         const email = settings.email && employer.email ? String(employer.email).trim() : '';
-        if (!tokens.length && !email)
-            return 'skipped';
+        if (!tokens.length && !email) {
+            return {
+                status: 'skipped',
+                note: !settings.push && !settings.email
+                    ? 'employer turned off push and email'
+                    : 'employer has no FCM token saved (and email is off)',
+            };
+        }
         const count = payloads.length;
         const total = await this.appRepo.count({ where: { jobId } });
         const names = [...new Set(payloads.map((p) => p.applicantName))];
@@ -123,12 +136,15 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
             path: this.buildPath(jobId),
         };
         this.logger.log(`Job #${jobId} -> employer #${employerId}: "${body}"`);
+        const notes = [`"${body}"`];
         if (tokens.length) {
             const res = await this.firebaseService.sendToTokens(tokens, { title, body }, data);
             const errors = Object.entries(res.errors)
                 .map(([code, e]) => `${code}x${e.count}`)
                 .join(', ');
-            this.logger.log(`Job #${jobId} push: ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`);
+            const pushText = `push: ${res.success} ok, ${res.failure} failed${errors ? ` (${errors})` : ''}`;
+            this.logger.log(`Job #${jobId} ${pushText}`);
+            notes.push(pushText);
         }
         if (email) {
             const esc = (s) => s
@@ -143,7 +159,9 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
                 html: `<div style="font-family:Arial,sans-serif;max-width:560px"><h2 style="margin:0 0 8px">${esc(title)}</h2><p>${esc(body)}</p><p>Open the JobsLoot app to review the applications.</p><p style="color:#888;font-size:12px">You can turn off email notifications anytime in the app settings.</p></div>`,
             });
         }
-        return 'sent';
+        if (email)
+            notes.push('email sent');
+        return { status: 'sent', note: notes.join(' | ') };
     }
 };
 exports.ApplicationNotifier = ApplicationNotifier;

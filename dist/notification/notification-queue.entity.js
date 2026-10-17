@@ -66,6 +66,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
     __metadata("design:type", String)
 ], NotificationQueueItem.prototype, "lastError", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
+    __metadata("design:type", String)
+], NotificationQueueItem.prototype, "note", void 0);
 exports.NotificationQueueItem = NotificationQueueItem = __decorate([
     (0, typeorm_1.Entity)('notification_queue'),
     (0, typeorm_1.Index)('IDX_notification_queue_pending', ['type', 'status', 'groupKey']),

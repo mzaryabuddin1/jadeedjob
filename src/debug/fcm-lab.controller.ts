@@ -16,8 +16,13 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { timingSafeEqual } from 'crypto';
-import { Like, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
+import { Job } from 'src/job/entities/job.entity';
+import { JobApplication } from 'src/job-application/entities/job-application.entity';
+import { JobApplicationService } from 'src/job-application/job-application.service';
+import { ApplicationNotifier } from 'src/job-application/application-notifier';
+import { NotificationQueueItem } from 'src/notification/notification-queue.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { MailService } from 'src/notification/mail.service';
@@ -58,6 +63,13 @@ export class DebugLabGuard implements CanActivate {
 export class FcmLabController {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
+    @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
+    @InjectRepository(JobApplication)
+    private readonly appRepo: Repository<JobApplication>,
+    @InjectRepository(NotificationQueueItem)
+    private readonly queueRepo: Repository<NotificationQueueItem>,
+    private readonly jobApplicationService: JobApplicationService,
+    private readonly applicationNotifier: ApplicationNotifier,
     private readonly firebaseService: FirebaseService,
     private readonly notificationService: NotificationService,
     private readonly mailService: MailService,
@@ -127,6 +139,237 @@ export class FcmLabController {
       ),
       createdAt: u.createdAt,
     }));
+  }
+
+  // ────────────────────────────────────────────────
+  // JOBS & APPLICATIONS (test the "someone applied" notification)
+  // ────────────────────────────────────────────────
+
+  @Get('jobs')
+  async jobs(@Query('limit') limit = '60') {
+    const take = Math.min(200, Math.max(1, Number(limit) || 60));
+    const jobs = await this.jobRepo.find({
+      order: { id: 'DESC' },
+      take,
+      relations: ['filters'],
+    });
+
+    const jobIds = jobs.map((j) => j.id);
+    const creatorIds = [...new Set(jobs.map((j) => j.createdBy))];
+
+    const counts: { jobId: number; n: string }[] = jobIds.length
+      ? await this.appRepo
+          .createQueryBuilder('a')
+          .select('a.jobId', 'jobId')
+          .addSelect('COUNT(*)', 'n')
+          .where('a.jobId IN (:...jobIds)', { jobIds })
+          .groupBy('a.jobId')
+          .getRawMany()
+      : [];
+    const countByJob = new Map(
+      counts.map((c) => [Number(c.jobId), Number(c.n)]),
+    );
+
+    const creators = creatorIds.length
+      ? await this.userRepo.find({
+          where: { id: In(creatorIds) },
+          select: [
+            'id',
+            'firstName',
+            'lastName',
+            'fcmTokens',
+            'email',
+            'notification_settings',
+          ],
+        })
+      : [];
+    const creatorById = new Map(creators.map((u) => [u.id, u]));
+
+    return {
+      timing: this.applicationNotifier.getTiming(),
+      jobs: jobs.map((j) => {
+        const c = creatorById.get(j.createdBy);
+        const settings = resolveNotificationSettings(c?.notification_settings);
+        const devices = (c?.fcmTokens || []).filter(Boolean).length;
+        return {
+          id: j.id,
+          title: j.title,
+          isActive: j.isActive,
+          isTest: j.title.startsWith('[FCM TEST]'),
+          filters: (j.filters || []).map((f) => f.name),
+          applications: countByJob.get(j.id) ?? 0,
+          createdAt: j.createdAt,
+          employer: {
+            id: j.createdBy,
+            name: `${c?.firstName ?? ''} ${c?.lastName ?? ''}`.trim(),
+            pushDevices: settings.push ? devices : 0,
+            pushEnabled: settings.push,
+            emailEnabled: settings.email && !!c?.email,
+            willBeNotified:
+              settings.push && devices > 0
+                ? true
+                : settings.email && !!c?.email,
+            whyNot:
+              settings.push && devices > 0
+                ? ''
+                : settings.email && c?.email
+                  ? ''
+                  : !settings.push
+                    ? 'employer turned push off'
+                    : 'employer has no FCM token saved',
+          },
+        };
+      }),
+    };
+  }
+
+  /**
+   * Apply to a job as one or more users through the REAL apply code
+   * (so the employer notification is queued/batched exactly like production).
+   * Jobs that are not "[FCM TEST]" jobs need confirmReal=true because the
+   * real employer would get a real notification.
+   */
+  @Post('apply')
+  async apply(
+    @Body()
+    body: {
+      jobId: number;
+      applicantIds: number[];
+      confirmReal?: boolean;
+    },
+  ) {
+    const jobId = Number(body.jobId);
+    const applicantIds = [
+      ...new Set((body.applicantIds || []).map(Number)),
+    ].filter((n) => n > 0);
+    if (!jobId) throw new BadRequestException('Send jobId');
+    if (!applicantIds.length) {
+      throw new BadRequestException('Tick at least one applicant');
+    }
+
+    const job = await this.jobRepo.findOne({
+      where: { id: jobId },
+      select: ['id', 'title', 'isActive', 'createdBy'],
+    });
+    if (!job) throw new NotFoundException('Job not found');
+    if (!job.title.startsWith('[FCM TEST]') && !body.confirmReal) {
+      throw new BadRequestException(
+        'This is not an [FCM TEST] job - the real employer would be notified. Send confirmReal=true to continue.',
+      );
+    }
+
+    const results = [];
+    for (const applicantId of applicantIds) {
+      try {
+        const app: any = await this.jobApplicationService.apply({
+          jobId,
+          applicantId,
+        });
+        results.push({ applicantId, ok: true, applicationId: app.id });
+      } catch (err: any) {
+        results.push({
+          applicantId,
+          ok: false,
+          message: err?.response?.message ?? err?.message ?? 'failed',
+        });
+      }
+    }
+
+    return {
+      applied: results.filter((r) => r.ok).length,
+      results,
+      timing: this.applicationNotifier.getTiming(),
+      note: 'The employer notification is queued and sent after the delay (see Queue panel).',
+    };
+  }
+
+  /** Queue rows of a job: when will the employer be notified, and what happened */
+  @Get('queue')
+  async queue(@Query('jobId') jobId: string) {
+    const id = Number(jobId);
+    if (!id) throw new BadRequestException('Send jobId');
+
+    const rows = await this.queueRepo.find({
+      where: { groupKey: `job_application:${id}` },
+      order: { id: 'DESC' },
+      take: 25,
+    });
+
+    const timing = this.applicationNotifier.getTiming();
+    const pending = rows.filter((r) => r.status === 'pending');
+    const lastSent = rows.find((r) => r.status === 'sent');
+
+    let estimatedSendAt: Date | null = null;
+    if (pending.length) {
+      const first = Math.min(
+        ...pending.map((r) => new Date(r.queuedAt).getTime()),
+      );
+      let at = first + timing.delaySeconds * 1000;
+      if (lastSent?.processedAt && timing.minGapSeconds > 0) {
+        at = Math.max(
+          at,
+          new Date(lastSent.processedAt).getTime() +
+            timing.minGapSeconds * 1000,
+        );
+      }
+      estimatedSendAt = new Date(at);
+    }
+
+    return {
+      now: new Date(),
+      timing,
+      pendingCount: pending.length,
+      estimatedSendAt,
+      rows: rows.map((r) => ({
+        id: r.id,
+        status: r.status,
+        applicant: r.payload?.applicantName ?? '',
+        queuedAt: r.queuedAt,
+        processedAt: r.processedAt,
+        attempts: r.attempts,
+        note: r.note ?? r.lastError ?? '',
+      })),
+    };
+  }
+
+  /** Make a job visible/hidden for applying without touching anything else */
+  @Post('job-active')
+  async jobActive(@Body() body: { jobId: number; active: boolean }) {
+    const jobId = Number(body.jobId);
+    const job = await this.jobRepo.findOne({
+      where: { id: jobId },
+      select: ['id', 'title'],
+    });
+    if (!job) throw new NotFoundException('Job not found');
+    if (!job.title.startsWith('[FCM TEST]')) {
+      throw new BadRequestException('Only [FCM TEST] jobs can be toggled here');
+    }
+    await this.jobRepo.update({ id: jobId }, { isActive: !!body.active });
+    return { jobId, isActive: !!body.active };
+  }
+
+  /** Delete the applications + queue rows of a TEST job so you can apply again */
+  @Post('reset-job')
+  async resetJob(@Body() body: { jobId: number }) {
+    const jobId = Number(body.jobId);
+    const job = await this.jobRepo.findOne({
+      where: { id: jobId },
+      select: ['id', 'title'],
+    });
+    if (!job) throw new NotFoundException('Job not found');
+    if (!job.title.startsWith('[FCM TEST]')) {
+      throw new BadRequestException('Only [FCM TEST] jobs can be reset here');
+    }
+
+    const apps = await this.appRepo.delete({ jobId });
+    const queued = await this.queueRepo.delete({
+      groupKey: `job_application:${jobId}`,
+    });
+    return {
+      jobId,
+      applicationsDeleted: apps.affected,
+      queueRowsDeleted: queued.affected,
+    };
   }
 
   /** Send a test push to every token of a user, or to one raw token */
