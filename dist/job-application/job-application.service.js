@@ -19,11 +19,13 @@ const typeorm_2 = require("typeorm");
 const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const application_notifier_1 = require("./application-notifier");
 let JobApplicationService = class JobApplicationService {
-    constructor(jobAppRepo, jobRepo, userRepo) {
+    constructor(jobAppRepo, jobRepo, userRepo, applicationNotifier) {
         this.jobAppRepo = jobAppRepo;
         this.jobRepo = jobRepo;
         this.userRepo = userRepo;
+        this.applicationNotifier = applicationNotifier;
     }
     async apply(data) {
         const job = await this.jobRepo.findOne({
@@ -32,20 +34,29 @@ let JobApplicationService = class JobApplicationService {
         if (!job) {
             throw new common_1.BadRequestException('Job does not exist or is not active');
         }
-        const existing = await this.jobAppRepo.findOne({
-            where: {
+        if (job.createdBy === data.applicantId) {
+            throw new common_1.BadRequestException('You cannot apply to your own job');
+        }
+        const app = await this.jobAppRepo.manager.transaction(async (manager) => {
+            await manager
+                .createQueryBuilder(job_entity_1.Job, 'j')
+                .select('j.id')
+                .where('j.id = :id', { id: data.jobId })
+                .setLock('pessimistic_write')
+                .getOne();
+            const existing = await manager.findOne(job_application_entity_1.JobApplication, {
+                where: { jobId: data.jobId, applicantId: data.applicantId },
+            });
+            if (existing) {
+                throw new common_1.BadRequestException('You already applied to this job');
+            }
+            return manager.save(manager.create(job_application_entity_1.JobApplication, {
                 jobId: data.jobId,
                 applicantId: data.applicantId,
-            },
+            }));
         });
-        if (existing) {
-            throw new common_1.BadRequestException('You already applied to this job');
-        }
-        const app = this.jobAppRepo.create({
-            jobId: data.jobId,
-            applicantId: data.applicantId,
-        });
-        return this.jobAppRepo.save(app);
+        await this.applicationNotifier.onApplied(job, app);
+        return app;
     }
     async getApplicationsByUser(userId, page = 1, limit = 10) {
         const skip = (page - 1) * limit;
@@ -86,6 +97,7 @@ exports.JobApplicationService = JobApplicationService = __decorate([
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        application_notifier_1.ApplicationNotifier])
 ], JobApplicationService);
 //# sourceMappingURL=job-application.service.js.map

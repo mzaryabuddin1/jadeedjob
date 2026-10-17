@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
+import { ApplicationNotifier } from './application-notifier';
 
 @Injectable()
 export class JobApplicationService {
@@ -16,6 +17,8 @@ export class JobApplicationService {
 
     @InjectRepository(User)
     private userRepo: Repository<User>,
+
+    private applicationNotifier: ApplicationNotifier,
   ) {}
 
   async apply(data: { jobId: number; applicantId: number }) {
@@ -27,23 +30,40 @@ export class JobApplicationService {
       throw new BadRequestException('Job does not exist or is not active');
     }
 
-    const existing = await this.jobAppRepo.findOne({
-      where: {
-        jobId: data.jobId,
-        applicantId: data.applicantId,
-      },
-    });
-
-    if (existing) {
-      throw new BadRequestException('You already applied to this job');
+    if (job.createdBy === data.applicantId) {
+      throw new BadRequestException('You cannot apply to your own job');
     }
 
-    const app = this.jobAppRepo.create({
-      jobId: data.jobId,
-      applicantId: data.applicantId,
+    // One application per user per job. The job row is locked inside a
+    // transaction so two quick taps / parallel requests cannot both pass
+    // the "already applied" check.
+    const app = await this.jobAppRepo.manager.transaction(async (manager) => {
+      await manager
+        .createQueryBuilder(Job, 'j')
+        .select('j.id')
+        .where('j.id = :id', { id: data.jobId })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      const existing = await manager.findOne(JobApplication, {
+        where: { jobId: data.jobId, applicantId: data.applicantId },
+      });
+      if (existing) {
+        throw new BadRequestException('You already applied to this job');
+      }
+
+      return manager.save(
+        manager.create(JobApplication, {
+          jobId: data.jobId,
+          applicantId: data.applicantId,
+        }),
+      );
     });
 
-    return this.jobAppRepo.save(app);
+    // Employer is told later, in a batch (see ApplicationNotifier) - never blocks apply
+    await this.applicationNotifier.onApplied(job, app);
+
+    return app;
   }
 
   async getApplicationsByUser(userId: number, page = 1, limit = 10) {

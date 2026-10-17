@@ -29,7 +29,15 @@ export class JobApplicationController {
   constructor(private readonly jobAppService: JobApplicationService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Apply to a job' })
+  @ApiOperation({
+    summary: 'Apply to a job',
+    description: [
+      'A user can apply **once** per job (400 `You already applied to this job`), and not to their own job.',
+      'The job owner is **not** pinged instantly: applications are queued and merged into ONE notification after ~30 seconds,',
+      'e.g. `3 people applied to your job "X" (12 total)`. Busy jobs are spaced out (at least 2 min between notifications).',
+      'Push/email follow the owner\'s `notification-settings`. Push `data`: `type=job_application, jobId, jobTitle, title, text, count, totalApplications, applicantIds, applicantNames, applicationId, createdAt, path`.',
+    ].join('\n'),
+  })
   @ApiBody({
     schema: {
       type: 'object',

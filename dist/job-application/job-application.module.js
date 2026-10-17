@@ -14,14 +14,21 @@ const typeorm_1 = require("@nestjs/typeorm");
 const job_application_entity_1 = require("./entities/job-application.entity");
 const job_entity_1 = require("../job/entities/job.entity");
 const user_entity_1 = require("../users/entities/user.entity");
+const notification_module_1 = require("../notification/notification.module");
+const firebase_module_1 = require("../firebase/firebase.module");
+const application_notifier_1 = require("./application-notifier");
 let JobApplicationModule = class JobApplicationModule {
 };
 exports.JobApplicationModule = JobApplicationModule;
 exports.JobApplicationModule = JobApplicationModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User])],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([job_application_entity_1.JobApplication, job_entity_1.Job, user_entity_1.User]),
+            notification_module_1.NotificationModule,
+            firebase_module_1.FirebaseModule,
+        ],
         controllers: [job_application_controller_1.JobApplicationController],
-        providers: [job_application_service_1.JobApplicationService],
+        providers: [job_application_service_1.JobApplicationService, application_notifier_1.ApplicationNotifier],
     })
 ], JobApplicationModule);
 //# sourceMappingURL=job-application.module.js.map

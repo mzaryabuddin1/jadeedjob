@@ -13,14 +13,19 @@ const user_entity_1 = require("../users/entities/user.entity");
 const firebase_module_1 = require("../firebase/firebase.module");
 const notification_service_1 = require("./notification.service");
 const mail_service_1 = require("./mail.service");
+const notification_queue_entity_1 = require("./notification-queue.entity");
+const notification_queue_service_1 = require("./notification-queue.service");
 let NotificationModule = class NotificationModule {
 };
 exports.NotificationModule = NotificationModule;
 exports.NotificationModule = NotificationModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([user_entity_1.User]), firebase_module_1.FirebaseModule],
-        providers: [notification_service_1.NotificationService, mail_service_1.MailService],
-        exports: [notification_service_1.NotificationService, mail_service_1.MailService],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, notification_queue_entity_1.NotificationQueueItem]),
+            firebase_module_1.FirebaseModule,
+        ],
+        providers: [notification_service_1.NotificationService, mail_service_1.MailService, notification_queue_service_1.NotificationQueueService],
+        exports: [notification_service_1.NotificationService, mail_service_1.MailService, notification_queue_service_1.NotificationQueueService],
     })
 ], NotificationModule);
 //# sourceMappingURL=notification.module.js.map

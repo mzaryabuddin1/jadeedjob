@@ -129,6 +129,34 @@ Relationships to remember:
   - Category filtering uses `EXISTS` on `job_filters`.
 - `GET /job/:id` only returns `isActive` jobs.
 
+## Job applications & batched employer notifications
+
+- `POST /job-application {job}`: once per user per job (job row locked in a
+  transaction, so parallel taps create one application), not own job. No DB
+  unique index on (jobId, applicantId) on purpose - production data may hold
+  old duplicates and `synchronize` would crash; check with
+  `SELECT jobId, applicantId, COUNT(*) FROM job_applications GROUP BY 1,2 HAVING COUNT(*)>1`
+  and add `@Unique` once clean.
+- Employer (`jobs.createdBy`) is NOT pinged instantly. `ApplicationNotifier`
+  (`src/job-application/application-notifier.ts`) queues each application in the
+  generic durable queue (`notification_queue` table, `NotificationQueueService`
+  in `src/notification/`). A worker polls every 5s: a group (`job_application:<jobId>`)
+  is flushed `APPLICATION_NOTIFY_DELAY_SECONDS` (30) after its FIRST queued item,
+  at most one notification per job every `APPLICATION_NOTIFY_MIN_GAP_SECONDS` (120),
+  merged into one message ("3 people applied to your job "X" (12 total)", or
+  "<name> applied ..." for one). Push/email follow the employer's
+  `notification_settings`. Push data: `type=job_application, jobId, jobTitle, title,
+  text, count, totalApplications, applicantIds, applicantNames, applicationId,
+  createdAt, path` (`path` from env `NOTIFICATION_APPLICATION_PATH`, default
+  `/job/{id}/applications`).
+- Queue: DB-backed (survives restarts, multi-instance safe via atomic claim),
+  3 retries with backoff, stuck claims released after 5 min, processed rows
+  deleted after 7 days. `NOTIFICATION_WORKER=off` disables the worker on an
+  instance; `NOTIFICATION_QUEUE_POLL_SECONDS` sets polling. New batched types:
+  `queue.register(type, {delaySeconds, minGapSeconds, handler})` + `queue.enqueue(...)`.
+- Page-owned jobs notify only the poster (`createdBy`), not page members.
+- For very high volume swap the worker for BullMQ + Redis; the handler stays.
+
 ## Username (`src/users/username.util.ts`, `users.service.ts`)
 
 - `users.username` (varchar 30, unique, nullable only for the instant before

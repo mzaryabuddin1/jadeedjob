@@ -2,11 +2,13 @@ import { Repository } from 'typeorm';
 import { JobApplication } from './entities/job-application.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { User } from 'src/users/entities/user.entity';
+import { ApplicationNotifier } from './application-notifier';
 export declare class JobApplicationService {
     private jobAppRepo;
     private jobRepo;
     private userRepo;
-    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>);
+    private applicationNotifier;
+    constructor(jobAppRepo: Repository<JobApplication>, jobRepo: Repository<Job>, userRepo: Repository<User>, applicationNotifier: ApplicationNotifier);
     apply(data: {
         jobId: number;
         applicantId: number;
