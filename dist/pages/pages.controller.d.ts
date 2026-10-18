@@ -9,9 +9,9 @@ export declare class PagesController {
     roles(): {
         assignable: ("owner" | "admin" | "editor")[];
         roles: {
-            [k: string]: readonly ("page.edit" | "page.delete" | "members.view" | "members.invite" | "members.remove" | "members.change_role" | "jobs.manage" | "applications.manage" | "ratings.give" | "verification.submit" | "verification.view")[];
+            [k: string]: readonly ("page.edit" | "page.delete" | "members.view" | "members.invite" | "members.remove" | "members.change_role" | "jobs.manage" | "applications.manage" | "ratings.give" | "posts.manage" | "analytics.view" | "verification.submit" | "verification.view")[];
         };
-        allPermissions: readonly ["page.edit", "page.delete", "members.view", "members.invite", "members.remove", "members.change_role", "jobs.manage", "applications.manage", "ratings.give", "verification.submit", "verification.view"];
+        allPermissions: readonly ["page.edit", "page.delete", "members.view", "members.invite", "members.remove", "members.change_role", "jobs.manage", "applications.manage", "ratings.give", "posts.manage", "analytics.view", "verification.submit", "verification.view"];
         rules: string[];
     };
     myInvitations(req: any): Promise<{
@@ -53,15 +53,25 @@ export declare class PagesController {
         data: Record<string, any>;
     }>;
     getPages(query: any, req: any): Promise<{
-        data: Record<string, any>[];
+        data: {
+            isFollowing: boolean;
+        }[];
         total: number;
         totalPages: number;
         currentPage: number;
     }>;
-    getPageById(id: number, req: any): Promise<Record<string, any>>;
+    getPageById(id: number, req: any): Promise<{
+        posts: number;
+        reels: number;
+        isFollowing: boolean;
+    }>;
     updatePage(id: number, body: any, req: any): Promise<{
         message: string;
-        data: Record<string, any>;
+        data: {
+            posts: number;
+            reels: number;
+            isFollowing: boolean;
+        };
     }>;
     deletePage(id: number, req: any): Promise<{
         message: string;

@@ -34,6 +34,7 @@ const PUBLIC_FIELDS = [
     'certifications',
     'page_rating',
     'page_rating_count',
+    'followersCount',
     'is_verified',
     'verified_at',
     'createdAt',

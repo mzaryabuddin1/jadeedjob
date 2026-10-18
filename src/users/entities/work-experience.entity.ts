@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import { Page } from 'src/pages/entities/page.entity';
 import { User } from './user.entity';
 
 @Entity('work_experience')
@@ -24,8 +31,19 @@ export class WorkExperience {
   @Column({ nullable: true })
   to_date: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   key_responsibilities: string;
+
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  location: string | null;
+
+  /** Set when the employer is a JobsLoot page (links to its profile) */
+  @Column({ type: 'int', nullable: true })
+  pageId: number | null;
+
+  @ManyToOne(() => Page, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'pageId' })
+  page: Page | null;
 
   @Column({ nullable: true })
   experience_certificate: string;

@@ -23,13 +23,17 @@ const user_entity_1 = require("../users/entities/user.entity");
 const page_permissions_1 = require("./page-permissions");
 const page_view_1 = require("./page-view");
 const page_verification_service_1 = require("./page-verification.service");
+const follow_service_1 = require("../follow/follow.service");
+const post_entity_1 = require("../posts/entities/post.entity");
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9.-]{1,38}[a-z0-9]$/;
 let PagesService = class PagesService {
-    constructor(pageRepo, memberRepo, userRepo, verificationService) {
+    constructor(pageRepo, memberRepo, userRepo, verificationService, followService, postRepo) {
         this.pageRepo = pageRepo;
         this.memberRepo = memberRepo;
         this.userRepo = userRepo;
         this.verificationService = verificationService;
+        this.followService = followService;
+        this.postRepo = postRepo;
     }
     roleOf(page, userId) {
         if (page.ownerId === userId)
@@ -139,10 +143,11 @@ let PagesService = class PagesService {
                 .getMany()
             : [];
         const roleByPage = new Map(memberships.map((m) => [m.pageId, m.role]));
+        const followed = await this.followService.followedSet(userId, 'page', pages.map((p) => p.id));
         return {
             data: pages.map((p) => {
                 const role = p.ownerId === userId ? 'owner' : (roleByPage.get(p.id) ?? null);
-                return (0, page_view_1.toPageView)(p, role);
+                return { ...(0, page_view_1.toPageView)(p, role), isFollowing: followed.has(p.id) };
             }),
             total,
             totalPages: Math.ceil(total / take),
@@ -151,7 +156,11 @@ let PagesService = class PagesService {
     }
     async getPageById(id, userId) {
         const page = await this.requirePage(id);
-        return (0, page_view_1.toPageView)(page, this.roleOf(page, userId));
+        return {
+            ...(0, page_view_1.toPageView)(page, this.roleOf(page, userId)),
+            isFollowing: await this.followService.isFollowing(userId, 'page', id),
+            ...(await (0, post_entity_1.countContent)(this.postRepo, { pageId: id })),
+        };
     }
     async updatePage(id, data, userId) {
         const { page } = await this.requirePermission(id, userId, 'page.edit', 'edit this page');
@@ -291,9 +300,12 @@ exports.PagesService = PagesService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
     __param(1, (0, typeorm_1.InjectRepository)(page_member_entity_1.PageMember)),
     __param(2, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(5, (0, typeorm_1.InjectRepository)(post_entity_1.Post)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        page_verification_service_1.PageVerificationService])
+        page_verification_service_1.PageVerificationService,
+        follow_service_1.FollowService,
+        typeorm_2.Repository])
 ], PagesService);
 //# sourceMappingURL=pages.service.js.map

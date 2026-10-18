@@ -5,5 +5,8 @@ export declare class Certification {
     issuing_institution: string;
     certification_date: Date;
     certificate_file: string;
+    expiry_date: Date | null;
+    credential_id: string | null;
+    credential_url: string | null;
     user: User;
 }

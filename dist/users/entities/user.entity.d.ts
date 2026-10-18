@@ -35,6 +35,9 @@ export declare class User {
     nationality: string;
     marital_status: string;
     profile_photo: string;
+    cover_photo: string | null;
+    headline: string | null;
+    open_to_work: boolean;
     alternate_phone: string;
     address_line1: string;
     address_line2: string;
@@ -65,6 +68,8 @@ export declare class User {
     ratingsGiven: Rating[];
     ratingAverage: number;
     ratingCount: number;
+    followersCount: number;
+    followingCount: number;
     country: Country | null;
     cityEntity: City | null;
     language: Language | null;

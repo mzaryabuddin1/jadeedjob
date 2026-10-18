@@ -177,6 +177,10 @@ __decorate([
     __metadata("design:type", Number)
 ], Page.prototype, "page_rating_count", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], Page.prototype, "followersCount", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'boolean', default: false }),
     __metadata("design:type", Boolean)
 ], Page.prototype, "is_verified", void 0);

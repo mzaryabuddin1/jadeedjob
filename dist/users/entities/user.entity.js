@@ -118,6 +118,18 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "profile_photo", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 500, nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "cover_photo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 220, nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "headline", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'boolean', default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "open_to_work", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], User.prototype, "alternate_phone", void 0);
@@ -237,6 +249,14 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'int', default: 0 }),
     __metadata("design:type", Number)
 ], User.prototype, "ratingCount", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "followersCount", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "followingCount", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => country_entity_1.Country, (country) => country.users, {
         eager: true,

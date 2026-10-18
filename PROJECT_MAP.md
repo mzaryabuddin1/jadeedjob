@@ -163,6 +163,56 @@ Relationships to remember:
 - Page-owned jobs notify only the poster (`createdBy`), not page members.
 - For very high volume swap the worker for BullMQ + Redis; the handler stays.
 
+## Social layer: profile, follow, posts/reels, discover, analytics
+
+All social routes use `@Throttle({limit: 300/min})` (the global 10 req / 30 s per IP
+would break normal scrolling; the rest of the API still has it - raise or make it
+per-user when real traffic arrives).
+
+- **Profile** (`src/profile/`): `GET|PATCH /users/me/profile`, experience /
+  education / certifications CRUD under `/users/me/...`, `GET /users/:id/profile`
+  (public view, declared AFTER the `me/...` routes). New user columns `headline`,
+  `cover_photo`, `open_to_work`, `followersCount`, `followingCount`; experience can
+  link a page (`pageId`). Public view never exposes contact, bank, KYC or
+  document links (the owner sees their documents + a `private` block).
+- **Follow** (`src/follow/`, table `follows`, unique pair): users and pages are
+  followable; follow/unfollow idempotent (`INSERT IGNORE` + `.updateEntity(false)`),
+  counters (`users.followersCount/followingCount`, `pages.followersCount`) updated in
+  the same transaction. `FollowNotifier` batches "X and N others started following you"
+  (page followers notify the page owner). Use `FollowService.followedSet()` for the
+  "do I follow these ids" flag of any list.
+- **Media** (`src/media/`): `POST /media/upload` (JPG/PNG/WEBP/GIF <= 10 MB, MP4/MOV/
+  WEBM <= 100 MB; env `MEDIA_MAX_IMAGE_MB`, `MEDIA_MAX_VIDEO_MB`), content sniffed,
+  stored in `uploads/media`, recorded in `media_files`; a post can only attach the
+  author's unused files; abandoned uploads deleted after 24 h. No transcoding or
+  thumbnails (app sends a cover image). Local disk - move to S3/CDN when needed.
+- **Posts & reels** (`src/posts/`): one table `posts` with `kind` post|reel; published
+  by a person or as a page (`pageId`, permission `posts.manage` = owner/admin/editor),
+  optional `jobId` tag (own job / that page's job), hashtags in `post_hashtags`, soft
+  delete (`deletedAt`). Reel = exactly 1 video (<= 180 s, caption <= 2200); post = text
+  and/or <= 10 images or 1 video (text <= 3000). Feeds: `GET /posts/feed` (follows +
+  mine, cursor), `GET /reels/feed` (decayed engagement score, page number), per user
+  / per page lists. `PostsService.hydrate()` builds the app-ready object (author, page,
+  job, counts, `viewer.liked/shared/canManage`).
+- **Engagement**: likes (`post_likes`), comments + one-level replies (`post_comments`),
+  shares (`post_shares`, a person counts once; `GET/POST .../share` returns `shareUrl`
+  from env `APP_SHARE_URL`, `{id}`). Cached counters on `posts`. `PostEngagementNotifier`
+  batches like / comment / reply notifications through the notification queue (re-checks
+  that likes/comments still exist; never notifies about your own actions). Env:
+  `POST_LIKE_NOTIFY_DELAY_SECONDS/_MIN_GAP_SECONDS`, `POST_COMMENT_...`,
+  `FOLLOW_NOTIFY_...`, `NOTIFICATION_POST_PATH`, `NOTIFICATION_PROFILE_PATH`.
+- **Analytics**: app reports `POST /posts/events` (<= 50 per call: `impression` / `view`
+  with `watchMs`, `completed`); own views ignored; reach = unique viewers
+  (`post_viewers`); per UTC day numbers in `post_stats_daily` (upsert through
+  `PostStatsService.bump`). `GET /posts/:id/analytics?days=` and
+  `GET /analytics/overview?days=&pageId=` (author; page posts need owner/admin =
+  `analytics.view`). Daily `likes` are gross new likes.
+- **Discover** (`src/discover/`): `/discover/users|pages|posts|reels|hashtags`, combined
+  `/discover/search?q=`, `/discover/home` (trending hashtags/reels, suggested people
+  and pages). Search is LIKE based (fine for now; use FULLTEXT/Elastic at scale).
+- Not built: blocking/reporting content, moderation, video transcoding, notifications
+  for new posts to followers, ownership transfer of pages.
+
 ## Pages (company profiles) (`src/pages/`)
 
 - "Page" replaced the old "company" naming everywhere: entity `Page` (table

@@ -36,6 +36,18 @@ __decorate([
     __metadata("design:type", String)
 ], Certification.prototype, "certificate_file", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'date', nullable: true }),
+    __metadata("design:type", Date)
+], Certification.prototype, "expiry_date", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 100, nullable: true }),
+    __metadata("design:type", String)
+], Certification.prototype, "credential_id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 500, nullable: true }),
+    __metadata("design:type", String)
+], Certification.prototype, "credential_url", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.certifications, {
         onDelete: 'CASCADE',
     }),

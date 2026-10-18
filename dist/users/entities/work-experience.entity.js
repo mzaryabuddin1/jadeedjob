@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkExperience = void 0;
 const typeorm_1 = require("typeorm");
+const page_entity_1 = require("../../pages/entities/page.entity");
 const user_entity_1 = require("./user.entity");
 let WorkExperience = class WorkExperience {
 };
@@ -44,9 +45,22 @@ __decorate([
     __metadata("design:type", Date)
 ], WorkExperience.prototype, "to_date", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
 ], WorkExperience.prototype, "key_responsibilities", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 150, nullable: true }),
+    __metadata("design:type", String)
+], WorkExperience.prototype, "location", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Number)
+], WorkExperience.prototype, "pageId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => page_entity_1.Page, { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.JoinColumn)({ name: 'pageId' }),
+    __metadata("design:type", page_entity_1.Page)
+], WorkExperience.prototype, "page", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)

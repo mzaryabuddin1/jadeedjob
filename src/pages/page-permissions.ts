@@ -23,6 +23,8 @@ export const PAGE_PERMISSIONS = [
   'jobs.manage', // post / edit jobs under the page
   'applications.manage', // view applicants, accept / reject
   'ratings.give', // rate applicants on behalf of the page
+  'posts.manage', // publish / edit / delete posts and reels as the page
+  'analytics.view', // performance numbers of the page's posts and reels
   'verification.submit', // send documents to get the verified tick
   'verification.view',
 ] as const;
@@ -38,6 +40,8 @@ export const ROLE_PERMISSIONS: Record<PageRole, readonly PagePermission[]> = {
     'jobs.manage',
     'applications.manage',
     'ratings.give',
+    'posts.manage',
+    'analytics.view',
     'verification.submit',
     'verification.view',
   ],
@@ -46,6 +50,7 @@ export const ROLE_PERMISSIONS: Record<PageRole, readonly PagePermission[]> = {
     'jobs.manage',
     'applications.manage',
     'ratings.give',
+    'posts.manage',
   ],
 };
 

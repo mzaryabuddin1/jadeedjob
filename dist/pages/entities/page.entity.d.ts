@@ -41,6 +41,7 @@ export declare class Page {
     certifications: string[];
     page_rating: number;
     page_rating_count: number;
+    followersCount: number;
     is_verified: boolean;
     verified_at: Date | null;
     verification_status: 'none' | 'pending' | 'verified' | 'rejected';

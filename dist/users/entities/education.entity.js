@@ -28,6 +28,14 @@ __decorate([
     __metadata("design:type", String)
 ], Education.prototype, "institution_name", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 150, nullable: true }),
+    __metadata("design:type", String)
+], Education.prototype, "field_of_study", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 4, nullable: true }),
+    __metadata("design:type", String)
+], Education.prototype, "start_year", void 0);
+__decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Education.prototype, "graduation_year", void 0);
@@ -39,6 +47,10 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Education.prototype, "degree_document", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], Education.prototype, "description", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.education, {
         onDelete: 'CASCADE',

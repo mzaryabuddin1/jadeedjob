@@ -21,7 +21,9 @@ const page_invitation_entity_1 = require("./entities/page-invitation.entity");
 const page_verification_entity_1 = require("./entities/page-verification.entity");
 const user_entity_1 = require("../users/entities/user.entity");
 const job_entity_1 = require("../job/entities/job.entity");
+const post_entity_1 = require("../posts/entities/post.entity");
 const notification_module_1 = require("../notification/notification.module");
+const follow_module_1 = require("../follow/follow.module");
 let PagesModule = class PagesModule {
 };
 exports.PagesModule = PagesModule;
@@ -35,8 +37,10 @@ exports.PagesModule = PagesModule = __decorate([
                 page_verification_entity_1.PageVerificationRequest,
                 user_entity_1.User,
                 job_entity_1.Job,
+                post_entity_1.Post,
             ]),
             notification_module_1.NotificationModule,
+            follow_module_1.FollowModule,
         ],
         controllers: [pages_controller_1.PagesController, admin_page_verification_controller_1.AdminPageVerificationController],
         providers: [

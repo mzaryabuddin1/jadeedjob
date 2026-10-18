@@ -15,6 +15,8 @@ exports.PAGE_PERMISSIONS = [
     'jobs.manage',
     'applications.manage',
     'ratings.give',
+    'posts.manage',
+    'analytics.view',
     'verification.submit',
     'verification.view',
 ];
@@ -28,6 +30,8 @@ exports.ROLE_PERMISSIONS = {
         'jobs.manage',
         'applications.manage',
         'ratings.give',
+        'posts.manage',
+        'analytics.view',
         'verification.submit',
         'verification.view',
     ],
@@ -36,6 +40,7 @@ exports.ROLE_PERMISSIONS = {
         'jobs.manage',
         'applications.manage',
         'ratings.give',
+        'posts.manage',
     ],
 };
 function roleHasPermission(role, permission) {

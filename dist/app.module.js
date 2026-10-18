@@ -34,6 +34,11 @@ const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
 const rating_module_1 = require("./rating/rating.module");
 const debug_module_1 = require("./debug/debug.module");
+const follow_module_1 = require("./follow/follow.module");
+const profile_module_1 = require("./profile/profile.module");
+const discover_module_1 = require("./discover/discover.module");
+const media_module_1 = require("./media/media.module");
+const posts_module_1 = require("./posts/posts.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -86,6 +91,11 @@ exports.AppModule = AppModule = __decorate([
             chat_module_1.ChatModule,
             rating_module_1.RatingModule,
             debug_module_1.DebugModule,
+            follow_module_1.FollowModule,
+            profile_module_1.ProfileModule,
+            discover_module_1.DiscoverModule,
+            media_module_1.MediaModule,
+            posts_module_1.PostsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

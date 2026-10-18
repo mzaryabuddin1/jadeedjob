@@ -105,6 +105,18 @@ export class User {
   @Column({ nullable: true })
   profile_photo: string;
 
+  /** Profile banner image (LinkedIn-style) */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  cover_photo: string | null;
+
+  /** One-line professional headline shown under the name, e.g. "Warehouse supervisor | 6 yrs" */
+  @Column({ type: 'varchar', length: 220, nullable: true })
+  headline: string | null;
+
+  /** Tells employers the user is looking for work */
+  @Column({ type: 'boolean', default: false })
+  open_to_work: boolean;
+
   // Contact Information
   @Column({ nullable: true })
   alternate_phone: string;
@@ -200,6 +212,13 @@ export class User {
 
   @Column({ type: 'int', default: 0 })
   ratingCount: number;
+
+  /** Cached counters (kept in sync by FollowService) */
+  @Column({ type: 'int', default: 0 })
+  followersCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  followingCount: number;
 
   // Many-to-one with Country
   @ManyToOne(() => Country, (country) => country.users, {

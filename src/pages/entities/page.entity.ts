@@ -134,6 +134,10 @@ export class Page {
   @Column({ type: 'int', default: 0 })
   page_rating_count: number;
 
+  /** Cached follower count (kept in sync by FollowService) */
+  @Column({ type: 'int', default: 0 })
+  followersCount: number;
+
   /** The verified tick - only set by staff after reviewing the documents */
   @Column({ type: 'boolean', default: false })
   is_verified: boolean;

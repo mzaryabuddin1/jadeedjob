@@ -31,6 +31,11 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
 import { RatingModule } from './rating/rating.module';
 import { DebugModule } from './debug/debug.module';
+import { FollowModule } from './follow/follow.module';
+import { ProfileModule } from './profile/profile.module';
+import { DiscoverModule } from './discover/discover.module';
+import { MediaModule } from './media/media.module';
+import { PostsModule } from './posts/posts.module';
 
 @Module({
   imports: [
@@ -84,6 +89,11 @@ import { DebugModule } from './debug/debug.module';
     ChatModule,
     RatingModule,
     DebugModule,
+    FollowModule,
+    ProfileModule,
+    DiscoverModule,
+    MediaModule,
+    PostsModule,
   ],
   controllers: [AppController],
   providers: [

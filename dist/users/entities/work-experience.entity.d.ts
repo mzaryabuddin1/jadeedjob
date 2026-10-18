@@ -1,3 +1,4 @@
+import { Page } from 'src/pages/entities/page.entity';
 import { User } from './user.entity';
 export declare class WorkExperience {
     id: number;
@@ -8,6 +9,9 @@ export declare class WorkExperience {
     from_date: Date;
     to_date: Date;
     key_responsibilities: string;
+    location: string | null;
+    pageId: number | null;
+    page: Page | null;
     experience_certificate: string;
     currently_working: boolean;
     user: User;

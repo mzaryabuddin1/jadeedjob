@@ -85,6 +85,9 @@ export declare class AuthService implements OnModuleInit {
         nationality: string;
         marital_status: string;
         profile_photo: string;
+        cover_photo: string | null;
+        headline: string | null;
+        open_to_work: boolean;
         alternate_phone: string;
         address_line1: string;
         address_line2: string;
@@ -115,6 +118,8 @@ export declare class AuthService implements OnModuleInit {
         ratingsGiven: import("../rating/entities/rating.entity").Rating[];
         ratingAverage: number;
         ratingCount: number;
+        followersCount: number;
+        followingCount: number;
         country: Country | null;
         cityEntity: City | null;
         language: Language | null;
@@ -159,6 +164,9 @@ export declare class AuthService implements OnModuleInit {
             nationality: string;
             marital_status: string;
             profile_photo: string;
+            cover_photo: string | null;
+            headline: string | null;
+            open_to_work: boolean;
             alternate_phone: string;
             address_line1: string;
             address_line2: string;
@@ -189,6 +197,8 @@ export declare class AuthService implements OnModuleInit {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
+            followersCount: number;
+            followingCount: number;
             country: Country | null;
             cityEntity: City | null;
             language: Language | null;
@@ -326,6 +336,9 @@ export declare class AuthService implements OnModuleInit {
             nationality: string;
             marital_status: string;
             profile_photo: string;
+            cover_photo: string | null;
+            headline: string | null;
+            open_to_work: boolean;
             alternate_phone: string;
             address_line1: string;
             address_line2: string;
@@ -356,6 +369,8 @@ export declare class AuthService implements OnModuleInit {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
+            followersCount: number;
+            followingCount: number;
             country: Country | null;
             cityEntity: City | null;
             language: Language | null;
@@ -413,6 +428,9 @@ export declare class AuthService implements OnModuleInit {
             nationality: string;
             marital_status: string;
             profile_photo: string;
+            cover_photo: string | null;
+            headline: string | null;
+            open_to_work: boolean;
             alternate_phone: string;
             address_line1: string;
             address_line2: string;
@@ -443,6 +461,8 @@ export declare class AuthService implements OnModuleInit {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
+            followersCount: number;
+            followingCount: number;
             country: Country | null;
             cityEntity: City | null;
             language: Language | null;
@@ -507,6 +527,9 @@ export declare class AuthService implements OnModuleInit {
             nationality: string;
             marital_status: string;
             profile_photo: string;
+            cover_photo: string | null;
+            headline: string | null;
+            open_to_work: boolean;
             alternate_phone: string;
             address_line1: string;
             address_line2: string;
@@ -537,6 +560,8 @@ export declare class AuthService implements OnModuleInit {
             ratingsGiven: import("../rating/entities/rating.entity").Rating[];
             ratingAverage: number;
             ratingCount: number;
+            followersCount: number;
+            followingCount: number;
             country: Country | null;
             cityEntity: City | null;
             language: Language | null;

@@ -21,6 +21,8 @@ import {
 } from './page-permissions';
 import { EDITABLE_PAGE_FIELDS, toPageView } from './page-view';
 import { PageVerificationService } from './page-verification.service';
+import { FollowService } from 'src/follow/follow.service';
+import { Post, countContent } from 'src/posts/entities/post.entity';
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9.-]{1,38}[a-z0-9]$/;
 
@@ -37,6 +39,11 @@ export class PagesService {
     private readonly userRepo: Repository<User>,
 
     private readonly verificationService: PageVerificationService,
+
+    private readonly followService: FollowService,
+
+    @InjectRepository(Post)
+    private readonly postRepo: Repository<Post>,
   ) {}
 
   // ────────────────────────────────────────────────
@@ -189,11 +196,17 @@ export class PagesService {
       : [];
     const roleByPage = new Map(memberships.map((m) => [m.pageId, m.role]));
 
+    const followed = await this.followService.followedSet(
+      userId,
+      'page',
+      pages.map((p) => p.id),
+    );
+
     return {
       data: pages.map((p) => {
         const role: PageRole | null =
           p.ownerId === userId ? 'owner' : (roleByPage.get(p.id) ?? null);
-        return toPageView(p, role);
+        return { ...toPageView(p, role), isFollowing: followed.has(p.id) };
       }),
       total,
       totalPages: Math.ceil(total / take),
@@ -203,7 +216,11 @@ export class PagesService {
 
   async getPageById(id: number, userId: number) {
     const page = await this.requirePage(id);
-    return toPageView(page, this.roleOf(page, userId));
+    return {
+      ...toPageView(page, this.roleOf(page, userId)),
+      isFollowing: await this.followService.isFollowing(userId, 'page', id),
+      ...(await countContent(this.postRepo, { pageId: id })),
+    };
   }
 
   async updatePage(id: number, data: any, userId: number) {

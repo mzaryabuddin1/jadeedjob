@@ -17,6 +17,12 @@ export class Education {
   @Column({ nullable: true })
   institution_name: string;
 
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  field_of_study: string | null;
+
+  @Column({ type: 'varchar', length: 4, nullable: true })
+  start_year: string | null;
+
   @Column({ nullable: true })
   graduation_year: string;
 
@@ -25,6 +31,9 @@ export class Education {
 
   @Column({ nullable: true })
   degree_document: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
 
   @ManyToOne(() => User, (user) => user.education, {
     onDelete: 'CASCADE',

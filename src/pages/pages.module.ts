@@ -12,7 +12,9 @@ import { PageInvitation } from './entities/page-invitation.entity';
 import { PageVerificationRequest } from './entities/page-verification.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Job } from 'src/job/entities/job.entity';
+import { Post } from 'src/posts/entities/post.entity';
 import { NotificationModule } from 'src/notification/notification.module';
+import { FollowModule } from 'src/follow/follow.module';
 
 @Module({
   imports: [
@@ -23,8 +25,10 @@ import { NotificationModule } from 'src/notification/notification.module';
       PageVerificationRequest,
       User,
       Job,
+      Post,
     ]),
     NotificationModule,
+    FollowModule,
   ],
   controllers: [PagesController, AdminPageVerificationController],
   providers: [

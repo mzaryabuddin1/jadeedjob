@@ -49,6 +49,14 @@ export function setupSwagger(app: INestApplication) {
         '`POST /job-application` - once per job per user (not your own job). The job owner is notified **in a batch, not instantly**:',
         'applications are queued, ~30s later ONE push/email is sent (`3 people applied to your job "X" (12 total)`), busy jobs get at most one every ~2 min.',
         '',
+        '### Social: profile, follow, posts & reels, discover',
+        '**Profile** (LinkedIn style): `GET|PATCH /users/me/profile` (headline, about, skills, links, open to work) and `POST|PATCH|DELETE /users/me/experience|education|certifications`. Anyone\'s public profile: `GET /users/:id/profile` (never shows contact details or documents).',
+        '**Follow** users and pages: `POST|DELETE /users/:id/follow`, `/pages/:id/follow`; lists `GET /users/:id/followers|following`, `/pages/:id/followers` (cursor paging).',
+        '**Posts & reels** are one thing with a `kind`. Upload files with `POST /media/upload`, then publish with `POST /posts` (as yourself, or as a page with `pageId`; tag a job with `jobId`; `#hashtags` become searchable). Feeds: `GET /posts/feed` (people/pages I follow), `GET /reels/feed` (discover reels), `GET /users/:id/posts`, `GET /pages/:id/posts`.',
+        '**Engagement**: `POST|DELETE /posts/:id/like`, `POST /posts/:id/comments` (+ replies), `POST /posts/:id/share`. Likes/comments/follows notify the owner **in batches** ("Ali and 4 others liked your reel"), never one push each.',
+        '**Analytics**: the app reports `POST /posts/events` (batched impressions/views); owners read `GET /posts/:id/analytics` and `GET /analytics/overview` (page: `?pageId=`).',
+        '**Discover**: `GET /discover/home`, `/discover/search`, `/discover/users|pages|posts|reels|hashtags`.',
+        '',
         '### Pages (company profiles)',
         'A **page** is the company profile on JobsLoot. Anyone can create one (`POST /pages`) and becomes its **owner**; jobs can be posted under the page (`pageId`) or individually.',
         '**Roles** (`GET /pages/roles`): `owner` (everything), `admin` (edit page, invite/remove editors, jobs, applications, verification), `editor` (jobs + applications). Only the owner invites admins or changes roles.',
@@ -99,6 +107,12 @@ export function setupSwagger(app: INestApplication) {
     .addTag('Job Applications', 'Apply & manage applications')
     .addTag('Organization', 'Organizations & members')
     .addTag('Pages', 'Pages (company profiles): roles, invitations, verification')
+    .addTag('Profile', 'LinkedIn-style profile: headline, about, experience, education, certifications')
+    .addTag('Follow', 'Follow users and pages, followers / following lists')
+    .addTag('Media', 'Upload images and videos for posts and reels')
+    .addTag('Posts & Reels', 'Publish, feeds, likes, comments, shares')
+    .addTag('Analytics', 'Views reporting and performance of posts / reels')
+    .addTag('Discover', 'Search people, pages, posts, reels, hashtags; trending and suggestions')
     .addTag('Chat', 'Application chat messages')
     .addTag('Ratings', 'Rate after job application')
     .addTag('Files', 'File upload')
