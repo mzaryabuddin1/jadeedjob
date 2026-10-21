@@ -38,7 +38,7 @@ src/
   users/                   User + work_experience/education/certifications/auth_identities entities, /users/me
   job/                     jobs CRUD + search (geo + category) + migrate-legacy-filter-column.ts
   job-application/         apply, my applications, applications per job, status update
-  chat/                    Socket.io gateway (namespace /chat) + REST message history
+  chat/                    inbox: DMs and job chats (REST + Socket.io ns /chat), blocks, chat push
   rating/                  rate user after accepted application
   filter/                  job categories (+ icon, approval status); seed data
   pages/                   pages (company profiles): roles, invitations, verified tick (jobs can belong to a page)
@@ -52,6 +52,7 @@ src/
   commands/                seed-* CLI entrypoints (npm run seed:*)
   swagger/swagger.setup.ts Swagger description text + tags
 public/google-login.html   auth test lab        chat-test.html  socket chat tester
+public/chat-lab.html          inbox chat lab: two accounts (A/B) side by side, login or paste JWT, DM and job chats, live events, typing, read ticks, mute, block, delete, file send (open http://localhost:3000/chat-lab.html)
 frontend/theme/            purchased admin HTML template (unused, not wired)
 test/                      e2e scaffold only (auth.service.spec.ts is the one real unit test)
 ```
@@ -79,7 +80,7 @@ test/                      e2e scaffold only (auth.service.spec.ts is the one re
 | users | `PATCH /users/me`, `GET /users/me/preferences`, `GET|PATCH /users/me/notification-settings`, `GET|PATCH /users/me/username`, `GET /users/username-available` | JWT |
 | jobs | `POST /job`, `GET /job`, `GET /job/:id`, `PATCH /job/:id` | JWT |
 | applications | `POST /job-application`, `GET /my`, `GET /job/:jobId`, `PATCH /:id/status` | JWT |
-| chat | `GET /chat/application/:id/messages`; WS ns `/chat`: `joinApplication`, `sendMessage` → emits `newMessage` | JWT (WS: token in handshake) |
+| chat | `POST/GET /chat/conversations`, `GET /chat/conversations/:id`, `GET/POST /chat/conversations/:id/messages`, `POST .../read`, `PATCH .../mute`, `DELETE /chat/messages/:id`, `GET /chat/unread-count`, `GET /chat/blocks`, `POST/DELETE /chat/blocks/:userId`; legacy `GET /chat/application/:id/messages`; WS ns `/chat` (see Chat section) | JWT (WS: token in handshake) |
 | ratings | `POST /ratings` | JWT |
 | filters | `GET /filters`, `GET /filters/:id` (optional Bearer → preferred first) | public |
 | pages | `POST/GET /pages`, `GET/PATCH/DELETE /pages/:id`, members add/remove/role | JWT |
@@ -101,7 +102,8 @@ Relationships to remember:
   raw `ST_GeomFromText('POINT(lng lat)', 4326, 'axis-order=long-lat')`.
   `jobs.pageId` → `pages` (optional); `jobs.createdBy` → `users`.
 - `job_applications` (jobId, applicantId, status pending|accepted|rejected) →
-  has many `chat_messages` and `ratings` (unique per application+rater).
+  has many `ratings` (unique per application+rater). Its chat is the job chat of (its job, its
+  applicant) in `conversations`; `chat_messages` is the legacy table, read once by `ChatMigration`.
 - `users` → many `work_experience`, `education`, `certifications`,
   `user_auth_identities`, `applications`, `jobs`; ManyToOne country/city/language
   (eager). `users.filter_preferences` = number[] (category ids). `users.fcmTokens`.
@@ -259,6 +261,52 @@ per-user when real traffic arrives).
   reject needs a reason; staff can un-verify. Submitter is notified of results.
 - Deleting a page (owner): its jobs are kept but deactivated + detached
   (`pageId = null`); invitations, verification rows+files and page ratings go too.
+
+## Chat (`src/chat/`)
+
+One inbox, two kinds of conversation (`conversations.type`):
+- **direct** - DM to ANY user (`{type:"direct",userId}`); not yourself, not across a
+  block; max `CHAT_DM_DAILY_LIMIT` (30) NEW DM conversations per user per 24 h.
+- **job** - the "Chat" button on a job (`{type:"job",jobId}`): ONE chat per applicant per job,
+  key `j:{jobId}:{applicantId}`, `createdBy` = the applicant, with or without applying (a closed
+  job only if the chat already exists). The employer side is the job's TEAM *right now*, never a
+  fixed person (`job-team.util.ts`): personal job = its poster; page job = page owner + every
+  current admin/editor (role with `jobs.manage`). Any of them opens the same thread and replies;
+  the applicant sees one chat. `hasAccess()` re-checks the page team on every call, so when the
+  owner removes a member they lose the chats immediately (inbox, read, send, push) and the
+  owner / remaining team carry on - even if the removed person posted the job. The employer side
+  starts a chat with an applicant via `{type:"job",jobId,userId:<applicantId>}` (403 unless that
+  person applied). Applicants never send `userId`.
+Tables: `conversations` (unique `key`: `d:{low}:{high}` | `j:{jobId}:{applicantId}`
+so opening twice / from two devices / racing is one row; `lastMessageId/At` for the inbox,
+a conversation shows in the inbox only after its first message; the inbox query lists a job
+chat for the applicant AND for whoever is on the job team at that moment), `conversation_members`
+(per-person `lastReadMessageId` + `mutedUntil`; created on first use, so team members each have
+their own unread count; NOT the access list for job chats), `conversation_messages` (`clientMsgId`
+unique per sender+conversation = safe retries; soft delete keeps a `deleted:true` placeholder),
+`user_blocks` (a DM, or a chat on a PERSONAL job, or a team member vs an applicant who blocked
+them; one person's block never stops a page job's chat for the rest of the team).
+Services: `ConversationsService` (open/get/list/unread/read/mute/blocks, access rules),
+`MessagesService` (send, cursor list `before`/`after`, delete, 20 msgs / 10 s per user ->
+429), `ChatEvents` (bridge to the socket server, per-instance online set), `ChatNotifier`.
+**Socket** (ns `chat`, `auth:{token}`): every socket joins room `user:{id}`; server events
+`message:new {conversationId,message}`, `message:deleted`, `conversation:read`, `typing`;
+client events `conversation:send`, `conversation:typing`, `conversation:read` (all ack
+`{ok:true,...}` / `{ok:false,error,status}`). Legacy `joinApplication` / `sendMessage` /
+`newMessage` and `GET /chat/application/:id/messages` keep their old shapes but read and write
+the same conversations (the chat of an application = the job chat of its job + applicant;
+`ChatService` is a thin adapter), so old and new apps see the same chat.
+**Push**: `ChatNotifier` queues one `chat_message` item per message and recipient (applicant writes
+-> the whole current team; a team member writes -> the applicant; skips muted),
+waits `CHAT_NOTIFY_DELAY_SECONDS` (8) and sends ONE merged notification ("3 new messages: ...",
+title = sender, plus the job title for job chats) only if the person has not read it by then
+(online readers are never pinged). Path env `NOTIFICATION_CHAT_PATH` (`/chat/{id}`).
+**Migration**: `ChatMigration` (on bootstrap, idempotent) copies old `chat_messages` into
+job conversations (everything old counts as read); the old table is untouched.
+**Scaling notes**: stateless gateway - for several instances add the socket.io Redis adapter in
+`ChatGateway.afterInit` (emits already go through rooms) and move the online set + send rate
+limit (`ChatEvents`, `MessagesService.recent`) to Redis. Next phases: group chats, replies /
+edits / reactions, message search, archiving old messages.
 
 ## Accept/reject & ratings (`job-application/`, `rating/`)
 

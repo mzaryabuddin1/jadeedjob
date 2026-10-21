@@ -17,86 +17,110 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const job_application_entity_1 = require("../job-application/entities/job-application.entity");
-const job_entity_1 = require("../job/entities/job.entity");
-const user_entity_1 = require("../users/entities/user.entity");
-const chat_message_entity_1 = require("./entities/chat-message.entity");
+const page_entity_1 = require("../pages/entities/page.entity");
+const job_team_util_1 = require("./job-team.util");
+const conversation_entity_1 = require("./entities/conversation.entity");
+const conversation_message_entity_1 = require("./entities/conversation-message.entity");
+const conversations_service_1 = require("./conversations.service");
+const messages_service_1 = require("./messages.service");
 let ChatService = class ChatService {
-    constructor(messageRepo, appRepo, jobRepo, userRepo) {
-        this.messageRepo = messageRepo;
+    constructor(appRepo, pageRepo, convRepo, msgRepo, conversations, messages) {
         this.appRepo = appRepo;
-        this.jobRepo = jobRepo;
-        this.userRepo = userRepo;
+        this.pageRepo = pageRepo;
+        this.convRepo = convRepo;
+        this.msgRepo = msgRepo;
+        this.conversations = conversations;
+        this.messages = messages;
     }
     async userCanAccessApplication(userId, appId) {
         const app = await this.appRepo.findOne({
             where: { id: appId },
-            relations: ['job', 'job.creator'],
+            relations: ['job'],
         });
         if (!app)
             return false;
-        const isApplicant = app.applicantId === userId;
-        const isOwner = app.job.creator.id === userId;
-        return isApplicant || isOwner;
+        if (app.applicantId === userId)
+            return true;
+        return (0, job_team_util_1.isJobTeam)(this.pageRepo, app.job, userId);
     }
-    async sendMessage(senderId, dto) {
-        const { jobApplicationId, content, mediaUrl, messageType } = dto;
-        const app = await this.appRepo.findOne({
-            where: { id: jobApplicationId },
-            relations: ['job', 'job.creator'],
-        });
+    async conversationOf(userId, applicationId) {
+        const app = await this.appRepo.findOne({ where: { id: applicationId } });
         if (!app)
             throw new common_1.NotFoundException('Job application not found');
-        const allowed = await this.userCanAccessApplication(senderId, jobApplicationId);
-        if (!allowed)
-            throw new common_1.ForbiddenException('You cannot chat on this application');
-        if (messageType === 'text' && !content) {
-            throw new common_1.BadRequestException('Text messages must include content');
-        }
-        if (messageType !== 'text' && !mediaUrl) {
-            throw new common_1.BadRequestException('Media messages must include mediaUrl');
-        }
-        const msg = this.messageRepo.create({
-            jobApplicationId,
-            senderId,
-            content: content || null,
-            mediaUrl: mediaUrl || null,
-            messageType,
+        return this.conversations.getOrCreate(userId, userId === app.applicantId
+            ? { type: 'job', jobId: app.jobId }
+            : { type: 'job', jobId: app.jobId, userId: app.applicantId }, { allowInactive: true });
+    }
+    async sendMessage(senderId, dto) {
+        const conv = await this.conversationOf(senderId, dto.jobApplicationId);
+        const msg = await this.messages.send(senderId, conv.id, {
+            content: dto.content,
+            mediaUrl: dto.mediaUrl,
+            messageType: dto.messageType,
         });
-        await this.messageRepo.save(msg);
-        return this.messageRepo.findOne({
-            where: { id: msg.id },
-            relations: ['sender'],
-        });
+        return this.legacy(msg, dto.jobApplicationId);
     }
     async getMessages(jobApplicationId, userId, page = 1, limit = 20) {
-        const allowed = await this.userCanAccessApplication(userId, jobApplicationId);
-        if (!allowed)
+        const app = await this.appRepo.findOne({ where: { id: jobApplicationId } });
+        if (!app)
+            throw new common_1.NotFoundException('Job application not found');
+        if (!(await this.userCanAccessApplication(userId, jobApplicationId))) {
             throw new common_1.ForbiddenException('You cannot view this chat');
-        const [data, total] = await this.messageRepo.findAndCount({
-            where: { jobApplicationId },
-            relations: ['sender'],
-            order: { createdAt: 'ASC' },
+        }
+        const conv = await this.convRepo.findOne({
+            where: { key: `j:${app.jobId}:${app.applicantId}` },
+        });
+        if (!conv) {
+            return { data: [], total: 0, totalPages: 0, currentPage: page };
+        }
+        const [rows, total] = await this.msgRepo.findAndCount({
+            where: { conversationId: conv.id },
+            order: { id: 'ASC' },
             skip: (page - 1) * limit,
             take: limit,
         });
+        const views = await this.messages.views(rows);
         return {
-            data,
+            data: views.map((v) => this.legacy(v, jobApplicationId)),
             total,
             totalPages: Math.ceil(total / limit),
             currentPage: page,
+        };
+    }
+    legacy(v, jobApplicationId) {
+        const [firstName, ...rest] = (v.sender?.name ?? '').split(' ');
+        return {
+            id: v.id,
+            jobApplicationId,
+            senderId: v.senderId,
+            content: v.content,
+            mediaUrl: v.mediaUrl,
+            messageType: v.messageType,
+            createdAt: v.createdAt,
+            sender: v.sender
+                ? {
+                    id: v.sender.id,
+                    firstName,
+                    lastName: rest.join(' '),
+                    username: v.sender.username,
+                    profile_photo: v.sender.profile_photo,
+                }
+                : null,
         };
     }
 };
 exports.ChatService = ChatService;
 exports.ChatService = ChatService = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(chat_message_entity_1.ChatMessage)),
-    __param(1, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
-    __param(2, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
-    __param(3, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(0, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
+    __param(1, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
+    __param(2, (0, typeorm_1.InjectRepository)(conversation_entity_1.Conversation)),
+    __param(3, (0, typeorm_1.InjectRepository)(conversation_message_entity_1.ConversationMessage)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        conversations_service_1.ConversationsService,
+        messages_service_1.MessagesService])
 ], ChatService);
 //# sourceMappingURL=chat.service.js.map

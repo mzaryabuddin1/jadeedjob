@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobsLoot — Chat Lab</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e6e8ee; --mut:#8b93a5; --ok:#3ecf8e; --bad:#ff6b6b; --warn:#f5b84b; --pri:#4c8dff; --mine:#2F6F73; --theirs:#252a35; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.5 system-ui, Segoe UI, Roboto, sans-serif; }
+  header { padding:12px 18px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0 12px 0 0; }
+  input, select, button, textarea { font:inherit; color:var(--txt); background:#10131a; border:1px solid var(--line); border-radius:6px; padding:6px 9px; }
+  button { cursor:pointer; background:var(--pri); border-color:var(--pri); color:#fff; font-weight:600; }
+  button.sec { background:#232834; border-color:var(--line); color:var(--txt); font-weight:500; }
+  button.bad { background:var(--bad); border-color:var(--bad); }
+  button.sm { padding:2px 8px; font-size:12px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .mut { color:var(--mut); } .ok { color:var(--ok); } .badtxt { color:var(--bad); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:14px 18px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:640px; overflow:hidden; }
+  .phead { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .phead .who { font-weight:700; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--bad); display:inline-block; }
+  .dot.on { background:var(--ok); }
+  .login { padding:12px; display:grid; gap:8px; }
+  .login .row, .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .body { display:grid; grid-template-columns:230px 1fr; flex:1; min-height:0; }
+  .inbox { border-right:1px solid var(--line); overflow-y:auto; max-height:560px; }
+  .conv { padding:8px 10px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .conv:hover, .conv.active { background:#202533; }
+  .conv .t { display:flex; justify-content:space-between; gap:6px; font-weight:600; }
+  .conv .s { color:var(--mut); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge { background:var(--bad); color:#fff; border-radius:10px; padding:0 7px; font-size:11px; font-weight:700; }
+  .tag { font-size:10px; text-transform:uppercase; letter-spacing:.04em; border:1px solid var(--line); border-radius:4px; padding:0 4px; color:var(--mut); margin-left:4px; }
+  .chat { display:flex; flex-direction:column; min-width:0; }
+  .chead { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .msgs { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:6px; height:400px; }
+  .msg { max-width:80%; padding:6px 10px; border-radius:12px; background:var(--theirs); align-self:flex-start; word-break:break-word; position:relative; }
+  .msg.me { background:var(--mine); align-self:flex-end; }
+  .msg .meta { font-size:11px; color:#aab; opacity:.8; margin-top:2px; display:flex; gap:8px; align-items:center; }
+  .msg.deleted { opacity:.55; font-style:italic; }
+  .msg img { max-width:220px; max-height:200px; border-radius:8px; display:block; }
+  .msg .x { cursor:pointer; opacity:.6; } .msg .x:hover { opacity:1; }
+  .composer { border-top:1px solid var(--line); padding:8px 10px; display:flex; gap:6px; align-items:center; }
+  .composer input[type=text] { flex:1; min-width:0; }
+  .typing { height:18px; padding:0 12px; font-size:12px; color:var(--ok); }
+  .newchat { padding:8px 10px; border-bottom:1px solid var(--line); display:grid; gap:6px; }
+  .empty { color:var(--mut); padding:20px; text-align:center; }
+  details { margin:0 18px 18px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+  pre { margin:8px 0 0; max-height:260px; overflow:auto; font:12px ui-monospace, Consolas, monospace; white-space:pre-wrap; word-break:break-word; }
+  .hint { margin:12px 18px 0; padding:10px 12px; border:1px solid var(--warn); color:var(--warn); background:#2a2314; border-radius:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chat Lab</h1>
+  <label class="mut">API <input id="base" size="30"></label>
+  <span class="mut">Login two different accounts (A and B) and chat between them.</span>
+</header>
+<div class="hint">
+  How to test: sign in as <b>A</b> and <b>B</b> (email or phone + password, or paste a JWT).
+  Then in A use <i>New chat</i> → Direct with B's user id (shown in B's header), send a message and watch it arrive live in B.
+  Try: typing indicator, read ticks, unread badge, mute, block, delete, image upload, and job chat (a job id; the employer side adds the applicant's user id).
+</div>
+<div class="grid" id="panels"></div>
+<details open>
+  <summary>Event log (socket events + errors)</summary>
+  <pre id="log"></pre>
+</details>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const baseInput = $('#base');
+baseInput.value = localStorage.getItem('chatlab.base') || location.origin;
+baseInput.onchange = () => { localStorage.setItem('chatlab.base', baseInput.value.trim()); };
+const BASE = () => baseInput.value.trim().replace(/\/$/, '');
+
+const logEl = $('#log');
+function log(who, msg, data) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent = `[${t}] ${who}: ${msg}${data !== undefined ? ' ' + JSON.stringify(data) : ''}\n` + logEl.textContent.slice(0, 20000);
+}
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  kids.flat().forEach((k) => e.append(k));
+  return e;
+};
+const ago = (d) => { const s = (Date.now() - new Date(d)) / 1000; return s < 60 ? 'now' : s < 3600 ? Math.floor(s / 60) + 'm' : s < 86400 ? Math.floor(s / 3600) + 'h' : Math.floor(s / 86400) + 'd'; };
+
+class Panel {
+  constructor(label) {
+    this.label = label;
+    this.token = localStorage.getItem('chatlab.token.' + label) || '';
+    this.me = null; this.socket = null;
+    this.convs = []; this.active = null; this.msgs = []; this.nextCursor = null;
+    this.otherRead = {}; // conversationId -> last message id read by the other side
+    this.typingTimer = null; this.sentTyping = 0; this.inboxTimer = null;
+    this.root = el('div', { className: 'panel' });
+    document.getElementById('panels').append(this.root);
+    this.token ? this.start() : this.renderLogin();
+  }
+
+  async api(method, path, body, isForm) {
+    const res = await fetch(BASE() + path, {
+      method,
+      headers: { Authorization: 'Bearer ' + this.token, ...(body && !isForm ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
+    });
+    const text = await res.text(); let json; try { json = JSON.parse(text); } catch { json = text; }
+    if (!res.ok) { const m = (json && (json.details || json.message)) || res.statusText; log(this.label, `${method} ${path} → ${res.status}`, m); throw new Error(Array.isArray(m) ? m.join(', ') : m); }
+    return json;
+  }
+
+  // ───────── login ─────────
+  renderLogin() {
+    this.root.replaceChildren();
+    const id = el('input', { placeholder: 'email or phone (+92…)' });
+    const pw = el('input', { type: 'password', placeholder: 'password' });
+    const tok = el('input', { placeholder: 'or paste a JWT', size: 28 });
+    const err = el('div', { className: 'badtxt' });
+    const login = el('button', { textContent: 'Log in' });
+    login.onclick = async () => {
+      err.textContent = '';
+      try {
+        const v = id.value.trim();
+        const r = await fetch(BASE() + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [v.includes('@') ? 'email' : 'phone']: v, password: pw.value }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(Array.isArray(j.details) ? j.details.join(', ') : j.message || 'Login failed');
+        this.token = j.access_token; localStorage.setItem('chatlab.token.' + this.label, this.token); this.start();
+      } catch (e) { err.textContent = e.message; }
+    };
+    const use = el('button', { className: 'sec', textContent: 'Use token' });
+    use.onclick = () => { const t = tok.value.trim().replace(/^Bearer\s+/i, ''); if (!t) return; this.token = t; localStorage.setItem('chatlab.token.' + this.label, t); this.start(); };
+    this.root.append(el('div', { className: 'phead' }, el('span', { className: 'who', textContent: 'Person ' + this.label })),
+      el('div', { className: 'login' }, el('div', { className: 'row' }, id, pw, login), el('div', { className: 'row' }, tok, use), err));
+  }
+
+  logout() {
+    this.socket?.disconnect(); this.socket = null; this.token = ''; this.me = null;
+    localStorage.removeItem('chatlab.token.' + this.label); this.renderLogin();
+  }
+
+  // ───────── session ─────────
+  async start() {
+    try {
+      const p = await this.api('GET', '/users/me/profile');
+      this.me = { id: p.id, name: p.name };
+    } catch { return this.logout(); }
+    this.build();
+    this.connect();
+    this.loadInbox();
+    this.loadUnread();
+  }
+
+  connect() {
+    const s = io(BASE() + '/chat', { auth: { token: this.token } });
+    this.socket = s;
+    s.on('connect', () => { this.setDot(true); log(this.label, 'socket connected'); });
+    s.on('disconnect', () => { this.setDot(false); log(this.label, 'socket disconnected'); });
+    s.on('connect_error', (e) => log(this.label, 'socket error', e.message));
+    s.on('message:new', ({ conversationId, message }) => {
+      log(this.label, 'message:new', { conversationId, id: message.id, from: message.senderId, text: message.content });
+      if (this.active && this.active.id === conversationId) {
+        if (!this.msgs.some((m) => m.id === message.id)) { this.msgs.push(message); this.renderMsgs(true); }
+        if (message.senderId !== this.me.id) this.markRead();
+      }
+      this.scheduleInbox();
+    });
+    s.on('message:deleted', (p) => {
+      log(this.label, 'message:deleted', p);
+      const m = this.msgs.find((x) => x.id === p.messageId); if (m) { m.deleted = true; m.content = null; m.mediaUrl = null; this.renderMsgs(); }
+      this.scheduleInbox();
+    });
+    s.on('conversation:read', (p) => {
+      log(this.label, 'conversation:read', p);
+      if (p.userId !== this.me.id) { this.otherRead[p.conversationId] = Math.max(this.otherRead[p.conversationId] || 0, p.lastReadMessageId); this.renderMsgs(); }
+      else this.scheduleInbox();
+    });
+    s.on('typing', (p) => {
+      if (!this.active || p.conversationId !== this.active.id) return;
+      this.typingEl.textContent = p.isTyping ? 'typing…' : '';
+      clearTimeout(this.typingTimer); this.typingTimer = setTimeout(() => (this.typingEl.textContent = ''), 3000);
+    });
+  }
+
+  // ───────── layout ─────────
+  build() {
+    this.root.replaceChildren();
+    this.dot = el('span', { className: 'dot' });
+    this.unreadEl = el('span', { className: 'badge', textContent: '0', title: 'unread messages (GET /chat/unread-count)' });
+    const out = el('button', { className: 'sec sm', textContent: 'Log out' }); out.onclick = () => this.logout();
+    this.root.append(el('div', { className: 'phead' }, this.dot,
+      el('span', { className: 'who', textContent: `Person ${this.label}: ${this.me.name}` }),
+      el('span', { className: 'mut', textContent: `user id ${this.me.id}` }), this.unreadEl, out));
+
+    // new chat
+    const type = el('select', {}, ...[['direct', 'Direct (user id)'], ['job', 'Job chat (job id)']].map(([v, t]) => el('option', { value: v, textContent: t })));
+    const num = el('input', { type: 'number', placeholder: 'id', style: 'width:70px' });
+    const who = el('input', { type: 'number', placeholder: 'applicant user id (employer side only)', style: 'width:100%' });
+    const sync = () => { who.style.display = type.value === 'job' ? '' : 'none'; }; type.onchange = sync; sync();
+    const go = el('button', { textContent: 'Open', className: 'sm' });
+    go.onclick = async () => {
+      const n = Number(num.value); if (!n) return;
+      try {
+        const body = type.value === 'direct' ? { type: 'direct', userId: n } : { type: 'job', jobId: n, ...(Number(who.value) ? { userId: Number(who.value) } : {}) };
+        const c = await this.api('POST', '/chat/conversations', body);
+        log(this.label, 'opened conversation', { id: c.id, type: c.type });
+        await this.loadInbox(); this.open(c);
+      } catch (e) { alert(e.message); }
+    };
+    const inboxList = el('div'); this.inboxEl = inboxList;
+    const refresh = el('button', { className: 'sec sm', textContent: '↻' }); refresh.onclick = () => { this.loadInbox(); this.loadUnread(); };
+    const side = el('div', { className: 'inbox' }, el('div', { className: 'newchat' }, el('b', { textContent: 'New chat' }), type, el('div', { className: 'row' }, num, go, refresh), who), inboxList);
+
+    // chat pane
+    this.headEl = el('div', { className: 'chead' });
+    this.msgsEl = el('div', { className: 'msgs' });
+    this.typingEl = el('div', { className: 'typing' });
+    this.input = el('input', { type: 'text', placeholder: 'Type a message… (Enter to send)', maxLength: 1000 });
+    this.input.onkeydown = (e) => { if (e.key === 'Enter') this.send(); };
+    this.input.oninput = () => this.typing();
+    this.viaRest = el('input', { type: 'checkbox' });
+    const file = el('input', { type: 'file', accept: 'image/*,video/*,audio/*,.pdf', hidden: true });
+    file.onchange = () => { if (file.files[0]) this.sendFile(file.files[0]); file.value = ''; };
+    const attach = el('button', { className: 'sec', textContent: '📎', title: 'Send a file' }); attach.onclick = () => file.click();
+    const sendBtn = el('button', { textContent: 'Send' }); sendBtn.onclick = () => this.send();
+    this.composer = el('div', { className: 'composer' }, attach, file, this.input, el('label', { className: 'mut', title: 'POST /chat/conversations/:id/messages instead of the socket' }, this.viaRest, ' REST'), sendBtn);
+    this.chatEl = el('div', { className: 'chat' }, this.headEl, this.msgsEl, this.typingEl, this.composer);
+    this.root.append(el('div', { className: 'body' }, side, this.chatEl));
+    this.renderChat();
+  }
+
+  setDot(on) { this.dot?.classList.toggle('on', on); }
+
+  // ───────── inbox ─────────
+  scheduleInbox() { clearTimeout(this.inboxTimer); this.inboxTimer = setTimeout(() => { this.loadInbox(); this.loadUnread(); }, 250); }
+
+  async loadUnread() {
+    try { const u = await this.api('GET', '/chat/unread-count'); this.unreadEl.textContent = u.unreadMessages; this.unreadEl.style.background = u.unreadMessages ? 'var(--bad)' : '#444'; } catch {}
+  }
+
+  async loadInbox() {
+    try { this.convs = (await this.api('GET', '/chat/conversations?limit=50')).data; } catch { return; }
+    this.inboxEl.replaceChildren();
+    if (!this.convs.length) this.inboxEl.append(el('div', { className: 'empty', textContent: 'No conversations yet. A chat appears here after its first message.' }));
+    for (const c of this.convs) {
+      const title = c.type === 'direct' ? c.other?.name : c.job ? `${c.job.title}` : c.other?.name;
+      const sub = c.lastMessage ? (c.lastMessage.deleted ? 'message deleted' : c.lastMessage.content || '[' + c.lastMessage.messageType + ']') : '';
+      const row = el('div', { className: 'conv' + (this.active?.id === c.id ? ' active' : '') },
+        el('div', { className: 't' }, el('span', {}, title || 'Chat', el('span', { className: 'tag', textContent: c.type + (c.role ? ':' + c.role : '') }), c.muted ? el('span', { className: 'tag', textContent: 'muted' }) : '', c.blocked.byMe ? el('span', { className: 'tag', textContent: 'blocked' }) : ''), c.unreadCount ? el('span', { className: 'badge', textContent: c.unreadCount }) : ''),
+        el('div', { className: 's', textContent: (c.type !== 'direct' && c.other ? c.other.name + ' · ' : '') + sub }));
+      row.onclick = () => this.open(c);
+      this.inboxEl.append(row);
+    }
+    if (this.active) { const fresh = this.convs.find((c) => c.id === this.active.id); if (fresh) { this.active = fresh; this.renderHead(); } }
+  }
+
+  // ───────── conversation ─────────
+  async open(c) {
+    this.active = c; this.msgs = []; this.nextCursor = null; this.typingEl.textContent = '';
+    this.renderChat();
+    try {
+      const r = await this.api('GET', `/chat/conversations/${c.id}/messages?limit=50`);
+      this.msgs = r.data; this.nextCursor = r.nextCursor; this.renderMsgs(true);
+      this.markRead(); this.loadInbox();
+    } catch (e) { this.msgsEl.textContent = e.message; }
+  }
+
+  async older() {
+    if (!this.nextCursor) return;
+    const r = await this.api('GET', `/chat/conversations/${this.active.id}/messages?limit=50&before=${this.nextCursor}`);
+    this.msgs = [...r.data, ...this.msgs]; this.nextCursor = r.nextCursor; this.renderMsgs();
+  }
+
+  markRead() {
+    if (!this.active) return;
+    const id = this.active.id;
+    this.socket.emit('conversation:read', { conversationId: id }, () => { this.loadUnread(); this.scheduleInbox(); });
+  }
+
+  typing() {
+    if (!this.active || Date.now() - this.sentTyping < 1500) return;
+    this.sentTyping = Date.now();
+    this.socket.emit('conversation:typing', { conversationId: this.active.id, isTyping: true });
+  }
+
+  async send() {
+    const text = this.input.value.trim(); if (!text || !this.active) return;
+    await this.deliver({ content: text, messageType: 'text' });
+    this.input.value = '';
+  }
+
+  async sendFile(f) {
+    try {
+      const form = new FormData(); form.append('file', f);
+      const up = await this.api('POST', '/files/upload', form, true);
+      const type = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : f.type.startsWith('audio/') ? 'audio' : 'file';
+      await this.deliver({ mediaUrl: up.fileUrl, messageType: type, content: f.name });
+    } catch (e) { alert('Upload failed: ' + e.message); }
+  }
+
+  async deliver(payload) {
+    const body = { ...payload, clientMsgId: Math.random().toString(36).slice(2) };
+    const id = this.active.id;
+    if (this.viaRest.checked) {
+      try { const m = await this.api('POST', `/chat/conversations/${id}/messages`, body); this.addOwn(m); } catch (e) { alert(e.message); }
+      return;
+    }
+    this.socket.emit('conversation:send', { conversationId: id, ...body }, (ack) => {
+      if (!ack?.ok) { log(this.label, 'send failed', ack); return alert(ack?.error || 'Send failed'); }
+      this.addOwn(ack.message);
+    });
+  }
+
+  addOwn(m) { if (!this.msgs.some((x) => x.id === m.id)) { this.msgs.push(m); this.renderMsgs(true); } this.scheduleInbox(); }
+
+  async act(kind) {
+    const c = this.active; if (!c) return;
+    try {
+      if (kind === 'mute') await this.api('PATCH', `/chat/conversations/${c.id}/mute`, { muted: !c.muted, ...(c.muted ? {} : { hours: 8 }) });
+      if (kind === 'block') await this.api(c.blocked.byMe ? 'DELETE' : 'POST', `/chat/blocks/${c.other.id}`);
+      await this.loadInbox();
+    } catch (e) { alert(e.message); }
+  }
+
+  async del(m) { try { await this.api('DELETE', `/chat/messages/${m.id}`); } catch (e) { alert(e.message); } }
+
+  // ───────── render ─────────
+  renderHead() {
+    const c = this.active; this.headEl.replaceChildren();
+    if (!c) return;
+    const title = c.job ? `${c.job.title}` : c.other?.name;
+    this.headEl.append(el('b', { textContent: title }), el('span', { className: 'tag', textContent: c.type + (c.role ? ':' + c.role : '') }),
+      c.other ? el('span', { className: 'mut', textContent: `with ${c.other.name} (${c.other.kind} ${c.other.id})` }) : '');
+    const mute = el('button', { className: 'sec sm', textContent: c.muted ? 'Unmute' : 'Mute 8h' }); mute.onclick = () => this.act('mute');
+    this.headEl.append(mute);
+    if (c.other && c.other.kind === 'user') { const b = el('button', { className: 'sec sm', textContent: c.blocked.byMe ? 'Unblock' : 'Block' }); b.onclick = () => this.act('block'); this.headEl.append(b); }
+    if (c.blocked?.byMe || c.blocked?.byThem) this.headEl.append(el('span', { className: 'badtxt', textContent: c.blocked.byMe ? 'you blocked them' : 'they blocked you' }));
+  }
+
+  renderChat() {
+    const has = !!this.active;
+    this.composer.style.display = has ? '' : 'none';
+    this.renderHead();
+    if (!has) this.msgsEl.replaceChildren(el('div', { className: 'empty', textContent: 'Pick a conversation or open a new one.' }));
+  }
+
+  renderMsgs(scroll) {
+    this.msgsEl.replaceChildren();
+    if (this.nextCursor) { const b = el('button', { className: 'sec sm', textContent: 'Load older messages' }); b.onclick = () => this.older(); this.msgsEl.append(b); }
+    const read = this.otherRead[this.active?.id] || 0;
+    for (const m of this.msgs) {
+      const mine = m.senderId === this.me.id;
+      const box = el('div', { className: 'msg' + (mine ? ' me' : '') + (m.deleted ? ' deleted' : '') });
+      if (m.deleted) box.append('message deleted');
+      else {
+        if (!mine && this.active?.type !== 'direct') box.append(el('div', { className: 'mut', textContent: m.sender?.name || '' }));
+        if (m.mediaUrl && m.messageType === 'image') box.append(el('img', { src: m.mediaUrl }));
+        else if (m.mediaUrl) box.append(el('a', { href: m.mediaUrl, target: '_blank', textContent: '[' + m.messageType + '] ' + (m.content || 'open'), style: 'color:#9fd' }));
+        if (m.content && m.messageType === 'text') box.append(el('div', { textContent: m.content }));
+      }
+      const meta = el('div', { className: 'meta' }, el('span', { textContent: `#${m.id} · ${new Date(m.createdAt).toLocaleTimeString()}` }));
+      if (mine && !m.deleted) {
+        meta.append(el('span', { textContent: m.id <= read ? '✓✓ read' : '✓ sent', style: m.id <= read ? 'color:#7fe3ff' : '' }));
+        const x = el('span', { className: 'x', textContent: '🗑', title: 'Delete my message' }); x.onclick = () => this.del(m); meta.append(x);
+      }
+      box.append(meta); this.msgsEl.append(box);
+    }
+    if (scroll) this.msgsEl.scrollTop = this.msgsEl.scrollHeight;
+  }
+}
+
+new Panel('A');
+new Panel('B');
+</script>
+</body>
+</html>
