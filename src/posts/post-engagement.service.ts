@@ -49,7 +49,7 @@ export class PostEngagementService {
 
   /** Idempotent: liking twice (or a double tap) counts once */
   async like(userId: number, postId: number) {
-    const post = await this.posts.requirePost(postId);
+    const post = await this.posts.requirePost(postId, userId);
 
     const created = await this.likeRepo.manager.transaction(async (m) => {
       const res = await m
@@ -77,7 +77,7 @@ export class PostEngagementService {
   }
 
   async unlike(userId: number, postId: number) {
-    await this.posts.requirePost(postId);
+    await this.posts.requirePost(postId, userId);
 
     const removed = await this.likeRepo.manager.transaction(async (m) => {
       const res = await m.delete(PostLike, { postId, userId });
@@ -102,7 +102,7 @@ export class PostEngagementService {
     viewerId: number,
     opts: { before?: number; limit?: number },
   ) {
-    await this.posts.requirePost(postId);
+    await this.posts.requirePost(postId, viewerId);
     const limit = Math.min(50, Math.max(1, Number(opts.limit) || 20));
 
     const qb = this.likeRepo
@@ -142,7 +142,7 @@ export class PostEngagementService {
     text: string,
     parentId?: number,
   ) {
-    const post = await this.posts.requirePost(postId);
+    const post = await this.posts.requirePost(postId, userId);
     const body = text.trim();
     if (!body) throw new BadRequestException('Comment cannot be empty');
     if (body.length > COMMENT_MAX) {
@@ -191,7 +191,7 @@ export class PostEngagementService {
     viewerId: number,
     opts: { before?: number; limit?: number },
   ) {
-    const post = await this.posts.requirePost(postId);
+    const post = await this.posts.requirePost(postId, viewerId);
     const limit = Math.min(50, Math.max(1, Number(opts.limit) || 20));
 
     const qb = this.visibleComments(postId)
@@ -221,7 +221,7 @@ export class PostEngagementService {
       where: { id: commentId, deletedAt: IsNull() },
     });
     if (!top) throw new NotFoundException('Comment not found');
-    const post = await this.posts.requirePost(top.postId);
+    const post = await this.posts.requirePost(top.postId, viewerId);
     const limit = Math.min(50, Math.max(1, Number(opts.limit) || 20));
 
     const qb = this.visibleComments(top.postId)
@@ -345,7 +345,7 @@ export class PostEngagementService {
    * times or channels they use.
    */
   async share(userId: number, postId: number, channel: string) {
-    await this.posts.requirePost(postId);
+    await this.posts.requirePost(postId, userId);
     const via = (SHARE_CHANNELS as readonly string[]).includes(channel)
       ? channel
       : 'link';
@@ -373,8 +373,8 @@ export class PostEngagementService {
     };
   }
 
-  async shareLink(postId: number) {
-    await this.posts.requirePost(postId);
+  async shareLink(postId: number, viewerId: number) {
+    await this.posts.requirePost(postId, viewerId);
     return { shareUrl: this.shareUrl(postId) };
   }
 }

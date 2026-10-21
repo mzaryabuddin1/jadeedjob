@@ -191,8 +191,15 @@ per-user when real traffic arrives).
   optional `jobId` tag (own job / that page's job), hashtags in `post_hashtags`, soft
   delete (`deletedAt`). Reel = exactly 1 video (<= 180 s, caption <= 2200); post = text
   and/or <= 10 images or 1 video (text <= 3000). Feeds: `GET /posts/feed` (follows +
-  mine, cursor), `GET /reels/feed` (decayed engagement score, page number), per user
-  / per page lists. `PostsService.hydrate()` builds the app-ready object (author, page,
+  mine, cursor), `GET /reels/feed` and `GET /posts/explore` (public reels / public posts
+  from anyone, decayed engagement score, page number + `hasMore`; one `rankedFeed()`),
+  per user / per page lists. **Visibility**: `posts.visibility` `public` (default) |
+  `private`, set on `POST /posts` and switchable any time via `PATCH /posts/:id`.
+  Private = only the author / page team: hidden from feeds, profile + page grids,
+  discover search, hashtags/trending, counters on others' profiles, and `GET /posts/:id`,
+  likes, comments, shares answer 404 to everybody else (`requirePost(id, viewerId)`,
+  `PostsService.visible(qb, viewerId, onlyPublic)`). Discover-style feeds (explore,
+  reels, search) use `onlyPublic` so even your own private posts stay out of them. `PostsService.hydrate()` builds the app-ready object (author, page,
   job, counts, `viewer.liked/shared/canManage`).
 - **Engagement**: likes (`post_likes`), comments + one-level replies (`post_comments`),
   shares (`post_shares`, a person counts once; `GET/POST .../share` returns `shareUrl`

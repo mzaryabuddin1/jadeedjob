@@ -15,6 +15,10 @@ import { Job } from 'src/job/entities/job.entity';
 
 export type PostKind = 'post' | 'reel';
 
+/** public = everybody (default); private = only the author / the page team */
+export type PostVisibility = 'public' | 'private';
+export const POST_VISIBILITIES: PostVisibility[] = ['public', 'private'];
+
 /** One uploaded file attached to a post (copied from `media_files` at publish time) */
 export type PostMedia = {
   id: number;
@@ -62,6 +66,10 @@ export class Post {
   @ManyToOne(() => Page, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'pageId' })
   page: Page | null;
+
+  /** Who can see it. Switchable any time by the author (or the page team). */
+  @Column({ type: 'varchar', length: 7, default: 'public' })
+  visibility: PostVisibility;
 
   /** Caption / text */
   @Column({ type: 'text', nullable: true })
@@ -126,12 +134,14 @@ export class Post {
 export async function countContent(
   repo: Repository<Post>,
   where: { userId: number } | { pageId: number },
+  includePrivate = false,
 ) {
   const qb = repo
     .createQueryBuilder('p')
     .select('p.kind', 'kind')
     .addSelect('COUNT(*)', 'n')
     .where('p.deletedAt IS NULL');
+  if (!includePrivate) qb.andWhere("p.visibility = 'public'");
   if ('userId' in where) {
     qb.andWhere('p.authorId = :id AND p.pageId IS NULL', { id: where.userId });
   } else {

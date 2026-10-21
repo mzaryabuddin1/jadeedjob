@@ -9,12 +9,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Post = void 0;
+exports.Post = exports.POST_VISIBILITIES = void 0;
 exports.countContent = countContent;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("../../users/entities/user.entity");
 const page_entity_1 = require("../../pages/entities/page.entity");
 const job_entity_1 = require("../../job/entities/job.entity");
+exports.POST_VISIBILITIES = ['public', 'private'];
 const bigint = {
     to: (v) => v,
     from: (v) => (v == null ? 0 : Number(v)),
@@ -48,6 +49,10 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'pageId' }),
     __metadata("design:type", page_entity_1.Page)
 ], Post.prototype, "page", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 7, default: 'public' }),
+    __metadata("design:type", String)
+], Post.prototype, "visibility", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
@@ -119,12 +124,14 @@ exports.Post = Post = __decorate([
     (0, typeorm_1.Index)('IDX_post_author', ['authorId', 'id']),
     (0, typeorm_1.Index)('IDX_post_page', ['pageId', 'id'])
 ], Post);
-async function countContent(repo, where) {
+async function countContent(repo, where, includePrivate = false) {
     const qb = repo
         .createQueryBuilder('p')
         .select('p.kind', 'kind')
         .addSelect('COUNT(*)', 'n')
         .where('p.deletedAt IS NULL');
+    if (!includePrivate)
+        qb.andWhere("p.visibility = 'public'");
     if ('userId' in where) {
         qb.andWhere('p.authorId = :id AND p.pageId IS NULL', { id: where.userId });
     }

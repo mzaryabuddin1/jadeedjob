@@ -53,6 +53,7 @@ export declare class DiscoverService {
             id: number;
             kind: import("../posts/entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("../posts/entities/post.entity").PostVisibility;
             text: string;
             media: import("../posts/entities/post.entity").PostMedia[];
             durationMs: number;
@@ -114,6 +115,7 @@ export declare class DiscoverService {
             id: number;
             kind: import("../posts/entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("../posts/entities/post.entity").PostVisibility;
             text: string;
             media: import("../posts/entities/post.entity").PostMedia[];
             durationMs: number;
@@ -153,6 +155,7 @@ export declare class DiscoverService {
             id: number;
             kind: import("../posts/entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("../posts/entities/post.entity").PostVisibility;
             text: string;
             media: import("../posts/entities/post.entity").PostMedia[];
             durationMs: number;
@@ -202,6 +205,7 @@ export declare class DiscoverService {
             id: number;
             kind: import("../posts/entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("../posts/entities/post.entity").PostVisibility;
             text: string;
             media: import("../posts/entities/post.entity").PostMedia[];
             durationMs: number;

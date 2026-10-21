@@ -31,10 +31,12 @@ const createSchema = joi_1.default.object({
     durationMs: joi_1.default.number().integer().positive(),
     jobId: joi_1.default.number().integer().positive(),
     pageId: joi_1.default.number().integer().positive(),
+    visibility: joi_1.default.string().valid('public', 'private'),
 });
 const updateSchema = joi_1.default.object({
     text: joi_1.default.string().trim().allow(''),
     jobId: joi_1.default.number().integer().positive().allow(null),
+    visibility: joi_1.default.string().valid('public', 'private'),
 }).min(1);
 const cursor = () => (t, k, d) => {
     (0, swagger_1.ApiQuery)({
@@ -76,6 +78,12 @@ let PostsController = class PostsController {
             limit: Number(limit) || undefined,
         });
     }
+    explore(page, limit, req) {
+        return this.posts.exploreFeed(req.user.id, {
+            page: Number(page) || undefined,
+            limit: Number(limit) || undefined,
+        });
+    }
     getOne(id, req) {
         return this.posts.getOne(req.user.id, id);
     }
@@ -104,6 +112,7 @@ __decorate([
             '- **as a page**: add `pageId` (needs the owner / admin / editor role of that page).',
             "- **tag a job**: `jobId` - your own job (as a page: that page's job).",
             '- `#hashtags` in the text become searchable and feed trending.',
+            '- `visibility`: `public` (default) or `private`. Private = only you (or your page team) can see it; it is hidden from every feed, profile, search and hashtag. Change it any time with `PATCH /posts/:id`.',
         ].join('\n'),
     }),
     (0, swagger_1.ApiBody)({
@@ -121,6 +130,11 @@ __decorate([
                 durationMs: { type: 'number', example: 24000 },
                 jobId: { type: 'number', example: 5 },
                 pageId: { type: 'number', example: 2 },
+                visibility: {
+                    type: 'string',
+                    enum: ['public', 'private'],
+                    default: 'public',
+                },
             },
         },
     }),
@@ -166,10 +180,30 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PostsController.prototype, "reels", null);
 __decorate([
+    (0, common_1.Get)('posts/explore'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Public posts for everybody (discover > Posts tab)',
+        description: 'Instagram-style infinite scroll of **public** posts from anyone (not only people you follow), ranked by how well they are doing right now (likes, comments, shares, views, decayed by age; last 90 days). Private posts never appear, not even yours. Page by `page` number because the ranking moves; keep calling while `hasMore` is true.',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, example: 1 }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        example: 10,
+        description: 'max 30',
+    }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], PostsController.prototype, "explore", null);
+__decorate([
     (0, common_1.Get)('posts/:id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get one post / reel',
-        description: 'Includes author, page, tagged job, counts and what *I* did (`viewer.liked`, `viewer.shared`, `viewer.canManage`).',
+        description: 'Includes author, page, tagged job, counts, `visibility` and what *I* did (`viewer.liked`, `viewer.shared`, `viewer.canManage`). A private post answers 404 to everybody except its author / page team.',
     }),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Req)()),
@@ -180,8 +214,8 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('posts/:id'),
     (0, swagger_1.ApiOperation)({
-        summary: 'Edit text or tagged job',
-        description: 'Author (or page owner/admin/editor for page posts). Media cannot be changed. `jobId: null` removes the tag.',
+        summary: 'Edit text, tagged job or visibility',
+        description: 'Author (or page owner/admin/editor for page posts). Media cannot be changed. `jobId: null` removes the tag. `visibility: "private"` hides the post from everybody but you / your page team (feeds, profile, search, hashtags, likes, comments); `"public"` shows it again.',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -189,6 +223,7 @@ __decorate([
             properties: {
                 text: { type: 'string' },
                 jobId: { type: 'number', nullable: true },
+                visibility: { type: 'string', enum: ['public', 'private'] },
             },
         },
     }),

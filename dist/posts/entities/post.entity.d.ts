@@ -3,6 +3,8 @@ import { User } from 'src/users/entities/user.entity';
 import { Page } from 'src/pages/entities/page.entity';
 import { Job } from 'src/job/entities/job.entity';
 export type PostKind = 'post' | 'reel';
+export type PostVisibility = 'public' | 'private';
+export declare const POST_VISIBILITIES: PostVisibility[];
 export type PostMedia = {
     id: number;
     kind: 'image' | 'video';
@@ -18,6 +20,7 @@ export declare class Post {
     author: User;
     pageId: number | null;
     page: Page | null;
+    visibility: PostVisibility;
     text: string | null;
     media: PostMedia[];
     durationMs: number | null;
@@ -39,7 +42,7 @@ export declare function countContent(repo: Repository<Post>, where: {
     userId: number;
 } | {
     pageId: number;
-}): Promise<{
+}, includePrivate?: boolean): Promise<{
     posts: number;
     reels: number;
 }>;

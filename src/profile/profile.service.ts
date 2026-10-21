@@ -169,7 +169,7 @@ export class ProfileService {
       stats: {
         followers: user.followersCount,
         following: user.followingCount,
-        ...(await countContent(this.postRepo, { userId: user.id })),
+        ...(await countContent(this.postRepo, { userId: user.id }, isMe)),
       },
       pages: await this.managedPages(user.id),
       viewer: {

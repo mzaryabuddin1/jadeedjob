@@ -138,7 +138,7 @@ let ProfileService = class ProfileService {
             stats: {
                 followers: user.followersCount,
                 following: user.followingCount,
-                ...(await (0, post_entity_1.countContent)(this.postRepo, { userId: user.id })),
+                ...(await (0, post_entity_1.countContent)(this.postRepo, { userId: user.id }, isMe)),
             },
             pages: await this.managedPages(user.id),
             viewer: {

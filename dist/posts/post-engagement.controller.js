@@ -80,8 +80,8 @@ let PostEngagementController = class PostEngagementController {
     share(id, body, req) {
         return this.engagement.share(req.user.id, id, body?.channel ?? 'link');
     }
-    shareLink(id) {
-        return this.engagement.shareLink(id);
+    shareLink(id, req) {
+        return this.engagement.shareLink(id, req.user.id);
     }
 };
 exports.PostEngagementController = PostEngagementController;
@@ -205,8 +205,9 @@ __decorate([
     (0, common_1.Get)('posts/:id/share-link'),
     (0, swagger_1.ApiOperation)({ summary: 'The link to share (does not count as a share)' }),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
+    __metadata("design:paramtypes", [Number, Object]),
     __metadata("design:returntype", void 0)
 ], PostEngagementController.prototype, "shareLink", null);
 exports.PostEngagementController = PostEngagementController = __decorate([

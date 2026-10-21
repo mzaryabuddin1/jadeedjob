@@ -6,6 +6,7 @@ export declare class PostsController {
         id: number;
         kind: import("./entities/post.entity").PostKind;
         publishedAs: string;
+        visibility: import("./entities/post.entity").PostVisibility;
         text: string;
         media: import("./entities/post.entity").PostMedia[];
         durationMs: number;
@@ -46,6 +47,7 @@ export declare class PostsController {
             id: number;
             kind: import("./entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("./entities/post.entity").PostVisibility;
             text: string;
             media: import("./entities/post.entity").PostMedia[];
             durationMs: number;
@@ -88,6 +90,52 @@ export declare class PostsController {
             id: number;
             kind: import("./entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("./entities/post.entity").PostVisibility;
+            text: string;
+            media: import("./entities/post.entity").PostMedia[];
+            durationMs: number;
+            hashtags: string[];
+            author: {
+                id: number;
+                name: string;
+                username: string;
+                profile_photo: string;
+                headline: string;
+                isFollowing: boolean;
+                isMe: boolean;
+            };
+            page: {
+                id: number;
+                page_name: string;
+                username: string;
+                page_logo: string;
+                is_verified: boolean;
+                isFollowing: boolean;
+            };
+            job: any;
+            counts: {
+                likes: number;
+                comments: number;
+                shares: number;
+                views: number;
+            };
+            viewer: {
+                liked: boolean;
+                shared: boolean;
+                canManage: boolean;
+            };
+            createdAt: Date;
+        }[];
+        page: number;
+        limit: number;
+        hasMore: boolean;
+    }>;
+    explore(page: string, limit: string, req: any): Promise<{
+        data: {
+            id: number;
+            kind: import("./entities/post.entity").PostKind;
+            publishedAs: string;
+            visibility: import("./entities/post.entity").PostVisibility;
             text: string;
             media: import("./entities/post.entity").PostMedia[];
             durationMs: number;
@@ -131,6 +179,7 @@ export declare class PostsController {
         id: number;
         kind: import("./entities/post.entity").PostKind;
         publishedAs: string;
+        visibility: import("./entities/post.entity").PostVisibility;
         text: string;
         media: import("./entities/post.entity").PostMedia[];
         durationMs: number;
@@ -170,6 +219,7 @@ export declare class PostsController {
         id: number;
         kind: import("./entities/post.entity").PostKind;
         publishedAs: string;
+        visibility: import("./entities/post.entity").PostVisibility;
         text: string;
         media: import("./entities/post.entity").PostMedia[];
         durationMs: number;
@@ -213,6 +263,7 @@ export declare class PostsController {
             id: number;
             kind: import("./entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("./entities/post.entity").PostVisibility;
             text: string;
             media: import("./entities/post.entity").PostMedia[];
             durationMs: number;
@@ -255,6 +306,7 @@ export declare class PostsController {
             id: number;
             kind: import("./entities/post.entity").PostKind;
             publishedAs: string;
+            visibility: import("./entities/post.entity").PostVisibility;
             text: string;
             media: import("./entities/post.entity").PostMedia[];
             durationMs: number;

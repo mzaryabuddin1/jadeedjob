@@ -189,7 +189,7 @@ export class PostEngagementController {
 
   @Get('posts/:id/share-link')
   @ApiOperation({ summary: 'The link to share (does not count as a share)' })
-  shareLink(@Param('id', ParseIntPipe) id: number) {
-    return this.engagement.shareLink(id);
+  shareLink(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.engagement.shareLink(id, req.user.id);
   }
 }

@@ -121,6 +121,7 @@ let PostsService = class PostsService {
                 media,
                 durationMs: kind === 'reel' ? (dto.durationMs ?? null) : null,
                 jobId: dto.jobId ?? null,
+                visibility: dto.visibility ?? 'public',
             }));
             await this.saveHashtags(m, saved.id, extractHashtags(text));
             return saved;
@@ -146,6 +147,8 @@ let PostsService = class PostsService {
             await this.assertJobTag(userId, post.pageId, dto.jobId ?? undefined);
             patch.jobId = dto.jobId ?? null;
         }
+        if (dto.visibility !== undefined)
+            patch.visibility = dto.visibility;
         if (!Object.keys(patch).length)
             throw new common_1.BadRequestException('Nothing to update');
         await this.postRepo.manager.transaction(async (m) => {
@@ -186,7 +189,7 @@ let PostsService = class PostsService {
             throw new common_1.BadRequestException('You can only tag your own jobs');
         }
     }
-    async requirePost(id) {
+    async requirePost(id, viewerId) {
         const post = await this.postRepo.findOne({
             where: { id, deletedAt: (0, typeorm_2.IsNull)() },
         });
@@ -198,6 +201,11 @@ let PostsService = class PostsService {
         });
         if (!author || author.isBanned)
             throw new common_1.NotFoundException('Post not found');
+        if (viewerId !== undefined &&
+            post.visibility === 'private' &&
+            !(await this.canManage(post, viewerId))) {
+            throw new common_1.NotFoundException('Post not found');
+        }
         return post;
     }
     async canManage(post, userId) {
@@ -212,7 +220,7 @@ let PostsService = class PostsService {
         }
     }
     async getOne(viewerId, id) {
-        const post = await this.requirePost(id);
+        const post = await this.requirePost(id, viewerId);
         return (await this.hydrate([post], viewerId))[0];
     }
     async listByUser(viewerId, userId, opts) {
@@ -242,10 +250,18 @@ let PostsService = class PostsService {
             .setParameter('me', viewerId));
     }
     async reelsFeed(viewerId, opts) {
+        return this.rankedFeed(viewerId, 'reel', 30, opts);
+    }
+    async exploreFeed(viewerId, opts) {
+        return this.rankedFeed(viewerId, 'post', 90, opts);
+    }
+    async rankedFeed(viewerId, kind, days, opts) {
         const take = Math.min(30, Math.max(1, Number(opts.limit) || 10));
         const current = Math.max(1, Number(opts.page) || 1);
-        const rows = await this.visible(this.postRepo.createQueryBuilder('p').where("p.kind = 'reel'"))
-            .andWhere('p.createdAt > NOW() - INTERVAL 30 DAY')
+        const rows = await this.visible(this.postRepo
+            .createQueryBuilder('p')
+            .where('p.kind = :kind', { kind }), viewerId, true)
+            .andWhere('p.createdAt > NOW() - INTERVAL :days DAY', { days })
             .select('p.id', 'id')
             .addSelect(`(p.likesCount + p.commentsCount * 3 + p.sharesCount * 5 + p.viewsCount * 0.2 + 1)
            / POW(TIMESTAMPDIFF(HOUR, p.createdAt, NOW()) + 2, 1.4)`, 'score')
@@ -270,7 +286,7 @@ let PostsService = class PostsService {
     }
     async chronological(viewerId, opts, scope) {
         const limit = Math.min(30, Math.max(1, Number(opts.limit) || 10));
-        const qb = this.visible(this.postRepo.createQueryBuilder('p').where('1 = 1'));
+        const qb = this.visible(this.postRepo.createQueryBuilder('p').where('1 = 1'), viewerId);
         scope(qb);
         if (opts.kind === 'post' || opts.kind === 'reel') {
             qb.andWhere('p.kind = :kind', { kind: opts.kind });
@@ -286,17 +302,27 @@ let PostsService = class PostsService {
             nextCursor: hasMore ? page[page.length - 1].id : null,
         };
     }
-    visible(qb) {
-        return qb
-            .andWhere('p.deletedAt IS NULL')
-            .andWhere('NOT EXISTS (SELECT 1 FROM users ub WHERE ub.id = p.authorId AND ub.isBanned = 1)');
+    visible(qb, viewerId, onlyPublic = false) {
+        qb.andWhere('p.deletedAt IS NULL').andWhere('NOT EXISTS (SELECT 1 FROM users ub WHERE ub.id = p.authorId AND ub.isBanned = 1)');
+        if (onlyPublic) {
+            qb.andWhere("p.visibility = 'public'");
+        }
+        else {
+            qb.andWhere(new typeorm_2.Brackets((b) => b
+                .where("p.visibility = 'public'")
+                .orWhere('p.authorId = :vwr AND p.pageId IS NULL')
+                .orWhere(`(p.pageId IS NOT NULL AND (
+                 EXISTS (SELECT 1 FROM pages pg WHERE pg.id = p.pageId AND pg.ownerId = :vwr)
+                 OR EXISTS (SELECT 1 FROM page_members pm WHERE pm.pageId = p.pageId AND pm.userId = :vwr)))`)));
+        }
+        return qb.setParameter('vwr', viewerId);
     }
     async search(viewerId, q, opts) {
         const take = Math.min(30, Math.max(1, Number(opts.limit) || 10));
         const current = Math.max(1, Number(opts.page) || 1);
         const word = q.replace(/^#/, '').toLowerCase();
         const safe = word.replace(/[\\%_]/g, '\\$&');
-        const qb = this.visible(this.postRepo.createQueryBuilder('p').where('1 = 1'));
+        const qb = this.visible(this.postRepo.createQueryBuilder('p').where('1 = 1'), viewerId, true);
         if (q.startsWith('#')) {
             qb.andWhere('EXISTS (SELECT 1 FROM post_hashtags h WHERE h.postId = p.id AND h.tag = :tag)', { tag: word });
         }
@@ -337,7 +363,7 @@ let PostsService = class PostsService {
             .replace(/[\\%_]/g, '\\$&');
         const rows = await this.hashtagRepo
             .createQueryBuilder('h')
-            .innerJoin(post_entity_1.Post, 'p', 'p.id = h.postId AND p.deletedAt IS NULL')
+            .innerJoin(post_entity_1.Post, 'p', "p.id = h.postId AND p.deletedAt IS NULL AND p.visibility = 'public'")
             .select('h.tag', 'tag')
             .addSelect('COUNT(*)', 'posts')
             .where('h.tag LIKE :prefix', { prefix: `${safe}%` })
@@ -351,7 +377,7 @@ let PostsService = class PostsService {
     async trendingHashtags(days = 3, limit = 10) {
         const rows = await this.hashtagRepo
             .createQueryBuilder('h')
-            .innerJoin(post_entity_1.Post, 'p', 'p.id = h.postId AND p.deletedAt IS NULL')
+            .innerJoin(post_entity_1.Post, 'p', "p.id = h.postId AND p.deletedAt IS NULL AND p.visibility = 'public'")
             .select('h.tag', 'tag')
             .addSelect('COUNT(*)', 'posts')
             .where('p.createdAt > NOW() - INTERVAL :days DAY', {
@@ -402,6 +428,7 @@ let PostsService = class PostsService {
                 id: p.id,
                 kind: p.kind,
                 publishedAs: p.pageId ? 'page' : 'user',
+                visibility: p.visibility,
                 text: p.text,
                 media: p.media,
                 durationMs: p.durationMs,

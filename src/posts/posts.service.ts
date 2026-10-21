@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, IsNull, Repository, SelectQueryBuilder } from 'typeorm';
-import { Post, PostKind, PostMedia } from './entities/post.entity';
+import {
+  Post,
+  PostKind,
+  PostMedia,
+  PostVisibility,
+} from './entities/post.entity';
 import {
   PostHashtag,
   PostLike,
@@ -45,6 +50,7 @@ type CreateDto = {
   durationMs?: number;
   jobId?: number;
   pageId?: number;
+  visibility?: PostVisibility;
 };
 
 @Injectable()
@@ -170,6 +176,7 @@ export class PostsService {
           media,
           durationMs: kind === 'reel' ? (dto.durationMs ?? null) : null,
           jobId: dto.jobId ?? null,
+          visibility: dto.visibility ?? 'public',
         }),
       );
       await this.saveHashtags(m, saved.id, extractHashtags(text));
@@ -182,7 +189,11 @@ export class PostsService {
   async update(
     userId: number,
     postId: number,
-    dto: { text?: string; jobId?: number | null },
+    dto: {
+      text?: string;
+      jobId?: number | null;
+      visibility?: PostVisibility;
+    },
   ) {
     const post = await this.requirePost(postId);
     await this.assertCanManage(post, userId);
@@ -203,6 +214,7 @@ export class PostsService {
       await this.assertJobTag(userId, post.pageId, dto.jobId ?? undefined);
       patch.jobId = dto.jobId ?? null;
     }
+    if (dto.visibility !== undefined) patch.visibility = dto.visibility;
     if (!Object.keys(patch).length)
       throw new BadRequestException('Nothing to update');
 
@@ -259,7 +271,11 @@ export class PostsService {
   // ACCESS
   // ────────────────────────────────────────────────
 
-  async requirePost(id: number): Promise<Post> {
+  /**
+   * The live post, or 404. Pass `viewerId` to also hide private posts from
+   * everybody except the author / page team (omit it for owner-only callers).
+   */
+  async requirePost(id: number, viewerId?: number): Promise<Post> {
     const post = await this.postRepo.findOne({
       where: { id, deletedAt: IsNull() },
     });
@@ -270,6 +286,13 @@ export class PostsService {
     });
     if (!author || author.isBanned)
       throw new NotFoundException('Post not found');
+    if (
+      viewerId !== undefined &&
+      post.visibility === 'private' &&
+      !(await this.canManage(post, viewerId))
+    ) {
+      throw new NotFoundException('Post not found');
+    }
     return post;
   }
 
@@ -294,7 +317,7 @@ export class PostsService {
   // ────────────────────────────────────────────────
 
   async getOne(viewerId: number, id: number) {
-    const post = await this.requirePost(id);
+    const post = await this.requirePost(id, viewerId);
     return (await this.hydrate([post], viewerId))[0];
   }
 
@@ -360,13 +383,34 @@ export class PostsService {
    * Ranking moves, so paging is by page number.
    */
   async reelsFeed(viewerId: number, opts: { page?: number; limit?: number }) {
+    return this.rankedFeed(viewerId, 'reel', 30, opts);
+  }
+
+  /**
+   * Public posts for everybody (the posts twin of the reels feed): same
+   * ranking, last 90 days, people you do not follow included.
+   */
+  async exploreFeed(viewerId: number, opts: { page?: number; limit?: number }) {
+    return this.rankedFeed(viewerId, 'post', 90, opts);
+  }
+
+  private async rankedFeed(
+    viewerId: number,
+    kind: PostKind,
+    days: number,
+    opts: { page?: number; limit?: number },
+  ) {
     const take = Math.min(30, Math.max(1, Number(opts.limit) || 10));
     const current = Math.max(1, Number(opts.page) || 1);
 
     const rows = await this.visible(
-      this.postRepo.createQueryBuilder('p').where("p.kind = 'reel'"),
+      this.postRepo
+        .createQueryBuilder('p')
+        .where('p.kind = :kind', { kind }),
+      viewerId,
+      true,
     )
-      .andWhere('p.createdAt > NOW() - INTERVAL 30 DAY')
+      .andWhere('p.createdAt > NOW() - INTERVAL :days DAY', { days })
       .select('p.id', 'id')
       .addSelect(
         `(p.likesCount + p.commentsCount * 3 + p.sharesCount * 5 + p.viewsCount * 0.2 + 1)
@@ -404,6 +448,7 @@ export class PostsService {
     const limit = Math.min(30, Math.max(1, Number(opts.limit) || 10));
     const qb = this.visible(
       this.postRepo.createQueryBuilder('p').where('1 = 1'),
+      viewerId,
     );
     scope(qb);
     if (opts.kind === 'post' || opts.kind === 'reel') {
@@ -422,13 +467,37 @@ export class PostsService {
     };
   }
 
-  /** not deleted, and the author is not banned */
-  visible<T extends SelectQueryBuilder<Post>>(qb: T): T {
-    return qb
-      .andWhere('p.deletedAt IS NULL')
-      .andWhere(
-        'NOT EXISTS (SELECT 1 FROM users ub WHERE ub.id = p.authorId AND ub.isBanned = 1)',
-      ) as T;
+  /**
+   * not deleted, the author is not banned, and private posts only for the
+   * people who may see them (the author, or the page owner / members).
+   * Discover-style feeds pass `onlyPublic` so even your own private posts
+   * stay out of them.
+   */
+  visible<T extends SelectQueryBuilder<Post>>(
+    qb: T,
+    viewerId: number,
+    onlyPublic = false,
+  ): T {
+    qb.andWhere('p.deletedAt IS NULL').andWhere(
+      'NOT EXISTS (SELECT 1 FROM users ub WHERE ub.id = p.authorId AND ub.isBanned = 1)',
+    );
+    if (onlyPublic) {
+      qb.andWhere("p.visibility = 'public'");
+    } else {
+      qb.andWhere(
+        new Brackets((b) =>
+          b
+            .where("p.visibility = 'public'")
+            .orWhere('p.authorId = :vwr AND p.pageId IS NULL')
+            .orWhere(
+              `(p.pageId IS NOT NULL AND (
+                 EXISTS (SELECT 1 FROM pages pg WHERE pg.id = p.pageId AND pg.ownerId = :vwr)
+                 OR EXISTS (SELECT 1 FROM page_members pm WHERE pm.pageId = p.pageId AND pm.userId = :vwr)))`,
+            ),
+        ),
+      );
+    }
+    return qb.setParameter('vwr', viewerId) as T;
   }
 
   // ────────────────────────────────────────────────
@@ -451,6 +520,8 @@ export class PostsService {
 
     const qb = this.visible(
       this.postRepo.createQueryBuilder('p').where('1 = 1'),
+      viewerId,
+      true,
     );
     if (q.startsWith('#')) {
       qb.andWhere(
@@ -512,7 +583,11 @@ export class PostsService {
       .replace(/[\\%_]/g, '\\$&');
     const rows = await this.hashtagRepo
       .createQueryBuilder('h')
-      .innerJoin(Post, 'p', 'p.id = h.postId AND p.deletedAt IS NULL')
+      .innerJoin(
+        Post,
+        'p',
+        "p.id = h.postId AND p.deletedAt IS NULL AND p.visibility = 'public'",
+      )
       .select('h.tag', 'tag')
       .addSelect('COUNT(*)', 'posts')
       .where('h.tag LIKE :prefix', { prefix: `${safe}%` })
@@ -528,7 +603,11 @@ export class PostsService {
   async trendingHashtags(days = 3, limit = 10) {
     const rows = await this.hashtagRepo
       .createQueryBuilder('h')
-      .innerJoin(Post, 'p', 'p.id = h.postId AND p.deletedAt IS NULL')
+      .innerJoin(
+        Post,
+        'p',
+        "p.id = h.postId AND p.deletedAt IS NULL AND p.visibility = 'public'",
+      )
       .select('h.tag', 'tag')
       .addSelect('COUNT(*)', 'posts')
       .where('p.createdAt > NOW() - INTERVAL :days DAY', {
@@ -594,6 +673,7 @@ export class PostsService {
         id: p.id,
         kind: p.kind,
         publishedAs: p.pageId ? 'page' : 'user',
+        visibility: p.visibility,
         text: p.text,
         media: p.media,
         durationMs: p.durationMs,

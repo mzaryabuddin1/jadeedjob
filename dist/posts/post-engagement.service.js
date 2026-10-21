@@ -42,7 +42,7 @@ let PostEngagementService = class PostEngagementService {
         });
     }
     async like(userId, postId) {
-        const post = await this.posts.requirePost(postId);
+        const post = await this.posts.requirePost(postId, userId);
         const created = await this.likeRepo.manager.transaction(async (m) => {
             const res = await m
                 .createQueryBuilder()
@@ -68,7 +68,7 @@ let PostEngagementService = class PostEngagementService {
         };
     }
     async unlike(userId, postId) {
-        await this.posts.requirePost(postId);
+        await this.posts.requirePost(postId, userId);
         const removed = await this.likeRepo.manager.transaction(async (m) => {
             const res = await m.delete(post_engagement_entities_1.PostLike, { postId, userId });
             if (!res.affected)
@@ -88,7 +88,7 @@ let PostEngagementService = class PostEngagementService {
         };
     }
     async listLikes(postId, viewerId, opts) {
-        await this.posts.requirePost(postId);
+        await this.posts.requirePost(postId, viewerId);
         const limit = Math.min(50, Math.max(1, Number(opts.limit) || 20));
         const qb = this.likeRepo
             .createQueryBuilder('l')
@@ -112,7 +112,7 @@ let PostEngagementService = class PostEngagementService {
         };
     }
     async comment(userId, postId, text, parentId) {
-        const post = await this.posts.requirePost(postId);
+        const post = await this.posts.requirePost(postId, userId);
         const body = text.trim();
         if (!body)
             throw new common_1.BadRequestException('Comment cannot be empty');
@@ -149,7 +149,7 @@ let PostEngagementService = class PostEngagementService {
         return (await this.commentViews([saved], post, userId))[0];
     }
     async listComments(postId, viewerId, opts) {
-        const post = await this.posts.requirePost(postId);
+        const post = await this.posts.requirePost(postId, viewerId);
         const limit = Math.min(50, Math.max(1, Number(opts.limit) || 20));
         const qb = this.visibleComments(postId)
             .andWhere('c.parentId IS NULL')
@@ -172,7 +172,7 @@ let PostEngagementService = class PostEngagementService {
         });
         if (!top)
             throw new common_1.NotFoundException('Comment not found');
-        const post = await this.posts.requirePost(top.postId);
+        const post = await this.posts.requirePost(top.postId, viewerId);
         const limit = Math.min(50, Math.max(1, Number(opts.limit) || 20));
         const qb = this.visibleComments(top.postId)
             .andWhere('c.parentId = :commentId', { commentId })
@@ -265,7 +265,7 @@ let PostEngagementService = class PostEngagementService {
         return template.replace('{id}', String(postId));
     }
     async share(userId, postId, channel) {
-        await this.posts.requirePost(postId);
+        await this.posts.requirePost(postId, userId);
         const via = exports.SHARE_CHANNELS.includes(channel)
             ? channel
             : 'link';
@@ -292,8 +292,8 @@ let PostEngagementService = class PostEngagementService {
             shareUrl: this.shareUrl(postId),
         };
     }
-    async shareLink(postId) {
-        await this.posts.requirePost(postId);
+    async shareLink(postId, viewerId) {
+        await this.posts.requirePost(postId, viewerId);
         return { shareUrl: this.shareUrl(postId) };
     }
 };

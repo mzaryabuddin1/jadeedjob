@@ -107,7 +107,7 @@ export declare class PostEngagementService {
         sharesCount: number;
         shareUrl: string;
     }>;
-    shareLink(postId: number): Promise<{
+    shareLink(postId: number, viewerId: number): Promise<{
         shareUrl: string;
     }>;
 }

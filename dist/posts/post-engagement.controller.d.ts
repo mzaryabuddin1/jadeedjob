@@ -79,7 +79,7 @@ export declare class PostEngagementController {
         sharesCount: number;
         shareUrl: string;
     }>;
-    shareLink(id: number): Promise<{
+    shareLink(id: number, req: any): Promise<{
         shareUrl: string;
     }>;
 }

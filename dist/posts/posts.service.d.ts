@@ -1,5 +1,5 @@
 import { Repository, SelectQueryBuilder } from 'typeorm';
-import { Post, PostKind, PostMedia } from './entities/post.entity';
+import { Post, PostKind, PostMedia, PostVisibility } from './entities/post.entity';
 import { PostHashtag, PostLike, PostShare } from './entities/post-engagement.entities';
 import { User } from 'src/users/entities/user.entity';
 import { Page } from 'src/pages/entities/page.entity';
@@ -20,6 +20,7 @@ type CreateDto = {
     durationMs?: number;
     jobId?: number;
     pageId?: number;
+    visibility?: PostVisibility;
 };
 export declare class PostsService {
     private readonly postRepo;
@@ -38,6 +39,7 @@ export declare class PostsService {
         id: number;
         kind: PostKind;
         publishedAs: string;
+        visibility: PostVisibility;
         text: string;
         media: PostMedia[];
         durationMs: number;
@@ -76,10 +78,12 @@ export declare class PostsService {
     update(userId: number, postId: number, dto: {
         text?: string;
         jobId?: number | null;
+        visibility?: PostVisibility;
     }): Promise<{
         id: number;
         kind: PostKind;
         publishedAs: string;
+        visibility: PostVisibility;
         text: string;
         media: PostMedia[];
         durationMs: number;
@@ -120,13 +124,14 @@ export declare class PostsService {
     }>;
     private saveHashtags;
     private assertJobTag;
-    requirePost(id: number): Promise<Post>;
+    requirePost(id: number, viewerId?: number): Promise<Post>;
     canManage(post: Post, userId: number): Promise<boolean>;
     private assertCanManage;
     getOne(viewerId: number, id: number): Promise<{
         id: number;
         kind: PostKind;
         publishedAs: string;
+        visibility: PostVisibility;
         text: string;
         media: PostMedia[];
         durationMs: number;
@@ -171,6 +176,7 @@ export declare class PostsService {
             id: number;
             kind: PostKind;
             publishedAs: string;
+            visibility: PostVisibility;
             text: string;
             media: PostMedia[];
             durationMs: number;
@@ -217,6 +223,7 @@ export declare class PostsService {
             id: number;
             kind: PostKind;
             publishedAs: string;
+            visibility: PostVisibility;
             text: string;
             media: PostMedia[];
             durationMs: number;
@@ -263,6 +270,7 @@ export declare class PostsService {
             id: number;
             kind: PostKind;
             publishedAs: string;
+            visibility: PostVisibility;
             text: string;
             media: PostMedia[];
             durationMs: number;
@@ -308,6 +316,7 @@ export declare class PostsService {
             id: number;
             kind: PostKind;
             publishedAs: string;
+            visibility: PostVisibility;
             text: string;
             media: PostMedia[];
             durationMs: number;
@@ -347,8 +356,57 @@ export declare class PostsService {
         limit: number;
         hasMore: boolean;
     }>;
+    exploreFeed(viewerId: number, opts: {
+        page?: number;
+        limit?: number;
+    }): Promise<{
+        data: {
+            id: number;
+            kind: PostKind;
+            publishedAs: string;
+            visibility: PostVisibility;
+            text: string;
+            media: PostMedia[];
+            durationMs: number;
+            hashtags: string[];
+            author: {
+                id: number;
+                name: string;
+                username: string;
+                profile_photo: string;
+                headline: string;
+                isFollowing: boolean;
+                isMe: boolean;
+            };
+            page: {
+                id: number;
+                page_name: string;
+                username: string;
+                page_logo: string;
+                is_verified: boolean;
+                isFollowing: boolean;
+            };
+            job: any;
+            counts: {
+                likes: number;
+                comments: number;
+                shares: number;
+                views: number;
+            };
+            viewer: {
+                liked: boolean;
+                shared: boolean;
+                canManage: boolean;
+            };
+            createdAt: Date;
+        }[];
+        page: number;
+        limit: number;
+        hasMore: boolean;
+    }>;
+    private rankedFeed;
     private chronological;
-    visible<T extends SelectQueryBuilder<Post>>(qb: T): T;
+    visible<T extends SelectQueryBuilder<Post>>(qb: T, viewerId: number, onlyPublic?: boolean): T;
     search(viewerId: number, q: string, opts: {
         kind?: string;
         page?: number;
@@ -358,6 +416,7 @@ export declare class PostsService {
             id: number;
             kind: PostKind;
             publishedAs: string;
+            visibility: PostVisibility;
             text: string;
             media: PostMedia[];
             durationMs: number;
@@ -409,6 +468,7 @@ export declare class PostsService {
         id: number;
         kind: PostKind;
         publishedAs: string;
+        visibility: PostVisibility;
         text: string;
         media: PostMedia[];
         durationMs: number;
