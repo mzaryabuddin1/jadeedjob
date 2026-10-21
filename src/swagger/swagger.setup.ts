@@ -113,7 +113,40 @@ export function setupSwagger(app: INestApplication) {
     .addTag('Posts & Reels', 'Publish, feeds, likes, comments, shares')
     .addTag('Analytics', 'Views reporting and performance of posts / reels')
     .addTag('Discover', 'Search people, pages, posts, reels, hashtags; trending and suggestions')
-    .addTag('Chat', 'Application chat messages')
+    .addTag(
+      'Chat',
+      [
+        'Two kinds of chat: **direct** (DM to any user) and **job** (one thread per applicant per job).',
+        'Job chat: for a personal job the poster answers; for a page job the page owner and every current admin / editor answer in the same thread (removed members lose access at once).',
+        '',
+        '### Live updates: Socket.io',
+        'Swagger cannot show sockets, so they are described here. Namespace **`/chat`**, same host and port as the API (e.g. `io("http://localhost:3000/chat", { auth: { token: "<JWT>" } })`). No token = disconnected.',
+        'Every connection joins the personal room `user:{id}` automatically, so there is nothing to join for the inbox.',
+        '',
+        '**Server -> app (listen)**',
+        '- `message:new` `{ conversationId, message }` - a new message (also echoed to your own other devices; dedupe by `message.id`)',
+        '- `message:deleted` `{ conversationId, messageId }`',
+        '- `conversation:read` `{ conversationId, userId, lastReadMessageId }` - someone read up to that id (use it for read ticks)',
+        '- `typing` `{ conversationId, userId, isTyping }`',
+        '',
+        '**App -> server (emit, each with an ack callback)** - ack is `{ ok: true, ... }` or `{ ok: false, error, status }`',
+        '- `conversation:send` `{ conversationId, content?, mediaUrl?, messageType?, clientMsgId? }` -> `{ ok, message }` (same rules as `POST /chat/conversations/:id/messages`)',
+        '- `conversation:typing` `{ conversationId, isTyping }`',
+        '- `conversation:read` `{ conversationId, messageId? }` (default: latest) -> `{ conversationId, lastReadMessageId }`',
+        '',
+        '### Typical flow',
+        '1. `POST /chat/conversations` (`{type:"job",jobId}` or `{type:"direct",userId}`) -> conversation id',
+        '2. `GET /chat/conversations/:id/messages` -> history (scroll up with `before=<nextCursor>`)',
+        '3. Send with the socket event (or REST as fallback), listen to `message:new`',
+        '4. After reconnecting, catch up with `GET .../messages?after=<lastSeenId>` and refresh `GET /chat/unread-count`',
+        '5. Offline people get one merged push ("3 new messages"); nothing is sent if they read it within a few seconds',
+        '',
+        '### Old application chat (kept for old app versions)',
+        'Socket `joinApplication` / `sendMessage` -> `newMessage` and `GET /chat/application/:id/messages` still work. They use the same job chat, so old and new apps see the same messages.',
+        '',
+        'Try it live with the lab page `/chat-lab.html` (two accounts side by side).',
+      ].join('\n'),
+    )
     .addTag('Ratings', 'Rate after job application')
     .addTag('Files', 'File upload')
     .addTag('Firebase', 'Push notification helpers')
