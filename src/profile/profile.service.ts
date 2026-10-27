@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +10,10 @@ import { User } from 'src/users/entities/user.entity';
 import { WorkExperience } from 'src/users/entities/work-experience.entity';
 import { Education } from 'src/users/entities/education.entity';
 import { Certification } from 'src/users/entities/certification.entity';
+import {
+  LANGUAGE_LEVELS,
+  UserLanguage,
+} from 'src/users/entities/user-language.entity';
 import { Page } from 'src/pages/entities/page.entity';
 import { PageMember } from 'src/pages/entities/page-member.entity';
 import { FollowService, fullName } from 'src/follow/follow.service';
@@ -30,6 +35,10 @@ const PROFILE_FIELDS = [
   'github_url',
   'portfolio_url',
   'behance_url',
+  'facebook_url',
+  'instagram_url',
+  'twitter_url',
+  'youtube_url',
   'open_to_work',
 ] as const;
 
@@ -68,6 +77,9 @@ const CERTIFICATION_FIELDS = [
   'certificate_file',
 ] as const;
 
+/** a person can list this many languages */
+const MAX_LANGUAGES = 20;
+
 const pick = (data: any, fields: readonly string[]) => {
   const out: Record<string, any> = {};
   for (const f of fields) if (data[f] !== undefined) out[f] = data[f];
@@ -92,6 +104,8 @@ export class ProfileService {
     private readonly eduRepo: Repository<Education>,
     @InjectRepository(Certification)
     private readonly certRepo: Repository<Certification>,
+    @InjectRepository(UserLanguage)
+    private readonly langRepo: Repository<UserLanguage>,
     @InjectRepository(Page) private readonly pageRepo: Repository<Page>,
     @InjectRepository(PageMember)
     private readonly memberRepo: Repository<PageMember>,
@@ -154,6 +168,10 @@ export class ProfileService {
         github: user.github_url,
         portfolio: user.portfolio_url,
         behance: user.behance_url,
+        facebook: user.facebook_url,
+        instagram: user.instagram_url,
+        twitter: user.twitter_url,
+        youtube: user.youtube_url,
       },
       skills: user.skills ?? [],
       technical_skills: user.technical_skills ?? [],
@@ -165,6 +183,7 @@ export class ProfileService {
       certifications: certifications.map((c) =>
         this.certificationView(c, isMe),
       ),
+      languages: await this.languageViews(user.id),
       rating: { average: user.ratingAverage, count: user.ratingCount },
       stats: {
         followers: user.followersCount,
@@ -244,6 +263,26 @@ export class ProfileService {
       credential_url: c.credential_url,
       ...(isMe ? { certificate_file: c.certificate_file } : {}),
     };
+  }
+
+  private languageView(l: UserLanguage) {
+    return {
+      id: l.id,
+      language_name: l.language_name,
+      proficiency: l.proficiency,
+    };
+  }
+
+  /** best spoken first (native, fluent...), then A-Z */
+  private async languageViews(userId: number) {
+    const rows = await this.langRepo.find({ where: { userId } });
+    const rank = (l: UserLanguage) => LANGUAGE_LEVELS.indexOf(l.proficiency);
+    return rows
+      .sort(
+        (a, b) =>
+          rank(b) - rank(a) || a.language_name.localeCompare(b.language_name),
+      )
+      .map((l) => this.languageView(l));
   }
 
   private async pageCards(ids: number[]) {
@@ -483,5 +522,76 @@ export class ProfileService {
       );
     }
     return v;
+  }
+
+  // ────────────────────────────────────────────────
+  // LANGUAGES
+  // ────────────────────────────────────────────────
+
+  async addLanguage(userId: number, data: any) {
+    const name = this.cleanLanguageName(data.language_name);
+    const key = name.toLowerCase();
+
+    if ((await this.langRepo.count({ where: { userId } })) >= MAX_LANGUAGES) {
+      throw new BadRequestException(
+        `You can list at most ${MAX_LANGUAGES} languages`,
+      );
+    }
+    if (await this.langRepo.exist({ where: { userId, languageKey: key } })) {
+      throw new ConflictException('You already added this language');
+    }
+    const saved = await this.langRepo.save(
+      this.langRepo.create({
+        userId,
+        language_name: name,
+        languageKey: key,
+        proficiency: data.proficiency,
+      }),
+    );
+    return this.languageView(saved);
+  }
+
+  async updateLanguage(userId: number, id: number, data: any) {
+    const row = await this.ownLanguage(id, userId);
+    const patch: Partial<UserLanguage> = {};
+    if (data.language_name !== undefined) {
+      const name = this.cleanLanguageName(data.language_name);
+      const key = name.toLowerCase();
+      if (key !== row.languageKey) {
+        if (await this.langRepo.exist({ where: { userId, languageKey: key } })) {
+          throw new ConflictException('You already added this language');
+        }
+      }
+      patch.language_name = name;
+      patch.languageKey = key;
+    }
+    if (data.proficiency !== undefined) patch.proficiency = data.proficiency;
+    await this.langRepo.update(id, patch);
+    return this.languageView(await this.ownLanguage(id, userId));
+  }
+
+  async removeLanguage(userId: number, id: number) {
+    await this.ownLanguage(id, userId);
+    await this.langRepo.delete(id);
+    return { message: 'Language removed' };
+  }
+
+  listMyLanguages(userId: number) {
+    return this.languageViews(userId);
+  }
+
+  private async ownLanguage(id: number, userId: number) {
+    const row = await this.langRepo.findOne({ where: { id, userId } });
+    if (!row) throw new NotFoundException('Language not found');
+    return row;
+  }
+
+  /** "  urdu " -> "Urdu": trimmed, single spaces, first letter capital */
+  private cleanLanguageName(raw: unknown) {
+    const name = String(raw ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!name) throw new BadRequestException('language_name is required');
+    return name.charAt(0).toUpperCase() + name.slice(1);
   }
 }

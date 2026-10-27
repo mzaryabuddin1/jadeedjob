@@ -3,6 +3,7 @@ import { User } from 'src/users/entities/user.entity';
 import { Job } from 'src/job/entities/job.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from './mail.service';
+import { NotificationInbox } from './notification-inbox.service';
 export type NotificationSummary = {
     jobId: number;
     at: string;
@@ -39,12 +40,14 @@ export declare class NotificationService {
     private readonly userRepo;
     private readonly firebaseService;
     private readonly mailService;
+    private readonly inbox;
     private readonly logger;
-    constructor(userRepo: Repository<User>, firebaseService: FirebaseService, mailService: MailService);
+    constructor(userRepo: Repository<User>, firebaseService: FirebaseService, mailService: MailService, inbox: NotificationInbox);
     notifyUser(userId: number, message: {
         title: string;
         body: string;
         data?: Record<string, string | number | null | undefined>;
+        store?: boolean;
     }): Promise<{
         push: number;
         email: boolean;

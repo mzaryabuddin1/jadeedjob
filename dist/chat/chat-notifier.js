@@ -109,6 +109,7 @@ let ChatNotifier = ChatNotifier_1 = class ChatNotifier {
         }
         const body = unread.length === 1 ? preview(last) : `${unread.length} new messages: ${preview(last)}`;
         const res = await this.notifications.notifyUser(recipientId, {
+            store: false,
             title,
             body,
             data: {

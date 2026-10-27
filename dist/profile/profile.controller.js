@@ -22,6 +22,7 @@ const throttler_1 = require("@nestjs/throttler");
 const joi_1 = __importDefault(require("joi"));
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const joi_validation_pipe_1 = require("../common/pipes/joi-validation.pipe");
+const user_language_entity_1 = require("../users/entities/user-language.entity");
 const profile_service_1 = require("./profile.service");
 const str = (max) => joi_1.default.string().trim().max(max);
 const url = () => joi_1.default.string().trim().uri().max(500);
@@ -44,6 +45,10 @@ const profileSchema = joi_1.default.object({
     github_url: url().allow(''),
     portfolio_url: url().allow(''),
     behance_url: url().allow(''),
+    facebook_url: url().allow(''),
+    instagram_url: url().allow(''),
+    twitter_url: url().allow(''),
+    youtube_url: url().allow(''),
     open_to_work: joi_1.default.boolean(),
 }).min(1);
 const EMPLOYMENT_TYPES = [
@@ -103,6 +108,16 @@ const certificationCreate = joi_1.default.object({
     certification_name: str(200).required(),
 });
 const certificationUpdate = joi_1.default.object(certificationFields).min(1);
+const languageName = () => joi_1.default.string().trim().min(2).max(60);
+const languageLevel = () => joi_1.default.string().valid(...user_language_entity_1.LANGUAGE_LEVELS);
+const languageCreate = joi_1.default.object({
+    language_name: languageName().required(),
+    proficiency: languageLevel().required(),
+});
+const languageUpdate = joi_1.default.object({
+    language_name: languageName(),
+    proficiency: languageLevel(),
+}).min(1);
 const body = (schema) => (0, common_1.Body)(new joi_validation_pipe_1.JoiValidationPipe(schema));
 let ProfileController = class ProfileController {
     constructor(profile) {
@@ -141,6 +156,18 @@ let ProfileController = class ProfileController {
     removeCertification(id, req) {
         return this.profile.removeCertification(req.user.id, id);
     }
+    myLanguages(req) {
+        return this.profile.listMyLanguages(req.user.id);
+    }
+    addLanguage(data, req) {
+        return this.profile.addLanguage(req.user.id, data);
+    }
+    updateLanguage(id, data, req) {
+        return this.profile.updateLanguage(req.user.id, id, data);
+    }
+    removeLanguage(id, req) {
+        return this.profile.removeLanguage(req.user.id, id);
+    }
     userProfile(userId, req) {
         return this.profile.getProfile(userId, req.user.id);
     }
@@ -161,7 +188,7 @@ __decorate([
     (0, common_1.Patch)('me/profile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Edit my profile',
-        description: 'headline, about, photos, location, skills, links, open_to_work. Experience / education / certifications have their own endpoints below. Email/phone/username have their own flows.',
+        description: 'headline, about, photos, location, skills (`technical_skills` = Professional skills, `soft_skills` = People skills, `skills` = general list), links (`portfolio_url` = website / portfolio, plus linkedin, github, behance, facebook, instagram, twitter, youtube), open_to_work. Experience / education / certifications / languages have their own endpoints below. Email/phone/username have their own flows.',
     }),
     (0, swagger_1.ApiBody)({
         schema: {
@@ -189,6 +216,10 @@ __decorate([
                 github_url: { type: 'string' },
                 portfolio_url: { type: 'string' },
                 behance_url: { type: 'string' },
+                facebook_url: { type: 'string' },
+                instagram_url: { type: 'string' },
+                twitter_url: { type: 'string' },
+                youtube_url: { type: 'string' },
                 open_to_work: { type: 'boolean', example: true },
             },
         },
@@ -342,6 +373,62 @@ __decorate([
     __metadata("design:paramtypes", [Number, Object]),
     __metadata("design:returntype", void 0)
 ], ProfileController.prototype, "removeCertification", null);
+__decorate([
+    (0, common_1.Get)('me/languages'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'My languages',
+        description: 'Same list as `languages` on the profile: best spoken first. Levels: `basic`, `conversational`, `fluent`, `native`.',
+    }),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], ProfileController.prototype, "myLanguages", null);
+__decorate([
+    (0, common_1.Post)('me/languages'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Add a language',
+        description: 'Both fields required. `language_name` is free text (trimmed, first letter capital); adding the same language twice is 409 (any letter case). Up to 20 languages. This is the profile list, not the app language.',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['language_name', 'proficiency'],
+            properties: {
+                language_name: { type: 'string', example: 'Urdu' },
+                proficiency: {
+                    type: 'string',
+                    enum: [...user_language_entity_1.LANGUAGE_LEVELS],
+                    example: 'native',
+                },
+            },
+        },
+    }),
+    __param(0, body(languageCreate)),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], ProfileController.prototype, "addLanguage", null);
+__decorate([
+    (0, common_1.Patch)('me/languages/:id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Edit a language (name and / or level)' }),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, body(languageUpdate)),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:returntype", void 0)
+], ProfileController.prototype, "updateLanguage", null);
+__decorate([
+    (0, common_1.Delete)('me/languages/:id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Remove a language' }),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", void 0)
+], ProfileController.prototype, "removeLanguage", null);
 __decorate([
     (0, common_1.Get)(':userId/profile'),
     (0, swagger_1.ApiOperation)({

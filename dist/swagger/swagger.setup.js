@@ -133,6 +133,14 @@ function setupSwagger(app) {
         '',
         'Try it live with the lab page `/chat-lab.html` (two accounts side by side).',
     ].join('\n'))
+        .addTag('Notifications', [
+        'The bell screen: the personal notification list of the signed-in person.',
+        'Everything that is pushed to a person is also saved here (even when push / email is off), so a missed push is never lost. Chat messages are not in this list: they use the chat inbox.',
+        '',
+        '**Live (optional)**: on the socket namespace `/chat` (see the Chat section) the app also receives `notification:new` `{ notification }` (`notification` is `null` for bulk alerts such as a new job: just refresh the badge / list) and `notification:read` `{ ids }` or `{ all: true }` (another device read them).',
+        '',
+        'Typical flow: `GET /notifications/unread-count` for the badge, `GET /notifications` for the screen (infinite scroll with `before=<nextCursor>`), `POST /notifications/:id/read` when one is opened, open `path` (deep link) from the item.',
+    ].join('\n'))
         .addTag('Ratings', 'Rate after job application')
         .addTag('Files', 'File upload')
         .addTag('Firebase', 'Push notification helpers')

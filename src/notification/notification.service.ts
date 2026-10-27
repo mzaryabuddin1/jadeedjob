@@ -8,6 +8,7 @@ import { normalizeFilterIcon } from 'src/filter/entities/filter.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from './mail.service';
 import { resolveNotificationSettings } from './notification-settings';
+import { NotificationInbox } from './notification-inbox.service';
 
 /** What happened when a job notification went out (also kept for the FCM lab) */
 export type NotificationSummary = {
@@ -35,6 +36,8 @@ export type RecipientExplanation = {
 
 type MatchGroup = {
   matched: Filter[];
+  /** everybody who matched, also people with push and email off (they still get it in the in-app list) */
+  userIds: number[];
   pushTokens: string[];
   emails: string[];
 };
@@ -51,6 +54,7 @@ export class NotificationService {
     private readonly userRepo: Repository<User>,
     private readonly firebaseService: FirebaseService,
     private readonly mailService: MailService,
+    private readonly inbox: NotificationInbox,
   ) {}
 
   // ────────────────────────────────────────────────
@@ -68,6 +72,8 @@ export class NotificationService {
       title: string;
       body: string;
       data?: Record<string, string | number | null | undefined>;
+      /** false = push / email only, not added to the in-app list (chat messages: they have their own inbox) */
+      store?: boolean;
     },
   ): Promise<{ push: number; email: boolean }> {
     try {
@@ -82,6 +88,15 @@ export class NotificationService {
         ],
       });
       if (!user || user.isBanned) return { push: 0, email: false };
+
+      // the in-app list gets it whatever the push / email settings are
+      if (message.store !== false) {
+        await this.inbox.add(userId, {
+          title: message.title,
+          body: message.body,
+          data: message.data,
+        });
+      }
 
       const settings = resolveNotificationSettings(user.notification_settings);
       const tokens = settings.push
@@ -180,6 +195,14 @@ export class NotificationService {
 
       for (const group of groups.values()) {
         const message = this.buildJobMessage(job, group.matched);
+
+        // in-app list: every person whose interests match, push on or off
+        await this.inbox.addMany(group.userIds, {
+          type: 'job_created',
+          title: message.title,
+          body: message.body,
+          data: message.data,
+        });
 
         if (group.pushTokens.length) {
           pushUsers += group.pushTokens.length;
@@ -390,7 +413,6 @@ export class NotificationService {
           : [];
         const email =
           settings.email && user.email ? String(user.email).trim() : '';
-        if (!tokens.length && !email) continue;
 
         const key = matched
           .map((f) => f.id)
@@ -398,9 +420,10 @@ export class NotificationService {
           .join(',');
         let group = groups.get(key);
         if (!group) {
-          group = { matched, pushTokens: [], emails: [] };
+          group = { matched, userIds: [], pushTokens: [], emails: [] };
           groups.set(key, group);
         }
+        group.userIds.push(user.id);
         group.pushTokens.push(...tokens);
         if (email) group.emails.push(email);
       }

@@ -1,0 +1,1 @@
+{"version":3,"file":"realtime.module.js","sourceRoot":"","sources":["../../src/chat/realtime.module.ts"],"names":[],"mappings":";;;;;;;;;AAAA,2CAAgD;AAChD,+DAAmD;AAW5C,IAAM,cAAc,GAApB,MAAM,cAAc;CAAG,CAAA;AAAjB,wCAAc;yBAAd,cAAc;IAL1B,IAAA,eAAM,GAAE;IACR,IAAA,eAAM,EAAC;QACN,SAAS,EAAE,CAAC,gCAAU,CAAC;QACvB,OAAO,EAAE,CAAC,gCAAU,CAAC;KACtB,CAAC;GACW,cAAc,CAAG"}

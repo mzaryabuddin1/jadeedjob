@@ -83,5 +83,23 @@ export declare class ProfileController {
     removeCertification(id: number, req: any): Promise<{
         message: string;
     }>;
+    myLanguages(req: any): Promise<{
+        id: number;
+        language_name: string;
+        proficiency: "basic" | "conversational" | "fluent" | "native";
+    }[]>;
+    addLanguage(data: any, req: any): Promise<{
+        id: number;
+        language_name: string;
+        proficiency: "basic" | "conversational" | "fluent" | "native";
+    }>;
+    updateLanguage(id: number, data: any, req: any): Promise<{
+        id: number;
+        language_name: string;
+        proficiency: "basic" | "conversational" | "fluent" | "native";
+    }>;
+    removeLanguage(id: number, req: any): Promise<{
+        message: string;
+    }>;
     userProfile(userId: number, req: any): Promise<Record<string, any>>;
 }

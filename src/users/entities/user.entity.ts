@@ -156,6 +156,18 @@ export class User {
   @Column({ nullable: true })
   behance_url: string;
 
+  @Column({ nullable: true })
+  facebook_url: string;
+
+  @Column({ nullable: true })
+  instagram_url: string;
+
+  @Column({ nullable: true })
+  twitter_url: string;
+
+  @Column({ nullable: true })
+  youtube_url: string;
+
   // Skills
   @Column('simple-array', { nullable: true })
   skills: string[];

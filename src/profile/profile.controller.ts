@@ -15,6 +15,7 @@ import { Throttle } from '@nestjs/throttler';
 import Joi from 'joi';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { JoiValidationPipe } from 'src/common/pipes/joi-validation.pipe';
+import { LANGUAGE_LEVELS } from 'src/users/entities/user-language.entity';
 import { ProfileService } from './profile.service';
 
 const str = (max: number) => Joi.string().trim().max(max);
@@ -40,6 +41,10 @@ const profileSchema = Joi.object({
   github_url: url().allow(''),
   portfolio_url: url().allow(''),
   behance_url: url().allow(''),
+  facebook_url: url().allow(''),
+  instagram_url: url().allow(''),
+  twitter_url: url().allow(''),
+  youtube_url: url().allow(''),
   open_to_work: Joi.boolean(),
 }).min(1);
 
@@ -104,9 +109,20 @@ const certificationCreate = Joi.object({
 });
 const certificationUpdate = Joi.object(certificationFields).min(1);
 
+const languageName = () => Joi.string().trim().min(2).max(60);
+const languageLevel = () => Joi.string().valid(...LANGUAGE_LEVELS);
+const languageCreate = Joi.object({
+  language_name: languageName().required(),
+  proficiency: languageLevel().required(),
+});
+const languageUpdate = Joi.object({
+  language_name: languageName(),
+  proficiency: languageLevel(),
+}).min(1);
+
 const body = (schema: Joi.ObjectSchema) => Body(new JoiValidationPipe(schema));
 
-/** LinkedIn-style profile: headline, about, experience, education, certifications */
+/** LinkedIn-style profile: headline, about, skills, experience, education, certifications, languages, links */
 @ApiTags('Profile')
 @ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard)
@@ -131,7 +147,7 @@ export class ProfileController {
   @ApiOperation({
     summary: 'Edit my profile',
     description:
-      'headline, about, photos, location, skills, links, open_to_work. Experience / education / certifications have their own endpoints below. Email/phone/username have their own flows.',
+      'headline, about, photos, location, skills (`technical_skills` = Professional skills, `soft_skills` = People skills, `skills` = general list), links (`portfolio_url` = website / portfolio, plus linkedin, github, behance, facebook, instagram, twitter, youtube), open_to_work. Experience / education / certifications / languages have their own endpoints below. Email/phone/username have their own flows.',
   })
   @ApiBody({
     schema: {
@@ -159,6 +175,10 @@ export class ProfileController {
         github_url: { type: 'string' },
         portfolio_url: { type: 'string' },
         behance_url: { type: 'string' },
+        facebook_url: { type: 'string' },
+        instagram_url: { type: 'string' },
+        twitter_url: { type: 'string' },
+        youtube_url: { type: 'string' },
         open_to_work: { type: 'boolean', example: true },
       },
     },
@@ -297,6 +317,58 @@ export class ProfileController {
   @ApiOperation({ summary: 'Remove a certification' })
   removeCertification(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     return this.profile.removeCertification(req.user.id, id);
+  }
+
+  // ── languages ──
+
+  @Get('me/languages')
+  @ApiOperation({
+    summary: 'My languages',
+    description:
+      'Same list as `languages` on the profile: best spoken first. Levels: `basic`, `conversational`, `fluent`, `native`.',
+  })
+  myLanguages(@Req() req: any) {
+    return this.profile.listMyLanguages(req.user.id);
+  }
+
+  @Post('me/languages')
+  @ApiOperation({
+    summary: 'Add a language',
+    description:
+      'Both fields required. `language_name` is free text (trimmed, first letter capital); adding the same language twice is 409 (any letter case). Up to 20 languages. This is the profile list, not the app language.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['language_name', 'proficiency'],
+      properties: {
+        language_name: { type: 'string', example: 'Urdu' },
+        proficiency: {
+          type: 'string',
+          enum: [...LANGUAGE_LEVELS],
+          example: 'native',
+        },
+      },
+    },
+  })
+  addLanguage(@body(languageCreate) data: any, @Req() req: any) {
+    return this.profile.addLanguage(req.user.id, data);
+  }
+
+  @Patch('me/languages/:id')
+  @ApiOperation({ summary: 'Edit a language (name and / or level)' })
+  updateLanguage(
+    @Param('id', ParseIntPipe) id: number,
+    @body(languageUpdate) data: any,
+    @Req() req: any,
+  ) {
+    return this.profile.updateLanguage(req.user.id, id, data);
+  }
+
+  @Delete('me/languages/:id')
+  @ApiOperation({ summary: 'Remove a language' })
+  removeLanguage(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.profile.removeLanguage(req.user.id, id);
   }
 
   // ── someone else's profile (declared last) ──

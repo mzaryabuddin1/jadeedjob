@@ -24,13 +24,15 @@ const page_entity_1 = require("../pages/entities/page.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
 const mail_service_1 = require("../notification/mail.service");
 const notification_queue_service_1 = require("../notification/notification-queue.service");
+const notification_inbox_service_1 = require("../notification/notification-inbox.service");
 const notification_settings_1 = require("../notification/notification-settings");
 const TYPE = 'job_application';
 let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
-    constructor(queue, firebaseService, mailService, userRepo, jobRepo, appRepo, pageRepo) {
+    constructor(queue, firebaseService, mailService, inbox, userRepo, jobRepo, appRepo, pageRepo) {
         this.queue = queue;
         this.firebaseService = firebaseService;
         this.mailService = mailService;
+        this.inbox = inbox;
         this.userRepo = userRepo;
         this.jobRepo = jobRepo;
         this.appRepo = appRepo;
@@ -95,10 +97,6 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
                 ? (applicant.fcmTokens || []).filter(Boolean)
                 : [];
             const email = settings.email && applicant.email ? String(applicant.email).trim() : '';
-            if (!tokens.length && !email) {
-                this.logger.log(`Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`);
-                return;
-            }
             const pageName = job.pageId
                 ? ((await this.pageRepo.findOne({
                     where: { id: job.pageId },
@@ -121,6 +119,11 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
                 createdAt: new Date().toISOString(),
                 path: template.replace('{id}', String(application.id)),
             };
+            await this.inbox.add(applicant.id, { type: 'application_accepted', title, body, data });
+            if (!tokens.length && !email) {
+                this.logger.log(`Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`);
+                return;
+            }
             this.logger.log(`Application #${application.id} accepted -> applicant #${applicant.id}: "${body}"`);
             if (tokens.length) {
                 const res = await this.firebaseService.sendToTokens(tokens, { title, body }, data);
@@ -168,14 +171,6 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
             ? (employer.fcmTokens || []).filter(Boolean)
             : [];
         const email = settings.email && employer.email ? String(employer.email).trim() : '';
-        if (!tokens.length && !email) {
-            return {
-                status: 'skipped',
-                note: !settings.push && !settings.email
-                    ? 'employer turned off push and email'
-                    : 'employer has no FCM token saved (and email is off)',
-            };
-        }
         const count = payloads.length;
         const total = await this.appRepo.count({ where: { jobId } });
         const names = [...new Set(payloads.map((p) => p.applicantName))];
@@ -202,6 +197,15 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
             createdAt: new Date().toISOString(),
             path: this.buildPath(jobId),
         };
+        await this.inbox.add(employerId, { type: 'job_application', title, body, data });
+        if (!tokens.length && !email) {
+            return {
+                status: 'skipped',
+                note: !settings.push && !settings.email
+                    ? 'employer turned off push and email (saved in the in-app list)'
+                    : 'employer has no FCM token saved (and email is off) (saved in the in-app list)',
+            };
+        }
         this.logger.log(`Job #${jobId} -> employer #${employerId}: "${body}"`);
         const notes = [`"${body}"`];
         if (tokens.length) {
@@ -234,13 +238,14 @@ let ApplicationNotifier = ApplicationNotifier_1 = class ApplicationNotifier {
 exports.ApplicationNotifier = ApplicationNotifier;
 exports.ApplicationNotifier = ApplicationNotifier = ApplicationNotifier_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(3, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(4, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
-    __param(5, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
-    __param(6, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
+    __param(4, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(5, (0, typeorm_1.InjectRepository)(job_entity_1.Job)),
+    __param(6, (0, typeorm_1.InjectRepository)(job_application_entity_1.JobApplication)),
+    __param(7, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
     __metadata("design:paramtypes", [notification_queue_service_1.NotificationQueueService,
         firebase_service_1.FirebaseService,
         mail_service_1.MailService,
+        notification_inbox_service_1.NotificationInbox,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

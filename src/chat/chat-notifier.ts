@@ -124,6 +124,7 @@ export class ChatNotifier implements OnModuleInit {
     const body =
       unread.length === 1 ? preview(last) : `${unread.length} new messages: ${preview(last)}`;
     const res = await this.notifications.notifyUser(recipientId, {
+      store: false, // chat has its own inbox with unread counts
       title,
       body,
       data: {

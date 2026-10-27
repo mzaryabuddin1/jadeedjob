@@ -32,6 +32,7 @@ const migrate_legacy_filter_column_1 = require("./job/migrate-legacy-filter-colu
 const migrate_company_to_page_1 = require("./pages/migrate-company-to-page");
 const firebase_module_1 = require("./firebase/firebase.module");
 const chat_module_1 = require("./chat/chat.module");
+const realtime_module_1 = require("./chat/realtime.module");
 const rating_module_1 = require("./rating/rating.module");
 const debug_module_1 = require("./debug/debug.module");
 const follow_module_1 = require("./follow/follow.module");
@@ -89,6 +90,7 @@ exports.AppModule = AppModule = __decorate([
             pages_module_1.PagesModule,
             firebase_module_1.FirebaseModule,
             chat_module_1.ChatModule,
+            realtime_module_1.RealtimeModule,
             rating_module_1.RatingModule,
             debug_module_1.DebugModule,
             follow_module_1.FollowModule,

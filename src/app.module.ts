@@ -29,6 +29,7 @@ import { migrateLegacyJobFilterColumn } from './job/migrate-legacy-filter-column
 import { migrateCompanyToPageNaming } from './pages/migrate-company-to-page';
 import { FirebaseModule } from './firebase/firebase.module';
 import { ChatModule } from './chat/chat.module';
+import { RealtimeModule } from './chat/realtime.module';
 import { RatingModule } from './rating/rating.module';
 import { DebugModule } from './debug/debug.module';
 import { FollowModule } from './follow/follow.module';
@@ -87,6 +88,7 @@ import { PostsModule } from './posts/posts.module';
     PagesModule,
     FirebaseModule,
     ChatModule,
+    RealtimeModule,
     RatingModule,
     DebugModule,
     FollowModule,

@@ -8,6 +8,7 @@ import { Page } from 'src/pages/entities/page.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from 'src/notification/mail.service';
 import { NotificationQueueService } from 'src/notification/notification-queue.service';
+import { NotificationInbox } from 'src/notification/notification-inbox.service';
 import { NotificationQueueItem } from 'src/notification/notification-queue.entity';
 import { resolveNotificationSettings } from 'src/notification/notification-settings';
 
@@ -38,6 +39,7 @@ export class ApplicationNotifier implements OnModuleInit {
     private readonly queue: NotificationQueueService,
     private readonly firebaseService: FirebaseService,
     private readonly mailService: MailService,
+    private readonly inbox: NotificationInbox,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobApplication)
@@ -122,13 +124,6 @@ export class ApplicationNotifier implements OnModuleInit {
         : [];
       const email =
         settings.email && applicant.email ? String(applicant.email).trim() : '';
-      if (!tokens.length && !email) {
-        this.logger.log(
-          `Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`,
-        );
-        return;
-      }
-
       const pageName = job.pageId
         ? ((
             await this.pageRepo.findOne({
@@ -156,6 +151,16 @@ export class ApplicationNotifier implements OnModuleInit {
         createdAt: new Date().toISOString(),
         path: template.replace('{id}', String(application.id)),
       };
+
+      // in-app list: always, whatever the push / email settings are
+      await this.inbox.add(applicant.id, { type: 'application_accepted', title, body, data });
+
+      if (!tokens.length && !email) {
+        this.logger.log(
+          `Application #${application.id} accepted - applicant #${applicant.id} has no push token / email enabled, nothing sent`,
+        );
+        return;
+      }
 
       this.logger.log(
         `Application #${application.id} accepted -> applicant #${applicant.id}: "${body}"`,
@@ -227,16 +232,6 @@ export class ApplicationNotifier implements OnModuleInit {
       : [];
     const email =
       settings.email && employer.email ? String(employer.email).trim() : '';
-    if (!tokens.length && !email) {
-      return {
-        status: 'skipped',
-        note:
-          !settings.push && !settings.email
-            ? 'employer turned off push and email'
-            : 'employer has no FCM token saved (and email is off)',
-      };
-    }
-
     const count = payloads.length;
     const total = await this.appRepo.count({ where: { jobId } });
     const names = [...new Set(payloads.map((p) => p.applicantName))];
@@ -265,6 +260,19 @@ export class ApplicationNotifier implements OnModuleInit {
       createdAt: new Date().toISOString(),
       path: this.buildPath(jobId),
     };
+
+    // in-app list: always, whatever the push / email settings are
+    await this.inbox.add(employerId, { type: 'job_application', title, body, data });
+
+    if (!tokens.length && !email) {
+      return {
+        status: 'skipped',
+        note:
+          !settings.push && !settings.email
+            ? 'employer turned off push and email (saved in the in-app list)'
+            : 'employer has no FCM token saved (and email is off) (saved in the in-app list)',
+      };
+    }
 
     this.logger.log(`Job #${jobId} -> employer #${employerId}: "${body}"`);
 

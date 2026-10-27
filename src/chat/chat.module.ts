@@ -13,7 +13,7 @@ import { ChatController } from './chat.controller';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
 import { MessagesService } from './messages.service';
-import { ChatEvents } from './chat-events.service';
+import { RealtimeModule } from './realtime.module';
 import { ChatNotifier } from './chat-notifier';
 import { ChatMigration } from './chat-migration.service';
 import { ChatMessage } from './entities/chat-message.entity';
@@ -39,11 +39,11 @@ import { UserBlock } from './entities/user-block.entity';
       secret: process.env.JWT_SECRET,
     }),
     NotificationModule,
+    RealtimeModule,
   ],
   providers: [
     ChatService,
     ChatGateway,
-    ChatEvents,
     ConversationsService,
     MessagesService,
     ChatNotifier,

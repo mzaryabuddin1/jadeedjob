@@ -21,7 +21,7 @@ const chat_controller_1 = require("./chat.controller");
 const conversations_controller_1 = require("./conversations.controller");
 const conversations_service_1 = require("./conversations.service");
 const messages_service_1 = require("./messages.service");
-const chat_events_service_1 = require("./chat-events.service");
+const realtime_module_1 = require("./realtime.module");
 const chat_notifier_1 = require("./chat-notifier");
 const chat_migration_service_1 = require("./chat-migration.service");
 const chat_message_entity_1 = require("./entities/chat-message.entity");
@@ -50,11 +50,11 @@ exports.ChatModule = ChatModule = __decorate([
                 secret: process.env.JWT_SECRET,
             }),
             notification_module_1.NotificationModule,
+            realtime_module_1.RealtimeModule,
         ],
         providers: [
             chat_service_1.ChatService,
             chat_gateway_1.ChatGateway,
-            chat_events_service_1.ChatEvents,
             conversations_service_1.ConversationsService,
             messages_service_1.MessagesService,
             chat_notifier_1.ChatNotifier,

@@ -16,6 +16,7 @@ const user_entity_1 = require("../users/entities/user.entity");
 const work_experience_entity_1 = require("../users/entities/work-experience.entity");
 const education_entity_1 = require("../users/entities/education.entity");
 const certification_entity_1 = require("../users/entities/certification.entity");
+const user_language_entity_1 = require("../users/entities/user-language.entity");
 const page_entity_1 = require("../pages/entities/page.entity");
 const page_member_entity_1 = require("../pages/entities/page-member.entity");
 const post_entity_1 = require("../posts/entities/post.entity");
@@ -30,6 +31,7 @@ exports.ProfileModule = ProfileModule = __decorate([
                 work_experience_entity_1.WorkExperience,
                 education_entity_1.Education,
                 certification_entity_1.Certification,
+                user_language_entity_1.UserLanguage,
                 page_entity_1.Page,
                 page_member_entity_1.PageMember,
                 post_entity_1.Post,

@@ -38,7 +38,7 @@ src/
   users/                   User + work_experience/education/certifications/auth_identities entities, /users/me
   job/                     jobs CRUD + search (geo + category) + migrate-legacy-filter-column.ts
   job-application/         apply, my applications, applications per job, status update
-  chat/                    inbox: DMs and job chats (REST + Socket.io ns /chat), blocks, chat push
+  chat/                    inbox: DMs and job chats (REST + Socket.io ns /chat), blocks, chat push; realtime.module.ts
   rating/                  rate user after accepted application
   filter/                  job categories (+ icon, approval status); seed data
   pages/                   pages (company profiles): roles, invitations, verified tick (jobs can belong to a page)
@@ -177,6 +177,17 @@ per-user when real traffic arrives).
   `cover_photo`, `open_to_work`, `followersCount`, `followingCount`; experience can
   link a page (`pageId`). Public view never exposes contact, bank, KYC or
   document links (the owner sees their documents + a `private` block).
+  Profile sections (the app's profile screen): About me = `about` (column `professional_summary`);
+  Skills = `technical_skills` ("Professional skills"), `soft_skills` ("People skills"), `skills`
+  (general); Work experience = `designation`, `company_name`, `from_date`, `to_date` or
+  `currently_working`, `key_responsibilities`; Education = `highest_qualification`,
+  `institution_name`, `graduation_year`; Certifications = `certification_name`,
+  `issuing_institution`, `certification_date`; **Languages** = table `user_languages`
+  (`language_name` free text, `proficiency` basic|conversational|fluent|native, unique per user
+  case-insensitively via `languageKey`, max 20, CRUD `GET|POST /users/me/languages`,
+  `PATCH|DELETE /users/me/languages/:id`, shown best-spoken-first as `languages` on the profile;
+  NOT the app UI language `users.language`); Links = `links {portfolio (website), linkedin,
+  github, behance, facebook, instagram, twitter, youtube}` (columns `*_url`).
 - **Follow** (`src/follow/`, table `follows`, unique pair): users and pages are
   followable; follow/unfollow idempotent (`INSERT IGNORE` + `.updateEntity(false)`),
   counters (`users.followersCount/followingCount`, `pages.followersCount`) updated in
@@ -348,6 +359,26 @@ edits / reactions, message search, archiving old messages.
   `PATCH /users/me` cannot change it.
 
 ## Notifications (`src/notification/`)
+
+**In-app notification list** (the app's bell screen): table `notifications` (userId, type, title,
+body, `data` JSON incl. the deep-link `path`, `readAt`, `createdAt`; index (userId,id) and
+(userId,readAt)), service `NotificationInbox`, controller `NotificationsController`:
+`GET /notifications` (cursor `before`, `limit`<=50, `unreadOnly`, `type`; also returns `unreadCount`),
+`GET /notifications/unread-count`, `POST /notifications/:id/read` (idempotent), `POST
+/notifications/read-all[?type=]`, `DELETE /notifications/:id`, `DELETE /notifications[?onlyRead=true]`.
+Everything pushed is stored there TOO, even when the person's push / email is off: `NotificationService
+.notifyUser()` stores by default (`store:false` skips it - chat does, it has its own inbox);
+`notifyJobCreated()` stores `job_created` for every person whose interests match (`MatchGroup.userIds`);
+`ApplicationNotifier` stores `job_application` (employer) and `application_accepted` (applicant)
+before its "no token / email" early return. Types: job_created, job_application, application_accepted,
+new_follower, post_like, post_comment, page_invitation, page_invitation_accepted, page_verified,
+page_verification_rejected, page_unverified. Live: `notification:new {notification|null}` and
+`notification:read {ids|all}` on the socket ns `chat` (room `user:{id}`) through `ChatEvents`, which now
+lives in the global `RealtimeModule` (`src/chat/realtime.module.ts`) so any module can emit.
+Rows older than `NOTIFICATION_KEEP_DAYS` (90) are purged every 6 h. A NEW kind of notification =
+call `notifyUser` (or `NotificationInbox.add`) - the list picks it up with no other change.
+
+**Push / email sending** (below):
 
 - User setting `users.notification_settings` (JSON, null = defaults):
   `{ push: boolean, email: boolean }`, defaults `push:true, email:false`.

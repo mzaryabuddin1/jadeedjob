@@ -20,6 +20,7 @@ const user_entity_1 = require("../users/entities/user.entity");
 const work_experience_entity_1 = require("../users/entities/work-experience.entity");
 const education_entity_1 = require("../users/entities/education.entity");
 const certification_entity_1 = require("../users/entities/certification.entity");
+const user_language_entity_1 = require("../users/entities/user-language.entity");
 const page_entity_1 = require("../pages/entities/page.entity");
 const page_member_entity_1 = require("../pages/entities/page-member.entity");
 const follow_service_1 = require("../follow/follow.service");
@@ -39,6 +40,10 @@ const PROFILE_FIELDS = [
     'github_url',
     'portfolio_url',
     'behance_url',
+    'facebook_url',
+    'instagram_url',
+    'twitter_url',
+    'youtube_url',
     'open_to_work',
 ];
 const EXPERIENCE_FIELDS = [
@@ -73,6 +78,7 @@ const CERTIFICATION_FIELDS = [
     'credential_url',
     'certificate_file',
 ];
+const MAX_LANGUAGES = 20;
 const pick = (data, fields) => {
     const out = {};
     for (const f of fields)
@@ -84,11 +90,12 @@ const cleanList = (list) => list
     ? [...new Set(list.map((s) => String(s).trim()).filter(Boolean))].slice(0, 50)
     : list;
 let ProfileService = class ProfileService {
-    constructor(userRepo, expRepo, eduRepo, certRepo, pageRepo, memberRepo, postRepo, followService) {
+    constructor(userRepo, expRepo, eduRepo, certRepo, langRepo, pageRepo, memberRepo, postRepo, followService) {
         this.userRepo = userRepo;
         this.expRepo = expRepo;
         this.eduRepo = eduRepo;
         this.certRepo = certRepo;
+        this.langRepo = langRepo;
         this.pageRepo = pageRepo;
         this.memberRepo = memberRepo;
         this.postRepo = postRepo;
@@ -127,6 +134,10 @@ let ProfileService = class ProfileService {
                 github: user.github_url,
                 portfolio: user.portfolio_url,
                 behance: user.behance_url,
+                facebook: user.facebook_url,
+                instagram: user.instagram_url,
+                twitter: user.twitter_url,
+                youtube: user.youtube_url,
             },
             skills: user.skills ?? [],
             technical_skills: user.technical_skills ?? [],
@@ -134,6 +145,7 @@ let ProfileService = class ProfileService {
             experience: experiences.map((e) => this.experienceView(e, expPages, isMe)),
             education: educations.map((e) => this.educationView(e, isMe)),
             certifications: certifications.map((c) => this.certificationView(c, isMe)),
+            languages: await this.languageViews(user.id),
             rating: { average: user.ratingAverage, count: user.ratingCount },
             stats: {
                 followers: user.followersCount,
@@ -205,6 +217,20 @@ let ProfileService = class ProfileService {
             credential_url: c.credential_url,
             ...(isMe ? { certificate_file: c.certificate_file } : {}),
         };
+    }
+    languageView(l) {
+        return {
+            id: l.id,
+            language_name: l.language_name,
+            proficiency: l.proficiency,
+        };
+    }
+    async languageViews(userId) {
+        const rows = await this.langRepo.find({ where: { userId } });
+        const rank = (l) => user_language_entity_1.LANGUAGE_LEVELS.indexOf(l.proficiency);
+        return rows
+            .sort((a, b) => rank(b) - rank(a) || a.language_name.localeCompare(b.language_name))
+            .map((l) => this.languageView(l));
     }
     async pageCards(ids) {
         const unique = [...new Set(ids)];
@@ -390,6 +416,64 @@ let ProfileService = class ProfileService {
         }
         return v;
     }
+    async addLanguage(userId, data) {
+        const name = this.cleanLanguageName(data.language_name);
+        const key = name.toLowerCase();
+        if ((await this.langRepo.count({ where: { userId } })) >= MAX_LANGUAGES) {
+            throw new common_1.BadRequestException(`You can list at most ${MAX_LANGUAGES} languages`);
+        }
+        if (await this.langRepo.exist({ where: { userId, languageKey: key } })) {
+            throw new common_1.ConflictException('You already added this language');
+        }
+        const saved = await this.langRepo.save(this.langRepo.create({
+            userId,
+            language_name: name,
+            languageKey: key,
+            proficiency: data.proficiency,
+        }));
+        return this.languageView(saved);
+    }
+    async updateLanguage(userId, id, data) {
+        const row = await this.ownLanguage(id, userId);
+        const patch = {};
+        if (data.language_name !== undefined) {
+            const name = this.cleanLanguageName(data.language_name);
+            const key = name.toLowerCase();
+            if (key !== row.languageKey) {
+                if (await this.langRepo.exist({ where: { userId, languageKey: key } })) {
+                    throw new common_1.ConflictException('You already added this language');
+                }
+            }
+            patch.language_name = name;
+            patch.languageKey = key;
+        }
+        if (data.proficiency !== undefined)
+            patch.proficiency = data.proficiency;
+        await this.langRepo.update(id, patch);
+        return this.languageView(await this.ownLanguage(id, userId));
+    }
+    async removeLanguage(userId, id) {
+        await this.ownLanguage(id, userId);
+        await this.langRepo.delete(id);
+        return { message: 'Language removed' };
+    }
+    listMyLanguages(userId) {
+        return this.languageViews(userId);
+    }
+    async ownLanguage(id, userId) {
+        const row = await this.langRepo.findOne({ where: { id, userId } });
+        if (!row)
+            throw new common_1.NotFoundException('Language not found');
+        return row;
+    }
+    cleanLanguageName(raw) {
+        const name = String(raw ?? '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!name)
+            throw new common_1.BadRequestException('language_name is required');
+        return name.charAt(0).toUpperCase() + name.slice(1);
+    }
 };
 exports.ProfileService = ProfileService;
 exports.ProfileService = ProfileService = __decorate([
@@ -398,10 +482,12 @@ exports.ProfileService = ProfileService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(work_experience_entity_1.WorkExperience)),
     __param(2, (0, typeorm_1.InjectRepository)(education_entity_1.Education)),
     __param(3, (0, typeorm_1.InjectRepository)(certification_entity_1.Certification)),
-    __param(4, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
-    __param(5, (0, typeorm_1.InjectRepository)(page_member_entity_1.PageMember)),
-    __param(6, (0, typeorm_1.InjectRepository)(post_entity_1.Post)),
+    __param(4, (0, typeorm_1.InjectRepository)(user_language_entity_1.UserLanguage)),
+    __param(5, (0, typeorm_1.InjectRepository)(page_entity_1.Page)),
+    __param(6, (0, typeorm_1.InjectRepository)(page_member_entity_1.PageMember)),
+    __param(7, (0, typeorm_1.InjectRepository)(post_entity_1.Post)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

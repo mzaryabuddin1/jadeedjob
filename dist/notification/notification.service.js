@@ -22,13 +22,15 @@ const filter_entity_1 = require("../filter/entities/filter.entity");
 const firebase_service_1 = require("../firebase/firebase.service");
 const mail_service_1 = require("./mail.service");
 const notification_settings_1 = require("./notification-settings");
+const notification_inbox_service_1 = require("./notification-inbox.service");
 const USER_BATCH = 500;
 const EMAIL_CONCURRENCY = 10;
 let NotificationService = NotificationService_1 = class NotificationService {
-    constructor(userRepo, firebaseService, mailService) {
+    constructor(userRepo, firebaseService, mailService, inbox) {
         this.userRepo = userRepo;
         this.firebaseService = firebaseService;
         this.mailService = mailService;
+        this.inbox = inbox;
         this.logger = new common_1.Logger(NotificationService_1.name);
         this.recent = new Map();
     }
@@ -46,6 +48,13 @@ let NotificationService = NotificationService_1 = class NotificationService {
             });
             if (!user || user.isBanned)
                 return { push: 0, email: false };
+            if (message.store !== false) {
+                await this.inbox.add(userId, {
+                    title: message.title,
+                    body: message.body,
+                    data: message.data,
+                });
+            }
             const settings = (0, notification_settings_1.resolveNotificationSettings)(user.notification_settings);
             const tokens = settings.push
                 ? (user.fcmTokens || []).filter(Boolean)
@@ -100,6 +109,12 @@ let NotificationService = NotificationService_1 = class NotificationService {
             let emailFailed = 0;
             for (const group of groups.values()) {
                 const message = this.buildJobMessage(job, group.matched);
+                await this.inbox.addMany(group.userIds, {
+                    type: 'job_created',
+                    title: message.title,
+                    body: message.body,
+                    data: message.data,
+                });
                 if (group.pushTokens.length) {
                     pushUsers += group.pushTokens.length;
                     try {
@@ -264,17 +279,16 @@ let NotificationService = NotificationService_1 = class NotificationService {
                     ? (user.fcmTokens || []).filter(Boolean)
                     : [];
                 const email = settings.email && user.email ? String(user.email).trim() : '';
-                if (!tokens.length && !email)
-                    continue;
                 const key = matched
                     .map((f) => f.id)
                     .sort((a, b) => a - b)
                     .join(',');
                 let group = groups.get(key);
                 if (!group) {
-                    group = { matched, pushTokens: [], emails: [] };
+                    group = { matched, userIds: [], pushTokens: [], emails: [] };
                     groups.set(key, group);
                 }
+                group.userIds.push(user.id);
                 group.pushTokens.push(...tokens);
                 if (email)
                     group.emails.push(email);
@@ -361,6 +375,7 @@ exports.NotificationService = NotificationService = NotificationService_1 = __de
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         firebase_service_1.FirebaseService,
-        mail_service_1.MailService])
+        mail_service_1.MailService,
+        notification_inbox_service_1.NotificationInbox])
 ], NotificationService);
 //# sourceMappingURL=notification.service.js.map

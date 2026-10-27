@@ -3,6 +3,7 @@ import { User } from 'src/users/entities/user.entity';
 import { WorkExperience } from 'src/users/entities/work-experience.entity';
 import { Education } from 'src/users/entities/education.entity';
 import { Certification } from 'src/users/entities/certification.entity';
+import { UserLanguage } from 'src/users/entities/user-language.entity';
 import { Page } from 'src/pages/entities/page.entity';
 import { PageMember } from 'src/pages/entities/page-member.entity';
 import { FollowService } from 'src/follow/follow.service';
@@ -12,15 +13,18 @@ export declare class ProfileService {
     private readonly expRepo;
     private readonly eduRepo;
     private readonly certRepo;
+    private readonly langRepo;
     private readonly pageRepo;
     private readonly memberRepo;
     private readonly postRepo;
     private readonly followService;
-    constructor(userRepo: Repository<User>, expRepo: Repository<WorkExperience>, eduRepo: Repository<Education>, certRepo: Repository<Certification>, pageRepo: Repository<Page>, memberRepo: Repository<PageMember>, postRepo: Repository<Post>, followService: FollowService);
+    constructor(userRepo: Repository<User>, expRepo: Repository<WorkExperience>, eduRepo: Repository<Education>, certRepo: Repository<Certification>, langRepo: Repository<UserLanguage>, pageRepo: Repository<Page>, memberRepo: Repository<PageMember>, postRepo: Repository<Post>, followService: FollowService);
     getProfile(targetId: number, viewerId: number): Promise<Record<string, any>>;
     private experienceView;
     private educationView;
     private certificationView;
+    private languageView;
+    private languageViews;
     private pageCards;
     private managedPages;
     updateProfile(userId: number, data: any): Promise<Record<string, any>>;
@@ -110,4 +114,24 @@ export declare class ProfileService {
     }>;
     private ownCertification;
     private normalizeCertification;
+    addLanguage(userId: number, data: any): Promise<{
+        id: number;
+        language_name: string;
+        proficiency: "basic" | "conversational" | "fluent" | "native";
+    }>;
+    updateLanguage(userId: number, id: number, data: any): Promise<{
+        id: number;
+        language_name: string;
+        proficiency: "basic" | "conversational" | "fluent" | "native";
+    }>;
+    removeLanguage(userId: number, id: number): Promise<{
+        message: string;
+    }>;
+    listMyLanguages(userId: number): Promise<{
+        id: number;
+        language_name: string;
+        proficiency: "basic" | "conversational" | "fluent" | "native";
+    }[]>;
+    private ownLanguage;
+    private cleanLanguageName;
 }

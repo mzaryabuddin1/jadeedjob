@@ -7,16 +7,18 @@ import { Page } from 'src/pages/entities/page.entity';
 import { FirebaseService } from 'src/firebase/firebase.service';
 import { MailService } from 'src/notification/mail.service';
 import { NotificationQueueService } from 'src/notification/notification-queue.service';
+import { NotificationInbox } from 'src/notification/notification-inbox.service';
 export declare class ApplicationNotifier implements OnModuleInit {
     private readonly queue;
     private readonly firebaseService;
     private readonly mailService;
+    private readonly inbox;
     private readonly userRepo;
     private readonly jobRepo;
     private readonly appRepo;
     private readonly pageRepo;
     private readonly logger;
-    constructor(queue: NotificationQueueService, firebaseService: FirebaseService, mailService: MailService, userRepo: Repository<User>, jobRepo: Repository<Job>, appRepo: Repository<JobApplication>, pageRepo: Repository<Page>);
+    constructor(queue: NotificationQueueService, firebaseService: FirebaseService, mailService: MailService, inbox: NotificationInbox, userRepo: Repository<User>, jobRepo: Repository<Job>, appRepo: Repository<JobApplication>, pageRepo: Repository<Page>);
     getTiming(): {
         delaySeconds: number;
         minGapSeconds: number;
